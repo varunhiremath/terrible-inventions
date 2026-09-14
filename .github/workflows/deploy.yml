@@ -1,8 +1,12 @@
 name: Deploy
 
 # Builds the app and publishes it to GitHub Pages on every push to main.
-# Pages is switched on by the workflow itself (see `enablement` below), so there
-# is nothing to configure by hand.
+#
+# Pages must be switched on once by hand, under repository Settings > Pages >
+# Source: GitHub Actions. The `enablement: true` option on configure-pages looks
+# like it would avoid that, but creating a Pages site is not something the
+# workflow's GITHUB_TOKEN is permitted to do ("Resource not accessible by
+# integration"), so it fails with a less obvious error than simply being off.
 
 on:
   push:
@@ -47,10 +51,6 @@ jobs:
           BASE_PATH: /${{ github.event.repository.name }}/
 
       - uses: actions/configure-pages@v5
-        with:
-          # Turns Pages on if it is not already, rather than failing and asking
-          # for a trip to the repository settings.
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
