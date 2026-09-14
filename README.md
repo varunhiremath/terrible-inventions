@@ -47,6 +47,22 @@ as a failure.
 | **Papa's Mistake** | Finding the first wrong line in someone else's working |
 | **Faulty Wiring** | Knights-and-knaves deduction, with no arithmetic at all |
 
+## Two-player mode
+
+**Split Clues** is a logic grid with the clues dealt between two people. It only works if
+neither half is solvable alone, and that is guaranteed rather than hoped for: the clue set
+is pruned until it is *minimal*, meaning removing any single clue destroys the unique
+answer. Every proper subset of a minimal set is therefore ambiguous, so however the clues
+are dealt, both hands are needed. The tests check this on every puzzle across the range.
+
+The private hands are not a secrecy mechanism — anyone can lean over and look. They
+structure the conversation, because the only practical route to the answer is each person
+saying out loud what they are holding. Explaining your reasoning to someone else is where
+the understanding happens, and that is the actual point of the mode.
+
+Co-op results are recorded separately and never touch the rating. The rating estimates
+what the child can do alone, and this was not done alone.
+
 Every generator is seeded, so a problem is reproducible from its seed; verifiable, so the
 answer is computed rather than authored; and unbounded, so it scales past the player.
 `Faulty Wiring` brute-forces every labelling before serving a puzzle, to guarantee the
@@ -80,6 +96,12 @@ in any amount of interface copy.
 Recording happens in the app: Settings > Record your voice, read a line, tap to record,
 tap to stop, listen back, redo if you like. The microphone needs a secure context, so it
 works on localhost and over HTTPS.
+
+Clips live in that browser's storage, so a recording made on one device is not on the
+others. The booth exports them as a ZIP and loads one back, which is how they travel.
+Shipping them in `public/voice/` would work too, but the deployed site is public and that
+would put a real person's voice on a public URL — so the directory stays gitignored and
+the transfer stays device to device.
 
 ## Running it
 

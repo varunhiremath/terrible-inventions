@@ -30,8 +30,17 @@ These are not preferences. Breaking one defeats the point of the project.
    authored. If a puzzle type cannot be machine-checked for a unique solution, it does
    not go in.
 
-6. **No backend, no telemetry, no accounts.** If co-op play is added later it may carry
-   game state through a relay, but never the player's name or progress.
+6. **Co-op puzzles must be unsolvable from one hand.** `split-clues` gets this from a
+   minimal clue set: remove any single clue and the answer stops being unique, so every
+   proper subset is ambiguous and any split is fair. Never add a clue after pruning to
+   make a puzzle nicer — it breaks the guarantee. The tests assert union-unique and
+   each-half-ambiguous on every generated puzzle; keep them.
+
+7. **Co-op results never touch the rating.** The rating estimates what the child can do
+   alone. Two-player results go to `coopLog`, separately.
+
+8. **No backend, no telemetry, no accounts.** If remote co-op is added later it may carry
+   game state through a relay, but never the player's name, voice or progress.
 
 ## Conventions
 

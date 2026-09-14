@@ -4,7 +4,7 @@ import { Btn, Panel, Screen, Tag } from '../ui/bits'
 import { useStore } from '../store'
 
 export function Lab() {
-  const { save, startSession, go } = useStore()
+  const { save, startSession, startCoop, go } = useStore()
   const { kidName } = getProfile()
   const unreadNote = save.note && !save.note.seen
 
@@ -42,6 +42,13 @@ export function Lab() {
 
       <Btn tone="go" onClick={startSession} className="py-8 text-2xl">
         Fix a Machine
+      </Btn>
+
+      <Btn onClick={startCoop} className="py-6 text-xl">
+        {fill('Get {papa}')}
+        <span className="block text-sm font-normal text-dim">
+          A puzzle neither of you can do alone
+        </span>
       </Btn>
 
       {save.machinesWorked > 0 && (

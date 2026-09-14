@@ -29,6 +29,12 @@ export interface SaveState {
   /** Real names, entered on the device. Deliberately never in the repo. */
   names: { kidName?: string; papaName?: string }
   log: Attempt[]
+  /**
+   * Two-player puzzles, kept apart from `log` on purpose. A co-op result says
+   * nothing about what the child can do alone, so it must never touch the
+   * rating or the solo history.
+   */
+  coopLog: { id: string; rating: number; solved: boolean; at: number }[]
 }
 
 export function emptySave(): SaveState {
@@ -40,6 +46,7 @@ export function emptySave(): SaveState {
     note: null,
     names: {},
     log: [],
+    coopLog: [],
   }
 }
 
@@ -68,7 +75,11 @@ export async function loadSave(): Promise<SaveState> {
 
 export async function persistSave(state: SaveState): Promise<void> {
   try {
-    const trimmed: SaveState = { ...state, log: state.log.slice(-MAX_LOG) }
+    const trimmed: SaveState = {
+      ...state,
+      log: state.log.slice(-MAX_LOG),
+      coopLog: state.coopLog.slice(-MAX_LOG),
+    }
     await (await db()).put(STORE, trimmed, KEY)
   } catch {
     /* see loadSave */

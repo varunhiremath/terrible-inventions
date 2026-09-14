@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { GENERATORS, generatorFor } from './content'
+import { coopGeneratorFor } from './content/coop'
+import type { CoopProblem } from './content/coop'
 import { updateRating } from './engine/elo'
 import { initialSelectorState, selectNext, type ProblemSpec, type SelectorState } from './engine/session'
 import { makeRng, randomSeed } from './engine/rng'
@@ -10,7 +12,14 @@ import type { Attempt, Problem } from './engine/types'
 
 export const SESSION_LENGTH = 8
 
-export type Screen = 'lab' | 'gauntlet' | 'note' | 'settings' | 'summary' | 'studio'
+/**
+ * How far above his solo level a two-player puzzle is pitched. Two people
+ * reason better than one, and the co-op problems are the place to be ambitious
+ * — nothing here feeds the rating, so there is no cost to aiming high.
+ */
+export const COOP_BONUS = 200
+
+export type Screen = 'lab' | 'gauntlet' | 'note' | 'settings' | 'summary' | 'studio' | 'coop'
 
 interface Served {
   problem: Problem
@@ -25,6 +34,10 @@ interface State {
   selector: SelectorState
 
   current: Served | null
+  coop: CoopProblem | null
+  /** Which hand is on screen. Only one at a time, so the other stays private. */
+  coopShowing: 'a' | 'b' | null
+  coopSolved: boolean | null
   hintsOpen: number
   /** Null while he is still working; set once he has committed to an answer. */
   verdict: { correct: boolean; given: string } | null
@@ -35,6 +48,9 @@ interface State {
   boot: () => Promise<void>
   go: (screen: Screen) => void
   startSession: () => void
+  startCoop: () => void
+  showHand: (who: 'a' | 'b' | null) => void
+  finishCoop: (solved: boolean) => void
   openHint: () => void
   answer: (given: string, correct: boolean) => void
   next: () => void
@@ -50,6 +66,9 @@ export const useStore = create<State>((set, get) => ({
   save: emptySave(),
   selector: initialSelectorState(emptySave().rating),
   current: null,
+  coop: null,
+  coopShowing: null,
+  coopSolved: null,
   hintsOpen: 0,
   verdict: null,
   sessionLog: [],
@@ -67,6 +86,33 @@ export const useStore = create<State>((set, get) => ({
     set({ sessionLog: [], selector: initialSelectorState(get().save.rating, get().save.attempts) })
     serve(set, get)
     set({ screen: 'gauntlet' })
+  },
+
+  startCoop: () => {
+    const gen = coopGeneratorFor('split-clues')
+    const rating = Math.min(gen.maxRating, Math.max(gen.minRating, get().save.rating + COOP_BONUS))
+    set({
+      coop: gen.generate(rating, randomSeed()),
+      coopShowing: null,
+      coopSolved: null,
+      screen: 'coop',
+    })
+  },
+
+  showHand: (who) => set({ coopShowing: who }),
+
+  finishCoop: (solved) => {
+    const { coop, save } = get()
+    if (!coop || get().coopSolved !== null) return
+
+    // Recorded, but deliberately not rated: the rating is an estimate of what
+    // he can do on his own, and this was not done on his own.
+    const next: SaveState = {
+      ...save,
+      coopLog: [...save.coopLog, { id: coop.id, rating: coop.rating, solved, at: Date.now() }],
+    }
+    set({ coopSolved: solved, save: next })
+    void persistSave(next)
   },
 
   openHint: () => {

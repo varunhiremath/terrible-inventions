@@ -1,6 +1,7 @@
 import { makeRng } from '../engine/rng'
 import type { Generator, Problem } from '../engine/types'
 import { tier } from './util'
+import { MACHINE_NAMES } from './names'
 
 /**
  * Some of {papa}'s machines report honestly. Some lie about everything.
@@ -13,7 +14,6 @@ import { tier } from './util'
 
 const BOUNDS = [600, 1000, 1500, 2000] as const
 
-const MACHINE_NAMES = ['Bolt', 'Cog', 'Rivet', 'Sprocket', 'Widget', 'Flange'] as const
 
 type Stmt =
   | { kind: 'selfTruthful' }

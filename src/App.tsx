@@ -5,6 +5,7 @@ import { Summary } from './screens/Summary'
 import { Note } from './screens/Note'
 import { Settings } from './screens/Settings'
 import { Studio } from './screens/Studio'
+import { Coop } from './screens/Coop'
 import { useStore } from './store'
 import { unlock } from './audio'
 
@@ -36,6 +37,8 @@ export default function App() {
       return <Settings />
     case 'studio':
       return <Studio />
+    case 'coop':
+      return <Coop />
     default:
       return <Lab />
   }
