@@ -1,0 +1,83 @@
+import { openDB, type IDBPDatabase } from 'idb'
+import type { Attempt } from './types'
+import { START_RATING } from './elo'
+
+/**
+ * Everything lives on the device. There is no server, no account and no
+ * telemetry, so this file is the entire persistence story.
+ *
+ * iOS will evict IndexedDB for sites it thinks are abandoned — far less likely
+ * once the PWA is installed to the home screen, but not impossible — so
+ * `exportSave` exists to let a real backup be taken before that can ever matter.
+ */
+
+const DB_NAME = 'terrible-inventions'
+const STORE = 'state'
+const KEY = 'main'
+const MAX_LOG = 2000
+
+export interface SaveState {
+  version: 1
+  rating: number
+  attempts: number
+  /** Problems taken on, right or wrong. Deliberately not a score. */
+  machinesWorked: number
+  /** A short message from {papa}, shown once on the next visit. */
+  note: { text: string; at: number; seen: boolean } | null
+  /** Real names, entered on the device. Deliberately never in the repo. */
+  names: { kidName?: string; papaName?: string }
+  log: Attempt[]
+}
+
+export function emptySave(): SaveState {
+  return {
+    version: 1,
+    rating: START_RATING,
+    attempts: 0,
+    machinesWorked: 0,
+    note: null,
+    names: {},
+    log: [],
+  }
+}
+
+let dbPromise: Promise<IDBPDatabase> | null = null
+
+function db(): Promise<IDBPDatabase> {
+  dbPromise ??= openDB(DB_NAME, 1, {
+    upgrade(database) {
+      if (!database.objectStoreNames.contains(STORE)) database.createObjectStore(STORE)
+    },
+  })
+  return dbPromise
+}
+
+export async function loadSave(): Promise<SaveState> {
+  try {
+    const stored = (await (await db()).get(STORE, KEY)) as SaveState | undefined
+    return stored ? { ...emptySave(), ...stored } : emptySave()
+  } catch {
+    // A private window, or storage blocked entirely. The app still works; it
+    // just will not remember. Never let this take the whole screen down.
+    return emptySave()
+  }
+}
+
+export async function persistSave(state: SaveState): Promise<void> {
+  try {
+    const trimmed: SaveState = { ...state, log: state.log.slice(-MAX_LOG) }
+    await (await db()).put(STORE, trimmed, KEY)
+  } catch {
+    /* see loadSave */
+  }
+}
+
+export function exportSave(state: SaveState): string {
+  return JSON.stringify(state, null, 2)
+}
+
+export function importSave(json: string): SaveState {
+  const parsed = JSON.parse(json) as Partial<SaveState>
+  if (typeof parsed.rating !== 'number') throw new Error('not a save file')
+  return { ...emptySave(), ...parsed }
+}

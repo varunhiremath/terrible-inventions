@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+.vscode
+*.tsbuildinfo
+
+# --- Privacy -------------------------------------------------------------
+# Real names, photos and voice recordings never enter version control.
+# See src/config/profile.ts for how these are loaded.
+.env
+.env.*
+!.env.example
+src/config/profile.local.ts
+public/voice/
+public/faces/

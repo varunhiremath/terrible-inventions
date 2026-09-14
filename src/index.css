@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-ink text-chalk font-sans antialiased;
+    /* iPad: kill every browser affordance that breaks the illusion of an app. */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+      env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  button {
+    touch-action: manipulation;
+  }
+}
+
+@layer components {
+  /* Chunky, blocky surfaces — the whole visual language is one border + one hard shadow. */
+  .block-panel {
+    @apply rounded-2xl border-2 border-ink-line bg-ink-soft shadow-block;
+  }
+
+  .block-btn {
+    @apply rounded-2xl border-2 border-ink-line bg-ink-soft px-5 py-4 font-bold
+           shadow-block transition-transform active:translate-y-[3px] active:shadow-none
+           disabled:opacity-40 disabled:active:translate-y-0 disabled:active:shadow-block;
+  }
+}

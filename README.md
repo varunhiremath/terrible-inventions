@@ -1,0 +1,90 @@
+# Terrible Inventions
+
+A small, private maths app for one kid, built around hard problems rather than drills.
+
+Papa builds machines. Every machine goes wrong in a specific mathematical way, and
+somebody has to work out how. There is no subscription, no account, no server and no
+analytics — it is a single page that runs offline on a tablet.
+
+## Why it is built this way
+
+Most maths apps for this age are fluency drills with a reward loop bolted on. That is
+the wrong shape for a child already working above grade level: the ceiling arrives in
+about a week. The design here follows the problem-solving tradition instead — genuinely
+hard problems, presented so that a child wants to sit with them.
+
+Four constraints fall out of that, and they drive most of the code:
+
+**Difficulty has no ceiling.** Every generator takes a rating, not a level from one to
+five, and keeps producing harder problems until it runs out of road — at which point it
+declines to answer and says so, rather than quietly repeating itself. Player and problem
+share one Elo scale, so the selector can aim at a chosen success rate by solving the
+curve backwards.
+
+**The app hunts for the player's level instead of protecting him from it.** The first
+eight problems aim at a coin flip, which is where the estimate moves fastest; after that
+it settles at about four in five, which is high enough to feel good and low enough to
+bite. Every fifth problem is deliberately over his head and labelled as such before he
+starts.
+
+**Nothing is scored.** No percentages, no streaks, no correct-out-of-total, anywhere in
+the interface. The evidence on children identified as gifted is that praising the result
+pushes them toward defending a reputation for being clever, and the first thing to go is
+any appetite for difficulty. The end-of-session screen reports only what the player
+*did*: the hardest thing he cracked, where he kept going after a hint, what he took on.
+The smoke test asserts that no score has crept in.
+
+**Hints are free and unlimited.** Asking for help is never penalised and never recorded
+as a failure.
+
+## The problems
+
+| Generator | What it is really about |
+|---|---|
+| **Rectangle Hunt** | Arranging blocks into rectangles — which is factoring, without the word |
+| **Fraction Duel** | Comparing fractions, with pairs built so the easy rules stop working |
+| **Short Circuit** | Counting routes through a grid; walks into Pascal's triangle unaided |
+| **Papa's Mistake** | Finding the first wrong line in someone else's working |
+| **Faulty Wiring** | Knights-and-knaves deduction, with no arithmetic at all |
+
+Every generator is seeded, so a problem is reproducible from its seed; verifiable, so the
+answer is computed rather than authored; and unbounded, so it scales past the player.
+`Faulty Wiring` brute-forces every labelling before serving a puzzle, to guarantee the
+solution is unique.
+
+## Privacy
+
+The repository is public; the family using it is not. No real name, photograph or
+recording is in version control, and none is ever sent anywhere.
+
+- Names ship as placeholders and are entered on the device, into that browser's
+  IndexedDB. Authored strings use `{kid}` and `{papa}` placeholders.
+- Voice recordings live in `public/voice/`, which is gitignored.
+- All progress is local. There is no backend to leak, and no telemetry.
+- Because storage is local, iOS can evict it — so Settings has a backup export.
+
+## Running it
+
+```bash
+npm install
+npm run dev        # development
+npm test           # engine and generator unit tests
+npm run build      # production build
+npm run preview    # serve the build, then:
+npm run smoke      # play a full session in a real browser
+```
+
+Installing to an iPad home screen gets the standalone, offline, no-browser-chrome
+version, which is the way it is meant to be used.
+
+## Layout
+
+```
+src/
+  engine/     rating, selection, persistence   — unit tested
+  content/    the problem generators           — unit tested
+  screens/    Lab, Gauntlet, Summary, Note, Settings
+  ui/         keypad, per-problem inputs, primitives
+  config/     the names placeholder layer
+scripts/      icon generation, browser smoke test
+```
