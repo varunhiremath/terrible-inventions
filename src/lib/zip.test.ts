@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { makeZip } from './zip'
+import { makeZip, readZip } from './zip'
 
 const bytes = (s: string) => new TextEncoder().encode(s) as Uint8Array<ArrayBuffer>
 
@@ -59,5 +59,41 @@ describe('makeZip', () => {
     const buf = new Uint8Array(await makeZip([]).arrayBuffer())
     expect(buf.length).toBe(22)
     expect(new DataView(buf.buffer).getUint32(0, true)).toBe(0x06054b50)
+  })
+})
+
+describe('readZip', () => {
+  it('reads back what makeZip wrote', async () => {
+    const files = {
+      'voice/greeting-1.m4a': 'first clip',
+      'voice/struggle-4.m4a': 'a longer one, with, punctuation',
+      'voice/right-1.m4a': '',
+    }
+    const blob = makeZip(Object.entries(files).map(([name, text]) => ({ name, bytes: bytes(text) })))
+
+    const read = await readZip(blob)
+    const decoder = new TextDecoder()
+    expect(Object.fromEntries(read.map((f) => [f.name, decoder.decode(f.bytes)]))).toEqual(files)
+  })
+
+  it('survives a round trip of many entries', async () => {
+    const entries = Array.from({ length: 37 }, (_, i) => ({
+      name: `voice/line-${i}.m4a`,
+      bytes: bytes(`clip number ${i} `.repeat(i + 1)),
+    }))
+    const read = await readZip(makeZip(entries))
+    expect(read).toHaveLength(37)
+    expect(read.map((f) => f.name)).toEqual(entries.map((e) => e.name))
+    expect(read[36].bytes.length).toBe(entries[36].bytes.length)
+  })
+
+  it('reads an empty archive as no files', async () => {
+    expect(await readZip(makeZip([]))).toEqual([])
+  })
+
+  it('rejects something that is not a zip', async () => {
+    await expect(readZip(new Blob([bytes('just some text, not an archive at all')]))).rejects.toThrow(
+      /not a zip/,
+    )
   })
 })

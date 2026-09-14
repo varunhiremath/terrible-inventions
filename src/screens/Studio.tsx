@@ -4,12 +4,13 @@ import { CUES, CUE_NOTES, CUE_TITLES, VOICE_LINES, linesFor } from '../voiceLine
 import {
   allClips,
   extensionFor,
+  mimeForExtension,
   pickRecordingMime,
   putClip,
   removeClip,
   type VoiceClip,
 } from '../engine/voiceStore'
-import { makeZip, type ZipEntry } from '../lib/zip'
+import { makeZip, readZip, type ZipEntry } from '../lib/zip'
 import { loadVoice } from '../audio'
 import { useStore } from '../store'
 
@@ -29,8 +30,10 @@ export function Studio() {
   const [clips, setClips] = useState<Map<string, VoiceClip>>(new Map())
   const [recordingId, setRecordingId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [status, setStatus] = useState('')
   const [playingId, setPlayingId] = useState<string | null>(null)
 
+  const importRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -128,6 +131,45 @@ export function Studio() {
     a.download = 'voice-lines.zip'
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  /**
+   * Loads a ZIP of clips into this device.
+   *
+   * This is how recordings get from the device they were made on to the device
+   * they will be played on. The alternative — shipping them with the app —
+   * would put Papa's voice on a public URL, which is the one thing this project
+   * is built to avoid.
+   */
+  const importZip = async (file: File) => {
+    setError('')
+    try {
+      const entries = await readZip(file)
+      const known = new Map(VOICE_LINES.map((l) => [l.id, l]))
+      let loaded = 0
+
+      for (const entry of entries) {
+        const base = entry.name.split('/').pop() ?? ''
+        const dot = base.lastIndexOf('.')
+        if (dot < 1) continue
+
+        const lineId = base.slice(0, dot)
+        const mime = mimeForExtension(base.slice(dot + 1))
+        if (!known.has(lineId) || !mime || entry.bytes.length === 0) continue
+
+        await putClip(lineId, { blob: new Blob([entry.bytes], { type: mime }), mime, at: Date.now() })
+        loaded++
+      }
+
+      await refresh()
+      setStatus(
+        loaded === 0
+          ? 'Nothing in that file matched a line. Filenames need to look like greeting-1.m4a.'
+          : `Loaded ${loaded} recording${loaded === 1 ? '' : 's'}.`,
+      )
+    } catch {
+      setError('That file could not be read as a ZIP.')
+    }
   }
 
   const done = clips.size
@@ -238,16 +280,31 @@ export function Studio() {
       })}
 
       <Panel className="flex flex-col gap-3">
-        <h2 className="font-bold">Keep a copy</h2>
+        <h2 className="font-bold">Move them between devices</h2>
         <p className="text-sm leading-relaxed text-dim">
-          The clips live in this browser&rsquo;s storage. Download them if you want a backup, or to
-          drop into <code className="text-chalk">public/voice/</code> so a fresh install already has
-          your voice. That folder is gitignored &mdash; it will not end up in the repository.
+          Clips live in this browser&rsquo;s storage, so a recording made on one device is not on
+          the others. Download them here, send the file across however you like, and load it in on
+          the other device. Nothing is uploaded and nothing is published &mdash; your voice stays on
+          the devices you put it on.
         </p>
         <Btn onClick={() => void downloadZip()} disabled={done === 0}>
           Download all {done} as a ZIP
         </Btn>
+        <Btn onClick={() => importRef.current?.click()}>Load a ZIP onto this device</Btn>
+        <input
+          ref={importRef}
+          type="file"
+          accept=".zip,application/zip"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) void importZip(file)
+            e.target.value = ''
+          }}
+        />
       </Panel>
+
+      {status && <p className="text-center text-sm text-moss">{status}</p>}
     </Screen>
   )
 }

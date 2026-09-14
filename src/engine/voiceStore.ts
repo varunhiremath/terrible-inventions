@@ -34,6 +34,27 @@ export async function allClips(): Promise<Map<string, VoiceClip>> {
   }
 }
 
+/** The reverse of `extensionFor`, for clips arriving as files rather than recordings. */
+export function mimeForExtension(ext: string): string {
+  switch (ext.toLowerCase()) {
+    case 'm4a':
+    case 'mp4':
+    case 'aac':
+      return 'audio/mp4'
+    case 'webm':
+      return 'audio/webm'
+    case 'ogg':
+    case 'opus':
+      return 'audio/ogg'
+    case 'wav':
+      return 'audio/wav'
+    case 'mp3':
+      return 'audio/mpeg'
+    default:
+      return ''
+  }
+}
+
 export function extensionFor(mime: string): string {
   if (mime.includes('mp4') || mime.includes('aac')) return 'm4a'
   if (mime.includes('webm')) return 'webm'
