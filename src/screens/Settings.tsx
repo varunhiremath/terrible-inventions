@@ -9,12 +9,13 @@ import { useStore } from '../store'
  * looking in here finds his own name and a text box, which is not a catastrophe.
  */
 export function Settings() {
-  const { save, saveNames, saveNote, replaceSave, go } = useStore()
+  const { save, saveNames, saveNote, replaceSave, setPrototype, setRewards, go } = useStore()
   const profile = getProfile()
 
   const [kidName, setKidName] = useState(save.names.kidName ?? '')
   const [papaName, setPapaName] = useState(save.names.papaName ?? '')
   const [note, setNote] = useState(save.note?.text ?? '')
+  const [rewards, setRewardText] = useState(save.rewards.join('\n'))
   const [status, setStatus] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -44,10 +45,59 @@ export function Settings() {
     <Screen>
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-extrabold tracking-tight">Settings</h1>
-        <button type="button" onClick={() => go('world')} className="text-sm text-dim">
+        <button type="button" onClick={() => go(save.prototype === 'workshop' ? 'world' : 'hunt')} className="text-sm text-dim">
           Done
         </button>
       </header>
+
+      <Panel className="flex flex-col gap-3">
+        <h2 className="font-bold">Which game</h2>
+        <p className="text-sm leading-relaxed text-dim">
+          Two different ideas, both playable, so they can be compared rather than argued
+          about. Switching keeps all progress.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Btn
+            tone={save.prototype === 'hunt' ? 'chosen' : 'plain'}
+            onClick={() => setPrototype('hunt')}
+          >
+            Something is loose
+            <span className="block text-xs font-normal opacity-80">Track it and predict</span>
+          </Btn>
+          <Btn
+            tone={save.prototype === 'workshop' ? 'chosen' : 'plain'}
+            onClick={() => setPrototype('workshop')}
+          >
+            The workshop
+            <span className="block text-xs font-normal opacity-80">Fix the machines</span>
+          </Btn>
+        </div>
+      </Panel>
+
+      <Panel className="flex flex-col gap-3">
+        <h2 className="font-bold">What a catch is worth</h2>
+        <p className="text-sm leading-relaxed text-dim">
+          One promise per line, used in order. These are earned by catching, and a wrong
+          guess only ever hands him more evidence &mdash; so this rewards sticking with it,
+          not being clever. That distinction is deliberate.
+        </p>
+        <textarea
+          className={`${field} min-h-[96px] resize-y`}
+          value={rewards}
+          placeholder={'You pick tonight\u2019s film\nStay up twenty minutes later\nChoose Saturday breakfast'}
+          onChange={(e) => setRewardText(e.target.value)}
+          aria-label="Rewards"
+        />
+        <Btn
+          onClick={() => {
+            const list = rewards.split('\n').map((r) => r.trim()).filter(Boolean)
+            setRewards(list)
+            setStatus(list.length ? `${list.length} promise${list.length === 1 ? '' : 's'} saved.` : 'Promises cleared.')
+          }}
+        >
+          Save promises
+        </Btn>
+      </Panel>
 
       <Panel className="flex flex-col gap-3">
         <h2 className="font-bold">Names</h2>

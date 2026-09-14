@@ -6,7 +6,37 @@ Papa builds machines. Every machine goes wrong in a specific mathematical way, a
 somebody has to work out how. There is no subscription, no account, no server and no
 analytics — it is a single page that runs offline on a tablet.
 
+## Something is loose in the house
+
+The current prototype. Something is hiding in the house and moving between numbered
+rooms. The player never sees it — only where it has *been*. The job is to work out how it
+moves, go and wait in the room it will move to next, and set a trap.
+
+This is the design's whole bet: **the maths is the tracking, not a toll booth in front of
+it.** He is not answering questions to earn steps; he is inferring a rule from evidence
+and predicting. Pattern, hypothesis, prediction, test. The rules climb from skip counting
+through alternating jumps and growing steps to each jump being the sum of the last two,
+and because the house wraps round, it is modular arithmetic without the word ever coming
+up.
+
+Two properties hold it together:
+
+**Missing hands you evidence.** A wrong trap means the creature moves again and the trail
+gains a term, so the answer becomes *more* determined. Catching it is a matter of
+persistence, which is what makes it fair to hang a real promised reward on a catch rather
+than on being clever.
+
+**A served hunt never has two defensible answers.** The engine checks something weaker
+than "is the rule unique" — it asks whether every rule consistent with the evidence
+predicts the same next room. Ambiguity about the rule is fine; ambiguity about the answer
+is not. Terms are revealed until they agree.
+
+Catching opens another room, which makes the house bigger *and* the arithmetic richer.
+
 ## The workshop
+
+An earlier prototype, still playable — switch between them in Settings, since two ideas
+side by side settle an argument faster than talking about them.
 
 The app is a place you walk around, not a menu. One continuous tile map — kitchen, garage
 and back room off a corridor — with a character you move, machines standing in the rooms,

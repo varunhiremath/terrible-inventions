@@ -42,6 +42,21 @@ These are not preferences. Breaking one defeats the point of the project.
 8. **No backend, no telemetry, no accounts.** If remote co-op is added later it may carry
    game state through a relay, but never the player's name, voice or progress.
 
+## The hunt
+
+- `src/hunt/` holds the movement rules, the fairness check, the generated house and the
+  chase state; `src/screens/Hunt.tsx` runs it on the shared `TileWorld`.
+- **Never serve a hunt with two defensible answers.** `fairness()` asks whether every rule
+  fitting the trail predicts the same next room, and `revealUntilFair` extends the trail
+  until they agree. Keep that test.
+- **Never serve a degenerate chase.** A step equal to the room count leaves the creature
+  motionless; one sharing a factor with it gives a two-room ping-pong. `startHunt` re-rolls
+  until the trail visits at least three rooms. Both failure modes look fine in code and are
+  dead on contact with a player.
+- A miss must always add a term to the trail. That is what makes catching a matter of
+  persistence, and it is why a real-world reward can hang on a catch without rewarding
+  cleverness.
+
 ## The world
 
 - `src/world/` holds the map, the characters and the canvas renderer; `src/screens/World.tsx`

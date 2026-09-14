@@ -1,48 +1,38 @@
-import { MAP, TILE, mapHeight, mapWidth, type Point } from './map'
-import { MACHINES, PAPA_AT } from './characters'
-import { SPRITE_SIZE, makeSprite, paletteFor, type SpriteGrid } from './sprites'
-import { fill } from '../config/profile'
+import type { Point } from './map'
+import { SPRITE_SIZE, makeSprite, type Palette, type SpriteGrid } from './sprites'
 
 /**
- * Draws the workshop.
+ * Draws a tile scene.
  *
- * Flat colour and hard edges, at a deliberately chunky scale — the look is
- * doing the same job as the blocky games this is for. Sprites are rasterised
- * once into offscreen canvases and blitted, so the loop stays cheap on a tablet.
+ * Deliberately knows nothing about workshops or houses — it takes rows of tiles
+ * and a list of actors, so a second location costs a data file rather than a
+ * second renderer. Sprites are rasterised once into offscreen canvases and
+ * blitted, keeping the loop cheap on a tablet.
  */
 
-/**
- * Tile size is chosen per frame from the space available, so the wing fills a
- * tablet instead of sitting in a letterbox with dead space beneath it.
- */
-export function tileSizeFor(height: number): number {
-  return Math.max(26, Math.min(64, Math.floor(height / (mapHeight + 1))))
+export interface Actor {
+  key: string
+  at: Point
+  seed: number
+  palette?: Palette
+  label?: string
+  /** Bobbing marker above the head: something to do here. */
+  marker?: string
+  /** Shudders, for anything that is not right. */
+  agitated?: boolean
 }
 
-/** The player, in a palette nothing else uses, so he is never lost on screen. */
-const PLAYER_SEED = 31337
-const PLAYER_PALETTE = {
-  body: 'hsl(35 90% 58%)',
-  shade: 'hsl(28 80% 42%)',
-  accent: 'hsl(200 85% 62%)',
-  outline: 'hsl(30 60% 14%)',
-}
-
-const PAPA_SEED = 90210
-const PAPA_PALETTE = {
-  body: 'hsl(280 35% 55%)',
-  shade: 'hsl(280 35% 36%)',
-  accent: 'hsl(45 85% 60%)',
-  outline: 'hsl(280 40% 12%)',
-}
-
-export interface WorldView {
-  /** Player position in tiles, fractional while walking. */
+export interface Scene {
+  rows: readonly string[]
+  actors: readonly Actor[]
   player: { x: number; y: number }
-  fixed: readonly string[]
-  unlocked: boolean
-  /** Tile the player is facing, highlighted if something is there. */
   facingTile: Point | null
+  /** Big faint numerals painted on the floor, for rooms that have numbers. */
+  floorLabels?: readonly { at: Point; text: string; dim?: boolean }[]
+}
+
+export function tileSizeFor(height: number, rows: number): number {
+  return Math.max(22, Math.min(64, Math.floor(height / (rows + 1))))
 }
 
 const cache = new Map<string, HTMLCanvasElement>()
@@ -55,7 +45,6 @@ function spriteCanvas(key: string, grid: SpriteGrid): HTMLCanvasElement {
   canvas.width = SPRITE_SIZE
   canvas.height = SPRITE_SIZE
   const ctx = canvas.getContext('2d')!
-
   grid.forEach((row, y) =>
     row.forEach((colour, x) => {
       if (!colour) return
@@ -63,159 +52,135 @@ function spriteCanvas(key: string, grid: SpriteGrid): HTMLCanvasElement {
       ctx.fillRect(x, y, 1, 1)
     }),
   )
-
   cache.set(key, canvas)
   return canvas
 }
 
-export function draw(ctx: CanvasRenderingContext2D, view: WorldView, width: number, height: number): void {
+export function draw(ctx: CanvasRenderingContext2D, scene: Scene, width: number, height: number): void {
+  const rows = scene.rows
+  const mapH = rows.length
+  const mapW = Math.max(...rows.map((r) => r.length))
+  const T = tileSizeFor(height, mapH)
+
   ctx.imageSmoothingEnabled = false
   ctx.fillStyle = '#0d0f16'
   ctx.fillRect(0, 0, width, height)
 
-  const TILE_PX = tileSizeFor(height)
-
-  // Camera centres on the player, then stops at the edges so the walls sit
-  // against the frame rather than floating in void. Where the map is smaller
-  // than the screen it is centred instead, which is the usual case vertically.
-  const viewTilesX = width / TILE_PX
-  const viewTilesY = height / TILE_PX
-  const camX = clamp(view.player.x + 0.5 - viewTilesX / 2, 0, Math.max(0, mapWidth - viewTilesX))
-  const camY = clamp(view.player.y + 0.5 - viewTilesY / 2, 0, Math.max(0, mapHeight - viewTilesY))
-
-  const padX = Math.max(0, (width - mapWidth * TILE_PX) / 2)
-  const padY = Math.max(0, (height - mapHeight * TILE_PX) / 2)
-
-  const toScreen = (x: number, y: number) => ({
-    sx: Math.round((x - camX) * TILE_PX + padX),
-    sy: Math.round((y - camY) * TILE_PX + padY),
+  // Camera follows the player and stops at the edges; where the map is smaller
+  // than the screen it is centred instead.
+  const camX = clamp(scene.player.x + 0.5 - width / T / 2, 0, Math.max(0, mapW - width / T))
+  const camY = clamp(scene.player.y + 0.5 - height / T / 2, 0, Math.max(0, mapH - height / T))
+  const padX = Math.max(0, (width - mapW * T) / 2)
+  const padY = Math.max(0, (height - mapH * T) / 2)
+  const at = (x: number, y: number) => ({
+    sx: Math.round((x - camX) * T + padX),
+    sy: Math.round((y - camY) * T + padY),
   })
 
-  for (let y = 0; y < mapHeight; y++) {
-    for (let x = 0; x < MAP[y].length; x++) {
-      const { sx, sy } = toScreen(x, y)
-      if (sx < -TILE_PX || sy < -TILE_PX || sx > width || sy > height) continue
-      drawTile(ctx, MAP[y][x], sx, sy, view.unlocked, TILE_PX)
+  for (let y = 0; y < mapH; y++) {
+    for (let x = 0; x < rows[y].length; x++) {
+      const { sx, sy } = at(x, y)
+      if (sx < -T || sy < -T || sx > width || sy > height) continue
+      drawTile(ctx, rows[y][x], sx, sy, T)
     }
   }
 
-  if (view.facingTile) {
-    const { sx, sy } = toScreen(view.facingTile.x, view.facingTile.y)
+  for (const floor of scene.floorLabels ?? []) {
+    const { sx, sy } = at(floor.at.x, floor.at.y)
+    ctx.font = `bold ${Math.round(T * 1.5)}px system-ui, sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = floor.dim ? 'rgba(232,235,245,0.06)' : 'rgba(88,185,255,0.16)'
+    ctx.fillText(floor.text, sx + T / 2, sy + T / 2)
+    ctx.textBaseline = 'alphabetic'
+  }
+
+  if (scene.facingTile) {
+    const { sx, sy } = at(scene.facingTile.x, scene.facingTile.y)
     ctx.strokeStyle = 'rgba(255,200,74,0.85)'
     ctx.lineWidth = 3
-    ctx.strokeRect(sx + 2, sy + 2, TILE_PX - 4, TILE_PX - 4)
+    ctx.strokeRect(sx + 2, sy + 2, T - 4, T - 4)
   }
 
-  // Names only for whoever is being looked at. Labelling everyone at once
-  // clutters the room and covers the sprite standing below.
-  const facing = view.facingTile
-
-  for (const machine of MACHINES) {
-    const { sx, sy } = toScreen(machine.at.x, machine.at.y)
-    const broken = !view.fixed.includes(machine.id)
-    drawCharacter(ctx, spriteCanvas(machine.id, makeSprite(machine.seed)), sx, sy, broken, TILE_PX)
-    if (broken) exclamation(ctx, sx, sy, TILE_PX)
-    if (facing && facing.x === machine.at.x && facing.y === machine.at.y) {
-      label(ctx, machine.name, sx, sy, TILE_PX)
-    }
+  for (const actor of scene.actors) {
+    const { sx, sy } = at(actor.at.x, actor.at.y)
+    const sprite = spriteCanvas(actor.key, makeSprite(actor.seed, actor.palette))
+    const shake = actor.agitated ? Math.round(Math.sin(Date.now() / 90) * 1.5) : 0
+    ctx.drawImage(sprite, sx + shake, sy - 4, T, T)
+    if (actor.marker) marker(ctx, actor.marker, sx, sy, T)
+    if (actor.label) label(ctx, actor.label, sx, sy, T)
   }
 
-  const papa = toScreen(PAPA_AT.x, PAPA_AT.y)
-  drawCharacter(ctx, spriteCanvas('papa', makeSprite(PAPA_SEED, PAPA_PALETTE)), papa.sx, papa.sy, false, TILE_PX)
-  if (facing && facing.x === PAPA_AT.x && facing.y === PAPA_AT.y) {
-    label(ctx, fill('{papa}'), papa.sx, papa.sy, TILE_PX)
-  }
-
-  const p = toScreen(view.player.x, view.player.y)
-  drawCharacter(ctx, spriteCanvas('player', makeSprite(PLAYER_SEED, PLAYER_PALETTE)), p.sx, p.sy, false, TILE_PX)
+  const p = at(scene.player.x, scene.player.y)
+  ctx.drawImage(spriteCanvas('player', makeSprite(PLAYER_SEED, PLAYER_PALETTE)), p.sx, p.sy - 4, T, T)
 }
 
-function drawTile(
-  ctx: CanvasRenderingContext2D,
-  tile: string,
-  sx: number,
-  sy: number,
-  unlocked: boolean,
-  TILE_PX: number,
-): void {
+export const PLAYER_SEED = 31337
+export const PLAYER_PALETTE: Palette = {
+  body: 'hsl(35 90% 58%)',
+  shade: 'hsl(28 80% 42%)',
+  accent: 'hsl(200 85% 62%)',
+  outline: 'hsl(30 60% 14%)',
+}
+
+export const PAPA_SEED = 90210
+export const PAPA_PALETTE: Palette = {
+  body: 'hsl(280 35% 55%)',
+  shade: 'hsl(280 35% 36%)',
+  accent: 'hsl(45 85% 60%)',
+  outline: 'hsl(280 40% 12%)',
+}
+
+function drawTile(ctx: CanvasRenderingContext2D, tile: string, sx: number, sy: number, T: number): void {
   switch (tile) {
-    case TILE.WALL:
+    case '#':
       ctx.fillStyle = '#2c3145'
-      ctx.fillRect(sx, sy, TILE_PX, TILE_PX)
-      // A lighter cap reads as height without a real perspective pass.
+      ctx.fillRect(sx, sy, T, T)
       ctx.fillStyle = '#3a4160'
-      ctx.fillRect(sx, sy, TILE_PX, 6)
+      ctx.fillRect(sx, sy, T, Math.max(4, T / 6))
       break
-
-    case TILE.BENCH:
+    case '=':
       ctx.fillStyle = '#1d2030'
-      ctx.fillRect(sx, sy, TILE_PX, TILE_PX)
+      ctx.fillRect(sx, sy, T, T)
       ctx.fillStyle = '#5c4326'
-      ctx.fillRect(sx + 3, sy + 6, TILE_PX - 6, TILE_PX - 12)
-      ctx.fillStyle = '#77572f'
-      ctx.fillRect(sx + 3, sy + 6, TILE_PX - 6, 4)
+      ctx.fillRect(sx + 3, sy + 6, T - 6, T - 12)
       break
-
-    case TILE.LOCKED:
-      ctx.fillStyle = unlocked ? '#1d2030' : '#4a2f1c'
-      ctx.fillRect(sx, sy, TILE_PX, TILE_PX)
-      if (!unlocked) {
-        ctx.fillStyle = '#ffc84a'
-        ctx.fillRect(sx + TILE_PX / 2 - 3, sy + TILE_PX / 2 - 4, 6, 9)
-      }
+    case 'D':
+      ctx.fillStyle = '#4a2f1c'
+      ctx.fillRect(sx, sy, T, T)
+      ctx.fillStyle = '#ffc84a'
+      ctx.fillRect(sx + T / 2 - 3, sy + T / 2 - 4, 6, 9)
       break
-
     default:
       ctx.fillStyle = '#1a1d2a'
-      ctx.fillRect(sx, sy, TILE_PX, TILE_PX)
-      ctx.fillStyle = '#20243400'
+      ctx.fillRect(sx, sy, T, T)
       ctx.strokeStyle = 'rgba(255,255,255,0.03)'
-      ctx.strokeRect(sx + 0.5, sy + 0.5, TILE_PX - 1, TILE_PX - 1)
+      ctx.strokeRect(sx + 0.5, sy + 0.5, T - 1, T - 1)
   }
 }
 
-function drawCharacter(
-  ctx: CanvasRenderingContext2D,
-  sprite: HTMLCanvasElement,
-  sx: number,
-  sy: number,
-  broken: boolean,
-  TILE_PX: number,
-): void {
-  // A broken machine shudders, so it is obvious at a glance which need help.
-  const shake = broken ? Math.round(Math.sin(Date.now() / 90) * 1.5) : 0
-  ctx.save()
-  if (broken) ctx.globalAlpha = 0.92
-  ctx.drawImage(sprite, sx + shake, sy - 4, TILE_PX, TILE_PX)
-  ctx.restore()
-}
-
-function label(ctx: CanvasRenderingContext2D, text: string, sx: number, sy: number, TILE_PX: number): void {
+function label(ctx: CanvasRenderingContext2D, text: string, sx: number, sy: number, T: number): void {
   ctx.font = 'bold 11px system-ui, sans-serif'
   ctx.textAlign = 'center'
-  const x = sx + TILE_PX / 2
-  const y = sy + TILE_PX + 8
-  ctx.fillStyle = 'rgba(13,15,22,0.75)'
+  const x = sx + T / 2
+  const y = sy + T + 8
   const w = ctx.measureText(text).width + 8
+  ctx.fillStyle = 'rgba(13,15,22,0.78)'
   ctx.fillRect(x - w / 2, y - 10, w, 14)
   ctx.fillStyle = '#e8ebf5'
   ctx.fillText(text, x, y)
 }
 
-function exclamation(ctx: CanvasRenderingContext2D, sx: number, sy: number, TILE_PX: number): void {
+function marker(ctx: CanvasRenderingContext2D, text: string, sx: number, sy: number, T: number): void {
   const bob = Math.sin(Date.now() / 260) * 3
-  const x = sx + TILE_PX / 2
-  const y = sy - 12 + bob
   ctx.font = 'bold 20px system-ui, sans-serif'
   ctx.textAlign = 'center'
   ctx.fillStyle = '#14161f'
-  ctx.fillText('!', x + 1, y + 1)
+  ctx.fillText(text, sx + T / 2 + 1, sy - 11 + bob)
   ctx.fillStyle = '#ffc84a'
-  ctx.fillText('!', x, y)
+  ctx.fillText(text, sx + T / 2, sy - 12 + bob)
 }
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
 }
-
-export const __palettes = { PLAYER_PALETTE, PAPA_PALETTE, paletteFor }

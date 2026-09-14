@@ -37,6 +37,12 @@ export interface SaveState {
   coopLog: { id: string; rating: number; solved: boolean; at: number }[]
   /** Which machines are working again. The world's only persistent state. */
   world: { fixed: string[] }
+  /** Catches so far, which is what opens the house up. */
+  hunt: { catches: number }
+  /** What {papa} has promised, one per catch. Written on the device, never shipped. */
+  rewards: string[]
+  /** Which prototype is being tried. Here so the two can be compared honestly. */
+  prototype: 'hunt' | 'workshop'
 }
 
 export function emptySave(): SaveState {
@@ -50,6 +56,9 @@ export function emptySave(): SaveState {
     log: [],
     coopLog: [],
     world: { fixed: [] },
+    hunt: { catches: 0 },
+    rewards: [],
+    prototype: 'hunt',
   }
 }
 

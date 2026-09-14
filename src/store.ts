@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { GENERATORS, generatorFor } from './content'
 import { coopGeneratorFor } from './content/coop'
 import { MACHINES } from './world/characters'
+import { roomsUnlocked, setTrap, springTrap, startHunt, type HuntState } from './hunt/hunt'
 import type { CoopProblem } from './content/coop'
 import { updateRating } from './engine/elo'
 import { initialSelectorState, selectNext, type ProblemSpec, type SelectorState } from './engine/session'
@@ -21,7 +22,7 @@ export const MISSION_LENGTH = 4
  */
 export const COOP_BONUS = 200
 
-export type Screen = 'world' | 'mission' | 'note' | 'settings' | 'studio' | 'coop'
+export type Screen = 'world' | 'hunt' | 'mission' | 'note' | 'settings' | 'studio' | 'coop'
 
 interface Served {
   problem: Problem
@@ -44,6 +45,10 @@ interface State {
    * was broken visibly stops being broken, and says so.
    */
   justFixed: { machineId: string; praise: string } | null
+  /** The chase in progress, if any. */
+  hunt: HuntState | null
+  /** Shown after springing a trap, until dismissed. */
+  huntResult: { caught: boolean; reward: string | null } | null
   coop: CoopProblem | null
   /** Which hand is on screen. Only one at a time, so the other stays private. */
   coopShowing: 'a' | 'b' | null
@@ -60,6 +65,12 @@ interface State {
   startMission: (machineId: string) => void
   abandonMission: () => void
   clearJustFixed: () => void
+  beginHunt: () => void
+  placeTrap: (room: number) => void
+  springIt: () => void
+  dismissHuntResult: () => void
+  setPrototype: (which: 'hunt' | 'workshop') => void
+  setRewards: (rewards: string[]) => void
   startCoop: () => void
   showHand: (who: 'a' | 'b' | null) => void
   finishCoop: (solved: boolean) => void
@@ -80,6 +91,8 @@ export const useStore = create<State>((set, get) => ({
   current: null,
   mission: null,
   justFixed: null,
+  hunt: null,
+  huntResult: null,
   coop: null,
   coopShowing: null,
   coopSolved: null,
@@ -91,7 +104,12 @@ export const useStore = create<State>((set, get) => ({
     const save = await loadSave()
     setProfileOverride(save.names)
     await loadVoice()
-    set({ save, selector: initialSelectorState(save.rating, save.attempts), ready: true })
+    set({
+      save,
+      selector: initialSelectorState(save.rating, save.attempts),
+      screen: save.prototype === 'workshop' ? 'world' : 'hunt',
+      ready: true,
+    })
   },
 
   go: (screen) => set({ screen }),
@@ -112,6 +130,55 @@ export const useStore = create<State>((set, get) => ({
   abandonMission: () => set({ mission: null, current: null, verdict: null, screen: 'world' }),
 
   clearJustFixed: () => set({ justFixed: null }),
+
+  beginHunt: () => {
+    const { save } = get()
+    set({
+      hunt: startHunt(save.rating, roomsUnlocked(save.hunt.catches), randomSeed()),
+      huntResult: null,
+      screen: 'hunt',
+    })
+  },
+
+  placeTrap: (room) => {
+    const { hunt } = get()
+    if (hunt) set({ hunt: setTrap(hunt, room) })
+  },
+
+  springIt: () => {
+    const { hunt, save } = get()
+    if (!hunt || hunt.trapRoom === null) return
+
+    const after = springTrap(hunt)
+    if (!after.caught) {
+      set({ hunt: after, huntResult: { caught: false, reward: null } })
+      return
+    }
+
+    // A catch is the only thing a promised reward hangs on — and since a miss
+    // only ever adds evidence, catching is a matter of persistence rather than
+    // of being clever. That is the distinction the whole design rests on.
+    const catches = save.hunt.catches + 1
+    const next: SaveState = { ...save, hunt: { catches } }
+    const reward = save.rewards.length > 0 ? save.rewards[(catches - 1) % save.rewards.length] : null
+
+    set({ hunt: after, huntResult: { caught: true, reward }, save: next })
+    void persistSave(next)
+  },
+
+  dismissHuntResult: () => set({ huntResult: null }),
+
+  setPrototype: (which) => {
+    const next: SaveState = { ...get().save, prototype: which }
+    set({ save: next, screen: which === 'hunt' ? 'hunt' : 'world', hunt: null, huntResult: null })
+    void persistSave(next)
+  },
+
+  setRewards: (rewards) => {
+    const next: SaveState = { ...get().save, rewards }
+    set({ save: next })
+    void persistSave(next)
+  },
 
   startCoop: () => {
     const gen = coopGeneratorFor('split-clues')
