@@ -42,6 +42,22 @@ These are not preferences. Breaking one defeats the point of the project.
 8. **No backend, no telemetry, no accounts.** If remote co-op is added later it may carry
    game state through a relay, but never the player's name, voice or progress.
 
+## The world
+
+- `src/world/` holds the map, the characters and the canvas renderer; `src/screens/World.tsx`
+  runs it. Movement lives in refs against an animation frame — never put the player
+  position in React state, and keep the world screen's store subscriptions narrow, or the
+  loop restarts on every unrelated change.
+- Machines are characters with names and dialogue, never topic labels. A new machine needs
+  a name, a personality, a fault that matches its problem kinds, and lines for all three
+  states (broken, just fixed, working).
+- Every mission must visibly change the world. A repaired machine stops shaking, loses its
+  marker and says something. That payoff is the point of the structure; do not add a
+  mission that leaves the place identical.
+- `map.test.ts` flood-fills from the spawn to prove every room is reachable, and checks the
+  rows are a consistent length. Keep both — a short row silently becomes wall and can seal
+  a room off.
+
 ## Conventions
 
 - Run `npm test` and `npm run build` before pushing. Both must be clean.

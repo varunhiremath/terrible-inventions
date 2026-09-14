@@ -35,6 +35,8 @@ export interface SaveState {
    * rating or the solo history.
    */
   coopLog: { id: string; rating: number; solved: boolean; at: number }[]
+  /** Which machines are working again. The world's only persistent state. */
+  world: { fixed: string[] }
 }
 
 export function emptySave(): SaveState {
@@ -47,6 +49,7 @@ export function emptySave(): SaveState {
     names: {},
     log: [],
     coopLog: [],
+    world: { fixed: [] },
   }
 }
 

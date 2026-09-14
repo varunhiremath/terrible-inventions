@@ -73,8 +73,8 @@ export function Coop() {
   return (
     <Screen>
       <header className="flex items-center justify-between gap-3">
-        <button type="button" onClick={() => go('lab')} className="text-sm text-dim">
-          &larr; Lab
+        <button type="button" onClick={() => go('world')} className="text-sm text-dim">
+          &larr; Workshop
         </button>
         <Tag tone="warn">Two players</Tag>
       </header>
@@ -153,8 +153,8 @@ export function Coop() {
             {coopSolved ? 'Between you, you got it.' : 'Not quite — the right answer is marked above.'}
           </p>
           <p className="mt-2 leading-relaxed text-chalk/90">{fill(coop.explain)}</p>
-          <Btn tone="go" onClick={() => go('lab')} className="mt-4 w-full">
-            Back to the Lab
+          <Btn tone="go" onClick={() => go('world')} className="mt-4 w-full">
+            Back to the workshop
           </Btn>
         </Panel>
       )}

@@ -6,6 +6,24 @@ Papa builds machines. Every machine goes wrong in a specific mathematical way, a
 somebody has to work out how. There is no subscription, no account, no server and no
 analytics — it is a single page that runs offline on a tablet.
 
+## The workshop
+
+The app is a place you walk around, not a menu. One continuous tile map — kitchen, garage
+and back room off a corridor — with a character you move, machines standing in the rooms,
+and a door at the far end that stays shut until the wing is working again.
+
+The machines are people with problems, not categories with labels. Kettle has boiled
+himself solid and cannot remember how to share things out; Trundle has wheels that turn
+two ways and has lost count of the routes; Sparks is sick of {papa} doing his working out
+on its casing in permanent marker. Each machine's fault is exactly the maths its mission
+serves, so helping it and understanding the thing are the same act.
+
+This matters more than it sounds. An earlier version had the same engine, the same
+generators and the same difficulty model behind a tidy list of topics, and it was a
+worksheet with good typography. Nothing was broken on screen, so nothing got fixed;
+nothing changed, so there was no trace you had been there. A named character who visibly
+stops shaking is the whole difference.
+
 ## Why it is built this way
 
 Most maths apps for this age are fluency drills with a reward loop bolted on. That is

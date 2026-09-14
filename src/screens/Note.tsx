@@ -20,7 +20,7 @@ export function Note() {
         </p>
       </Panel>
 
-      <Btn tone="go" onClick={() => go('lab')}>
+      <Btn tone="go" onClick={() => go('world')}>
         Right then
       </Btn>
     </Screen>

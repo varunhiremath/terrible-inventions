@@ -44,7 +44,7 @@ export function Settings() {
     <Screen>
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-extrabold tracking-tight">Settings</h1>
-        <button type="button" onClick={() => go('lab')} className="text-sm text-dim">
+        <button type="button" onClick={() => go('world')} className="text-sm text-dim">
           Done
         </button>
       </header>

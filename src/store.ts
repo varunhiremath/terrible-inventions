@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { GENERATORS, generatorFor } from './content'
 import { coopGeneratorFor } from './content/coop'
+import { MACHINES } from './world/characters'
 import type { CoopProblem } from './content/coop'
 import { updateRating } from './engine/elo'
 import { initialSelectorState, selectNext, type ProblemSpec, type SelectorState } from './engine/session'
@@ -10,7 +11,8 @@ import { loadVoice } from './audio'
 import { setProfileOverride } from './config/profile'
 import type { Attempt, Problem } from './engine/types'
 
-export const SESSION_LENGTH = 8
+/** Problems in a mission. Short enough that fixing a machine feels like one sitting. */
+export const MISSION_LENGTH = 4
 
 /**
  * How far above his solo level a two-player puzzle is pitched. Two people
@@ -19,7 +21,7 @@ export const SESSION_LENGTH = 8
  */
 export const COOP_BONUS = 200
 
-export type Screen = 'lab' | 'gauntlet' | 'note' | 'settings' | 'summary' | 'studio' | 'coop'
+export type Screen = 'world' | 'mission' | 'note' | 'settings' | 'studio' | 'coop'
 
 interface Served {
   problem: Problem
@@ -34,6 +36,14 @@ interface State {
   selector: SelectorState
 
   current: Served | null
+  /** The machine being repaired, if a mission is under way. */
+  mission: { machineId: string; total: number } | null
+  /**
+   * Set the instant a machine is repaired, so the world can play its reaction.
+   * This is the payoff the whole mission structure exists for — the thing that
+   * was broken visibly stops being broken, and says so.
+   */
+  justFixed: { machineId: string; praise: string } | null
   coop: CoopProblem | null
   /** Which hand is on screen. Only one at a time, so the other stays private. */
   coopShowing: 'a' | 'b' | null
@@ -47,7 +57,9 @@ interface State {
 
   boot: () => Promise<void>
   go: (screen: Screen) => void
-  startSession: () => void
+  startMission: (machineId: string) => void
+  abandonMission: () => void
+  clearJustFixed: () => void
   startCoop: () => void
   showHand: (who: 'a' | 'b' | null) => void
   finishCoop: (solved: boolean) => void
@@ -62,10 +74,12 @@ interface State {
 
 export const useStore = create<State>((set, get) => ({
   ready: false,
-  screen: 'lab',
+  screen: 'world',
   save: emptySave(),
   selector: initialSelectorState(emptySave().rating),
   current: null,
+  mission: null,
+  justFixed: null,
   coop: null,
   coopShowing: null,
   coopSolved: null,
@@ -82,11 +96,22 @@ export const useStore = create<State>((set, get) => ({
 
   go: (screen) => set({ screen }),
 
-  startSession: () => {
-    set({ sessionLog: [], selector: initialSelectorState(get().save.rating, get().save.attempts) })
+  startMission: (machineId) => {
+    const machine = MACHINES.find((m) => m.id === machineId)
+    if (!machine) return
+
+    set({
+      mission: { machineId, total: machine.length },
+      sessionLog: [],
+      selector: initialSelectorState(get().save.rating, get().save.attempts),
+    })
     serve(set, get)
-    set({ screen: 'gauntlet' })
+    set({ screen: 'mission' })
   },
+
+  abandonMission: () => set({ mission: null, current: null, verdict: null, screen: 'world' }),
+
+  clearJustFixed: () => set({ justFixed: null }),
 
   startCoop: () => {
     const gen = coopGeneratorFor('split-clues')
@@ -164,10 +189,29 @@ export const useStore = create<State>((set, get) => ({
   },
 
   next: () => {
-    if (get().sessionLog.length >= SESSION_LENGTH) {
-      set({ screen: 'summary', current: null, verdict: null, hintsOpen: 0 })
+    const { mission, sessionLog, save } = get()
+
+    if (mission && sessionLog.length >= mission.total) {
+      // The machine is repaired for good. This is the only thing the world
+      // remembers, and it is what opens the door at the end of the wing.
+      const fixed = save.world.fixed.includes(mission.machineId)
+        ? save.world.fixed
+        : [...save.world.fixed, mission.machineId]
+      const next: SaveState = { ...save, world: { fixed } }
+
+      set({
+        save: next,
+        mission: null,
+        current: null,
+        verdict: null,
+        hintsOpen: 0,
+        screen: 'world',
+        justFixed: { machineId: mission.machineId, praise: praiseFor(sessionLog) },
+      })
+      void persistSave(next)
       return
     }
+
     serve(set, get)
   },
 
@@ -197,15 +241,41 @@ export const useStore = create<State>((set, get) => ({
 
   replaceSave: (save) => {
     setProfileOverride(save.names)
-    set({ save, selector: initialSelectorState(save.rating, save.attempts), screen: 'lab' })
+    set({ save, selector: initialSelectorState(save.rating, save.attempts), screen: 'world' })
     void persistSave(save)
   },
 }))
 
+/**
+ * A line about what he actually did.
+ *
+ * Never about being right, and never about being clever — the evidence on
+ * children identified as gifted is that praising the result is what teaches
+ * them to avoid hard things. So this only ever reports effort and strategy.
+ */
+function praiseFor(log: readonly Attempt[]): string {
+  const withHints = log.filter((a) => a.hintsUsed > 0).length
+  const stretches = log.filter((a) => a.stretch).length
+  const longest = log.reduce((n, a) => Math.max(n, a.elapsedMs), 0)
+
+  if (stretches > 0) return 'You took on one that was over your head. That is the only way the ceiling moves.'
+  if (withHints > 0) return 'You asked for a nudge and carried on anyway. That is exactly how it is done.'
+  if (longest > 45_000) return 'You sat with one of those for a long time without giving up on it.'
+  return 'Straight through, no help needed.'
+}
+
 /** Picks and builds the next problem, and clears the per-problem UI state. */
 function serve(set: (partial: Partial<State>) => void, get: () => State): void {
-  const { selector } = get()
-  const spec = selectNext(selector, GENERATORS, makeRng(randomSeed()))
+  const { selector, mission } = get()
+
+  // A mission only serves the kinds of problem its machine is actually broken
+  // in, so helping Kettle is always about sharing things out.
+  const machine = mission ? MACHINES.find((m) => m.id === mission.machineId) : undefined
+  const pool = machine
+    ? GENERATORS.filter((g) => machine.kinds.includes(g.id))
+    : GENERATORS
+
+  const spec = selectNext(selector, pool.length > 0 ? pool : GENERATORS, makeRng(randomSeed()))
   const problem = generatorFor(spec.kind).generate(spec.rating, randomSeed())
 
   set({

@@ -1,13 +1,23 @@
 import { fill } from '../config/profile'
 import { Btn, Panel, Screen, Tag } from '../ui/bits'
 import { Prompt, ProblemView } from '../ui/ProblemView'
-import { SESSION_LENGTH, useStore } from '../store'
+import { MACHINES } from '../world/characters'
+import { useStore } from '../store'
 import { play } from '../audio'
 
-export function Gauntlet() {
-  const { current, verdict, hintsOpen, openHint, answer, next, sessionLog, go } = useStore()
-  if (!current) return null
+/**
+ * Problems, inside a job with a name.
+ *
+ * Identical machinery to before — same selector, same generators, same rating —
+ * but framed as helping somebody rather than as a quantity of questions. The
+ * header says whose fault this is and how close it is to being over.
+ */
+export function Mission() {
+  const { current, mission, verdict, hintsOpen, openHint, answer, next, sessionLog, abandonMission } =
+    useStore()
+  if (!current || !mission) return null
 
+  const machine = MACHINES.find((m) => m.id === mission.machineId)
   const { problem, spec } = current
   const done = sessionLog.length
   const locked = verdict !== null
@@ -20,11 +30,11 @@ export function Gauntlet() {
   return (
     <Screen>
       <header className="flex items-center justify-between gap-3">
-        <button type="button" onClick={() => go('lab')} className="text-sm text-dim">
-          &larr; Lab
+        <button type="button" onClick={abandonMission} className="text-sm text-dim">
+          &larr; Leave it for now
         </button>
-        <div className="flex gap-1.5" aria-label={`Problem ${done + 1} of ${SESSION_LENGTH}`}>
-          {Array.from({ length: SESSION_LENGTH }, (_, i) => (
+        <div className="flex gap-1.5" aria-label={`Problem ${done + 1} of ${mission.total}`}>
+          {Array.from({ length: mission.total }, (_, i) => (
             <span
               key={i}
               className={`h-2.5 w-2.5 rounded-full ${
@@ -35,8 +45,12 @@ export function Gauntlet() {
         </div>
       </header>
 
-      {/* Said out loud, before he starts. A stretch problem he misses is the
-          system working, and he should know that going in rather than after. */}
+      {machine && (
+        <p className="text-sm font-bold uppercase tracking-wider text-bolt">
+          {fill(machine.mission)}
+        </p>
+      )}
+
       {spec.stretch && (
         <Panel className="border-bolt/40 bg-bolt/10">
           <Tag tone="warn">Hard one</Tag>
@@ -62,12 +76,7 @@ export function Gauntlet() {
       ))}
 
       {!locked && hintsOpen < problem.hints.length && (
-        <Btn
-          onClick={() => {
-            openHint()
-            play('hint')
-          }}
-        >
+        <Btn onClick={() => { openHint(); play('hint') }}>
           {hintsOpen === 0 ? 'Give me a nudge' : 'Another nudge'}
         </Btn>
       )}
@@ -79,7 +88,7 @@ export function Gauntlet() {
           </p>
           <p className="mt-2 leading-relaxed text-chalk/90">{fill(problem.explain)}</p>
           <Btn tone="go" onClick={next} className="mt-4 w-full">
-            {done >= SESSION_LENGTH ? 'Finish' : 'Next machine'}
+            {done >= mission.total ? `Back to ${machine?.name ?? 'the workshop'}` : 'Keep going'}
           </Btn>
         </Panel>
       )}

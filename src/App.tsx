@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
-import { Lab } from './screens/Lab'
-import { Gauntlet } from './screens/Gauntlet'
-import { Summary } from './screens/Summary'
+import { World } from './screens/World'
+import { Mission } from './screens/Mission'
 import { Note } from './screens/Note'
 import { Settings } from './screens/Settings'
 import { Studio } from './screens/Studio'
@@ -27,10 +26,8 @@ export default function App() {
   if (!ready) return null
 
   switch (screen) {
-    case 'gauntlet':
-      return <Gauntlet />
-    case 'summary':
-      return <Summary />
+    case 'mission':
+      return <Mission />
     case 'note':
       return <Note />
     case 'settings':
@@ -40,6 +37,6 @@ export default function App() {
     case 'coop':
       return <Coop />
     default:
-      return <Lab />
+      return <World />
   }
 }
