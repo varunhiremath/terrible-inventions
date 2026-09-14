@@ -4,12 +4,13 @@ import { updateRating } from './engine/elo'
 import { initialSelectorState, selectNext, type ProblemSpec, type SelectorState } from './engine/session'
 import { makeRng, randomSeed } from './engine/rng'
 import { emptySave, loadSave, persistSave, type SaveState } from './engine/storage'
+import { loadVoice } from './audio'
 import { setProfileOverride } from './config/profile'
 import type { Attempt, Problem } from './engine/types'
 
 export const SESSION_LENGTH = 8
 
-export type Screen = 'lab' | 'gauntlet' | 'note' | 'settings' | 'summary'
+export type Screen = 'lab' | 'gauntlet' | 'note' | 'settings' | 'summary' | 'studio'
 
 interface Served {
   problem: Problem
@@ -56,6 +57,7 @@ export const useStore = create<State>((set, get) => ({
   boot: async () => {
     const save = await loadSave()
     setProfileOverride(save.names)
+    await loadVoice()
     set({ save, selector: initialSelectorState(save.rating, save.attempts), ready: true })
   },
 

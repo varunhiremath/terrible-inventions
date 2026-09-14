@@ -59,9 +59,27 @@ recording is in version control, and none is ever sent anywhere.
 
 - Names ship as placeholders and are entered on the device, into that browser's
   IndexedDB. Authored strings use `{kid}` and `{papa}` placeholders.
-- Voice recordings live in `public/voice/`, which is gitignored.
+- Voice recordings are made in the app's own booth (Settings > Record your voice) and
+  stored in that device's IndexedDB. They are never uploaded and never committed. The
+  booth can export them as a ZIP, and `public/voice/` accepts hand-placed files, but that
+  directory is gitignored.
 - All progress is local. There is no backend to leak, and no telemetry.
 - Because storage is local, iOS can evict it — so Settings has a backup export.
+
+## Papa's voice
+
+The app plays recorded lines at eight cues — a greeting, a nudge, a warning that the next
+problem is a hard one, and so on — with several takes per cue, picked at random so a clip
+heard forty times does not turn into a sound effect.
+
+The lines are in `src/voiceLines.ts`, and the largest group is deliberately the one where
+{papa} admits a problem was hard. A child used to finding things easy needs to hear that
+the adult he respects finds things hard too, and it lands better in a voice he knows than
+in any amount of interface copy.
+
+Recording happens in the app: Settings > Record your voice, read a line, tap to record,
+tap to stop, listen back, redo if you like. The microphone needs a secure context, so it
+works on localhost and over HTTPS.
 
 ## Running it
 

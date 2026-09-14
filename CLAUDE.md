@@ -9,9 +9,10 @@ These are not preferences. Breaking one defeats the point of the project.
 
 1. **No real names, faces or voices in git.** The repository is public. Names live in
    IndexedDB on the device; authored strings use `{kid}` / `{papa}` and are rendered
-   through `fill()` from `src/config/profile.ts`. `public/voice/` and `public/faces/`
-   are gitignored and must stay that way. Never put a real name in a commit message,
-   a comment, a test fixture or a branch name.
+   through `fill()` from `src/config/profile.ts`. Voice clips are recorded in-app and
+   kept in IndexedDB; `public/voice/` and `public/faces/` are gitignored and must stay
+   that way. Never add an upload path for recordings. Never put a real name in a commit
+   message, a comment, a test fixture or a branch name.
 
 2. **No scores in the interface.** No percentage, no accuracy, no streak, no
    correct-out-of-total, no leaderboard — on any screen. The counter on the Lab
@@ -42,5 +43,7 @@ These are not preferences. Breaking one defeats the point of the project.
   throwing anything.
 - iPad first. Touch targets at least 60px, never use the system keyboard for numbers
   (`src/ui/Keypad.tsx` exists for this), and keep the layout working at phone width.
+- Voice lines live in `src/voiceLines.ts`. Ids are storage keys and filenames — add
+  freely, never renumber. Keep several takes per cue.
 - Tone: {papa} is hopeless and cheerful about it. The app is never disappointed in the
   player, and never congratulates him on being clever — only on what he actually did.

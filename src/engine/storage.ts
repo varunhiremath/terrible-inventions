@@ -13,6 +13,8 @@ import { START_RATING } from './elo'
 
 const DB_NAME = 'terrible-inventions'
 const STORE = 'state'
+/** Recorded voice clips, keyed by line id. Blobs, never leaving this device. */
+export const VOICE_STORE = 'voice'
 const KEY = 'main'
 const MAX_LOG = 2000
 
@@ -43,10 +45,11 @@ export function emptySave(): SaveState {
 
 let dbPromise: Promise<IDBPDatabase> | null = null
 
-function db(): Promise<IDBPDatabase> {
-  dbPromise ??= openDB(DB_NAME, 1, {
+export function db(): Promise<IDBPDatabase> {
+  dbPromise ??= openDB(DB_NAME, 2, {
     upgrade(database) {
       if (!database.objectStoreNames.contains(STORE)) database.createObjectStore(STORE)
+      if (!database.objectStoreNames.contains(VOICE_STORE)) database.createObjectStore(VOICE_STORE)
     },
   })
   return dbPromise

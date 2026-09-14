@@ -99,10 +99,20 @@ export function Settings() {
       </Panel>
 
       <Panel className="flex flex-col gap-3">
+        <h2 className="font-bold">Your voice</h2>
+        <p className="text-sm leading-relaxed text-dim">
+          Record the lines {profile.papaName} says. They stay on this device and are never
+          uploaded. Needs a microphone, so this only works over HTTPS or on localhost.
+        </p>
+        <Btn onClick={() => go('studio')}>Record your voice</Btn>
+      </Panel>
+
+      <Panel className="flex flex-col gap-3">
         <h2 className="font-bold">Backup</h2>
         <p className="text-sm leading-relaxed text-dim">
           Progress lives in this browser&rsquo;s storage and nowhere else. iOS can clear that for
-          apps it thinks are unused, so take a copy occasionally.
+          apps it thinks are unused, so take a copy occasionally. Voice recordings are not in this
+          file &mdash; download those separately from the booth.
         </p>
         <Btn onClick={download}>Save a backup file</Btn>
         <Btn onClick={() => fileRef.current?.click()}>Restore from a backup</Btn>

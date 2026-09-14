@@ -4,6 +4,7 @@ import { Gauntlet } from './screens/Gauntlet'
 import { Summary } from './screens/Summary'
 import { Note } from './screens/Note'
 import { Settings } from './screens/Settings'
+import { Studio } from './screens/Studio'
 import { useStore } from './store'
 import { unlock } from './audio'
 
@@ -33,6 +34,8 @@ export default function App() {
       return <Note />
     case 'settings':
       return <Settings />
+    case 'studio':
+      return <Studio />
     default:
       return <Lab />
   }
