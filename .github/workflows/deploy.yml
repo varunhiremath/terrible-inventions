@@ -1,8 +1,8 @@
 name: Deploy
 
 # Builds the app and publishes it to GitHub Pages on every push to main.
-# Pages has to be switched on once by hand: repository Settings > Pages >
-# Source: GitHub Actions.
+# Pages is switched on by the workflow itself (see `enablement` below), so there
+# is nothing to configure by hand.
 
 on:
   push:
@@ -27,9 +27,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -47,6 +47,10 @@ jobs:
           BASE_PATH: /${{ github.event.repository.name }}/
 
       - uses: actions/configure-pages@v5
+        with:
+          # Turns Pages on if it is not already, rather than failing and asking
+          # for a trip to the repository settings.
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
