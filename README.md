@@ -92,8 +92,26 @@ npm run preview    # serve the build, then:
 npm run smoke      # play a full session in a real browser
 ```
 
-Installing to an iPad home screen gets the standalone, offline, no-browser-chrome
-version, which is the way it is meant to be used.
+## Deploying
+
+Pushing to `main` builds and publishes to GitHub Pages via `.github/workflows/deploy.yml`.
+Pages has to be switched on once by hand: repository **Settings > Pages > Source: GitHub
+Actions**. After that the app lives at `https://<user>.github.io/<repo>/` and every push
+updates it.
+
+CI sets `BASE_PATH` so the asset paths and the service worker's scope match the
+subdirectory. Any other static host works too — leave `BASE_PATH` unset to build with
+relative paths.
+
+Note that a GitHub Pages site is public. Nothing personal is in the build: names, voice
+and progress are all entered on the device and stay there.
+
+## Installing it
+
+Open the deployed URL on the device and add it to the home screen — Safari's Share menu
+on iOS, Chrome's menu on Android. That gets the standalone, offline, no-browser-chrome
+version, which is the way it is meant to be used. The microphone in the recording booth
+needs HTTPS, which a Pages URL provides.
 
 ## Layout
 
