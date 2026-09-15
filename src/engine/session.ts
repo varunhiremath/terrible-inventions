@@ -1,6 +1,8 @@
 import {
   CALIBRATION_ATTEMPTS,
   CALIBRATION_SUCCESS,
+  WARMUP_ATTEMPTS,
+  WARMUP_SUCCESS,
   MISSES_BEFORE_BRAKE,
   RECOVERY_SUCCESS,
   STRETCH_EVERY,
@@ -54,18 +56,21 @@ export function selectNext(
   if (generators.length === 0) throw new Error('no generators registered')
 
   const brake = state.consecutiveMisses >= MISSES_BEFORE_BRAKE
-  const calibrating = !brake && state.attempts < CALIBRATION_ATTEMPTS
+  const warmingUp = !brake && state.attempts < WARMUP_ATTEMPTS
+  const calibrating = !brake && !warmingUp && state.attempts < CALIBRATION_ATTEMPTS
   // No point flagging a stretch while every problem is already at the limit of
   // what we know he can do.
-  const stretch = !brake && !calibrating && state.sinceStretch >= STRETCH_EVERY
+  const stretch = !brake && !warmingUp && !calibrating && state.sinceStretch >= STRETCH_EVERY
 
   const target = brake
     ? RECOVERY_SUCCESS
-    : calibrating
-      ? CALIBRATION_SUCCESS
-      : stretch
-        ? STRETCH_SUCCESS
-        : TARGET_SUCCESS
+    : warmingUp
+      ? WARMUP_SUCCESS
+      : calibrating
+        ? CALIBRATION_SUCCESS
+        : stretch
+          ? STRETCH_SUCCESS
+          : TARGET_SUCCESS
   const wanted = Math.max(MIN_RATING, Math.round(ratingForSuccessRate(state.rating, target)))
 
   const eligible = generators.filter((g) => wanted >= g.minRating && wanted <= g.maxRating)

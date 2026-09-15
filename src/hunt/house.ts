@@ -30,6 +30,12 @@ const ROOM_H = 5
 const CORRIDOR_H = 3
 const COLUMNS = 5
 
+/** One hue per room, so a number is also a colour you can remember. */
+export const ROOM_COLOURS = [
+  '#f08c8c', '#f3b95c', '#e8dd5c', '#8fd97a', '#6fd3c8',
+  '#7bb0ef', '#a08ce8', '#e18ad4', '#e8a86a', '#a8cb7e',
+] as const
+
 export interface HouseRoom {
   number: number
   name: string
@@ -89,6 +95,11 @@ export function roomByNumber(n: number): HouseRoom | undefined {
 }
 
 /** Which room a point is inside, or undefined for the landing. */
+export function colourAt(x: number, y: number): string | undefined {
+  const room = roomContaining({ x, y })
+  return room ? ROOM_COLOURS[(room.number - 1) % ROOM_COLOURS.length] : undefined
+}
+
 export function roomContaining({ x, y }: Point): HouseRoom | undefined {
   return HOUSE.rooms.find(
     (r) => x >= r.bounds.x0 && x <= r.bounds.x1 && y >= r.bounds.y0 && y <= r.bounds.y1,

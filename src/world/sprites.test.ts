@@ -52,3 +52,16 @@ describe('sprites', () => {
     expect(bodies.size).toBeGreaterThan(seeds.length * 0.7)
   })
 })
+
+describe('colour format', () => {
+  it('emits colours three.js can actually parse', () => {
+    // Canvas accepts "hsl(200 60% 55%)"; three.js only accepts the comma form,
+    // and silently renders anything else white.
+    for (const seed of seeds.slice(0, 20)) {
+      for (const colour of makeSprite(seed).flat()) {
+        if (!colour || colour.startsWith('#')) continue
+        expect(colour).toMatch(/^hsl\(\d+, \d+%, \d+%\)$/)
+      }
+    }
+  })
+})

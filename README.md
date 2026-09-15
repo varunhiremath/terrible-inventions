@@ -6,6 +6,25 @@ Papa builds machines. Every machine goes wrong in a specific mathematical way, a
 somebody has to work out how. There is no subscription, no account, no server and no
 analytics — it is a single page that runs offline on a tablet.
 
+## How it looks
+
+Voxel, in three dimensions, rendered with three.js. Characters are the procedural
+sprites extruded — every lit pixel becomes a cube — so all the generated-character work
+carries straight over and a new machine still costs nothing to draw.
+
+The flat top-down version it replaced was legible and dull. For a child who plays Roblox,
+that difference is not cosmetic.
+
+## Voice
+
+The browser's own speech synthesiser reads every line, with pitch and rate derived from
+each character's seed so they do not all sound like one narrator. No API key, no network,
+no cost, and nothing leaves the device.
+
+Recorded voices are still supported — Settings offers computer speech, recordings, or
+silence — but the synthesiser is the default because it can speak lines written later,
+and the recordings only cover the thirty-seven that were read aloud.
+
 ## Something is loose in the house
 
 The current prototype. Something is hiding in the house and moving between numbered
@@ -70,7 +89,9 @@ share one Elo scale, so the selector can aim at a chosen success rate by solving
 curve backwards.
 
 **The app hunts for the player's level instead of protecting him from it.** The first
-eight problems aim at a coin flip, which is where the estimate moves fastest; after that
+few problems are pitched to be got right — meeting a child with the hardest thing you
+have before he has found the buttons is a poor introduction — and then it aims at a coin
+flip, which is where the estimate moves fastest; after that
 it settles at about four in five, which is high enough to feel good and low enough to
 bite. Every fifth problem is deliberately over his head and labelled as such before he
 starts.

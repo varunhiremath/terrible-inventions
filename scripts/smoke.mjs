@@ -1,9 +1,9 @@
 /**
- * End-to-end check: walks the workshop and repairs a machine, in a real browser.
+ * End-to-end check, in a real browser with real WebGL.
  *
- * The unit tests cover the engine, the generators and the map, but only this
- * catches a world that will not render, a character you cannot reach, or a score
- * leaking into a screen it has no business on.
+ * The unit tests cover the engine, the rules and the map. Only this catches a
+ * world that will not render, a character you cannot reach, or a score leaking
+ * onto a screen that has no business showing one.
  *
  *   npm run build && npm run preview &
  *   npm run smoke
@@ -13,7 +13,11 @@ import { chromium } from 'playwright'
 const URL = process.env.SMOKE_URL ?? 'http://127.0.0.1:4173/'
 const EXECUTABLE = process.env.CHROMIUM_PATH
 
-const browser = await chromium.launch(EXECUTABLE ? { executablePath: EXECUTABLE } : {})
+const browser = await chromium.launch({
+  ...(EXECUTABLE ? { executablePath: EXECUTABLE } : {}),
+  // Headless has no GPU; without a software rasteriser the canvas stays blank.
+  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+})
 const page = await browser.newPage({ viewport: { width: 1180, height: 820 } })
 
 const problems = []
@@ -25,65 +29,74 @@ page.on('console', (m) => {
 const step = async (key, n) => {
   for (let i = 0; i < n; i++) {
     await page.keyboard.press(key)
-    await page.waitForTimeout(175)
+    await page.waitForTimeout(180)
   }
 }
 
 await page.goto(URL, { waitUntil: 'networkidle' })
-await page.waitForTimeout(800)
+await page.waitForTimeout(2200)
 
-if (!/Corridor/.test(await page.textContent('header'))) problems.push('did not start in the corridor')
+// --- the hunt, which is what opens by default ------------------------------
+const canvas = await page.evaluate(() => {
+  const c = document.querySelector('canvas')
+  if (!c) return null
+  const gl = c.getContext('webgl2') || c.getContext('webgl')
+  return { w: c.width, h: c.height, gl: !!gl }
+})
+if (!canvas || !canvas.w) problems.push('no canvas rendered')
 
-// Round Papa, along the corridor, and up into the kitchen to find Kettle.
-await step('ArrowUp', 1)
-await step('ArrowLeft', 14)
-await step('ArrowUp', 4)
+if (!/Something is loose/.test(await page.textContent('header'))) {
+  problems.push('did not open on the hunt')
+}
+
+await page.getByRole('button', { name: 'Notebook' }).click()
+await page.waitForTimeout(300)
+const trail = await page.locator('.font-mono').allTextContents()
+if (trail.length < 4) problems.push(`trail too short to reason about: ${trail.join(',')}`)
+// A chase that never leaves one or two rooms offers nothing to work out.
+if (new Set(trail.filter((t) => t !== '?')).size < 3) {
+  problems.push(`degenerate trail: ${trail.join(' -> ')}`)
+}
+await page.getByRole('button', { name: 'Right' }).click()
 await page.waitForTimeout(300)
 
-if (!/Kitchen/.test(await page.textContent('header'))) problems.push('could not walk to the kitchen')
+await step('ArrowUp', 5)
+await page.waitForTimeout(400)
 
-const talk = page.getByRole('button', { name: 'Talk' })
-if ((await talk.count()) === 0) problems.push('Kettle was not interactable')
+const trap = page.getByRole('button', { name: /Trap/ })
+if ((await trap.count()) === 0) problems.push('could not walk into a room to set a trap')
 else {
-  await talk.click()
-  await page.waitForTimeout(250)
-
-  for (let i = 0; i < 8; i++) {
-    const go = page.getByRole('button', { name: 'Go on' })
-    if (!(await go.count())) break
-    await go.click()
-    await page.waitForTimeout(150)
-  }
-
-  const help = page.getByRole('button', { name: /Help Kettle/ })
-  if ((await help.count()) === 0) problems.push('no mission was offered')
+  await trap.click()
+  await page.waitForTimeout(300)
+  const wait = page.getByRole('button', { name: /Keep still/ })
+  if ((await wait.count()) === 0) problems.push('trap was set but nothing happened next')
   else {
-    await help.click()
-    await page.waitForTimeout(600)
-
-    const brief = await page.textContent('body')
-    if (!/Unboil Kettle/.test(brief)) problems.push('mission title missing')
-    // Kettle is broken in fractions, so that is what his mission must serve.
-    if (!/actually bigger/.test(brief)) problems.push('mission served the wrong kind of problem')
-
-    for (let i = 0; i < 4; i++) {
-      const options = page.locator('button.block-btn').filter({ hasText: /^\d+\/\d+$|^\d+$/ })
-      if (await options.count()) await options.first().click()
-      else await page.locator('.block-btn').first().click()
-      await page.waitForTimeout(300)
-
-      const cont = page.getByRole('button', { name: /Keep going|Back to Kettle/ })
-      if (!(await cont.count())) break
-      await cont.click()
-      await page.waitForTimeout(400)
+    await wait.click()
+    await page.waitForTimeout(700)
+    const outcome = await page.textContent('body')
+    if (!/Got it|went somewhere else/.test(outcome)) problems.push('springing the trap gave no result')
+    // A miss must read as evidence gained, never as a penalty.
+    if (/went somewhere else/.test(outcome) && !/easier, not harder/.test(outcome)) {
+      problems.push('a miss is not being framed as progress')
     }
 
-    await page.waitForTimeout(600)
-    const after = await page.textContent('body')
-    if (!/1 of 3 working/.test(after)) problems.push('the machine was not recorded as repaired')
-    if (!/Kitchen/.test(after)) problems.push('the player was teleported out of the room')
+    // Clear the result overlay, which otherwise sits over everything else.
+    await page.getByRole('button', { name: /Look at the notebook|Another one has got out/ }).click()
+    await page.waitForTimeout(400)
+    const notebook = page.getByRole('button', { name: 'Right' })
+    if (await notebook.count()) {
+      await notebook.click()
+      await page.waitForTimeout(300)
+    }
   }
 }
+
+// --- the workshop, still reachable through the switcher --------------------
+await page.getByRole('button', { name: 'Settings' }).click()
+await page.waitForTimeout(400)
+await page.getByRole('button', { name: /The workshop/ }).click()
+await page.waitForTimeout(1200)
+if (!/working/.test(await page.textContent('header'))) problems.push('could not switch to the workshop')
 
 // No screen may grow a score.
 const body = await page.textContent('body')
@@ -96,4 +109,4 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: walked the wing and repaired a machine')
+console.log('smoke test clean: hunted in 3D, and the workshop still switches in')

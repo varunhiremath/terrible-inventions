@@ -43,6 +43,8 @@ export interface SaveState {
   rewards: string[]
   /** Which prototype is being tried. Here so the two can be compared honestly. */
   prototype: 'hunt' | 'workshop'
+  /** Computer speech, {papa}'s recordings, or nothing. */
+  voice: 'computer' | 'papa' | 'off'
 }
 
 export function emptySave(): SaveState {
@@ -59,6 +61,7 @@ export function emptySave(): SaveState {
     hunt: { catches: 0 },
     rewards: [],
     prototype: 'hunt',
+    voice: 'computer',
   }
 }
 

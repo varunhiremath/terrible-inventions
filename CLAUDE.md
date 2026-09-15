@@ -42,6 +42,19 @@ These are not preferences. Breaking one defeats the point of the project.
 8. **No backend, no telemetry, no accounts.** If remote co-op is added later it may carry
    game state through a relay, but never the player's name, voice or progress.
 
+## Rendering
+
+- `src/three/` holds the renderer. `ThreeWorld` takes the same `Scene` a flat renderer
+  took, so screens know nothing about three.js and the renderer can be replaced again.
+- Characters are sprites extruded into voxels. A new character still costs only a seed.
+- **Per-instance colour on an `InstancedMesh` comes from `instanceColor`, not
+  `vertexColors`.** Setting `vertexColors: true` makes the shader look for an attribute
+  that is not there and everything renders black.
+- **Colours must be written `hsl(h, s%, l%)` with commas.** Canvas accepts the modern
+  space-separated form; three.js does not, and silently renders white.
+- Walls stay low enough to see over. The room numbers are the puzzle, so a wall that
+  hides them breaks the game.
+
 ## The hunt
 
 - `src/hunt/` holds the movement rules, the fairness check, the generated house and the

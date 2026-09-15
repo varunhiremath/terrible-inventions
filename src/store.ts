@@ -9,6 +9,7 @@ import { initialSelectorState, selectNext, type ProblemSpec, type SelectorState 
 import { makeRng, randomSeed } from './engine/rng'
 import { emptySave, loadSave, persistSave, type SaveState } from './engine/storage'
 import { loadVoice } from './audio'
+import { setVoiceMode, type VoiceMode } from './voice'
 import { setProfileOverride } from './config/profile'
 import type { Attempt, Problem } from './engine/types'
 
@@ -71,6 +72,7 @@ interface State {
   dismissHuntResult: () => void
   setPrototype: (which: 'hunt' | 'workshop') => void
   setRewards: (rewards: string[]) => void
+  setVoice: (voice: VoiceMode) => void
   startCoop: () => void
   showHand: (who: 'a' | 'b' | null) => void
   finishCoop: (solved: boolean) => void
@@ -103,6 +105,7 @@ export const useStore = create<State>((set, get) => ({
   boot: async () => {
     const save = await loadSave()
     setProfileOverride(save.names)
+    setVoiceMode(save.voice)
     await loadVoice()
     set({
       save,
@@ -171,6 +174,13 @@ export const useStore = create<State>((set, get) => ({
   setPrototype: (which) => {
     const next: SaveState = { ...get().save, prototype: which }
     set({ save: next, screen: which === 'hunt' ? 'hunt' : 'world', hunt: null, huntResult: null })
+    void persistSave(next)
+  },
+
+  setVoice: (voice) => {
+    const next: SaveState = { ...get().save, voice }
+    setVoiceMode(voice)
+    set({ save: next })
     void persistSave(next)
   },
 

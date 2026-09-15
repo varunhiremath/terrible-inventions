@@ -30,7 +30,7 @@ export function ruleFor(rating: number, rooms: number, rng: Rng): Rule {
   const span = (lo: number, hi: number) => rng.int(Math.min(lo, top), Math.min(hi, top))
 
   if (rating < 900) return { kind: 'step', d: span(2, 3) }
-  if (rating < 1150) return { kind: 'step', d: rng.next() < 0.5 ? span(3, 5) : -span(2, 4) }
+  if (rating < 1150) return { kind: 'step', d: rng.next() < 0.5 ? span(2, 4) : -span(2, 3) }
   if (rating < 1400) return { kind: 'alternate', a: span(2, 5), b: -span(1, 3) }
   if (rating < 1700) return { kind: 'growStep', start: span(1, 3), grow: span(1, 2) }
   if (rating < 2000) return { kind: 'multiply', r: span(2, 3) }

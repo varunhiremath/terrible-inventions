@@ -39,6 +39,17 @@ export const MISSES_BEFORE_BRAKE = 2
 export const CALIBRATION_ATTEMPTS = 8
 export const CALIBRATION_SUCCESS = 0.5
 
+/**
+ * Problems spent letting him win before the search for his level begins.
+ *
+ * Calibrating at a coin flip finds the ceiling fastest, but it means the very
+ * first thing a child meets is the hardest thing the app will ever show him,
+ * before he has even worked out where the buttons are. These few are pitched to
+ * be got right.
+ */
+export const WARMUP_ATTEMPTS = 3
+export const WARMUP_SUCCESS = 0.9
+
 /** Probability the player solves a problem of this rating. Standard Elo curve. */
 export function expectedScore(playerRating: number, problemRating: number): number {
   return 1 / (1 + 10 ** ((problemRating - playerRating) / 400))

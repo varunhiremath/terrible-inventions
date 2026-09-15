@@ -146,7 +146,10 @@ function addEyes(
 }
 
 function hsl(h: number, s: number, l: number): string {
-  return `hsl(${h} ${s}% ${l}%)`
+  // Comma-separated on purpose. Canvas accepts the modern space-separated form,
+  // three.js's colour parser does not, and a sprite that silently renders white
+  // in 3D is a miserable thing to track down.
+  return `hsl(${h}, ${s}%, ${l}%)`
 }
 
 export const SPRITE_SIZE = SIZE

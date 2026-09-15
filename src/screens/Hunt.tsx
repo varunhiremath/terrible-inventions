@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
-import { TileWorld } from '../world/TileWorld'
+import { ThreeWorld } from '../three/ThreeWorld'
 import { PAPA_PALETTE, PAPA_SEED, type Scene } from '../world/render'
-import { HOUSE, roomByNumber, roomContaining } from '../hunt/house'
+import { HOUSE, colourAt, roomByNumber, roomContaining } from '../hunt/house'
 import { isSolidIn } from '../hunt/house-solid'
 import { roomsUnlocked } from '../hunt/hunt'
 import { fill } from '../config/profile'
 import { Btn, Panel } from '../ui/bits'
 import { useStore } from '../store'
-import { play } from '../audio'
+import { say, silence } from '../voice'
 import type { Point } from '../world/map'
 
 /**
@@ -37,6 +37,16 @@ export function Hunt() {
     if (!hunt) beginHunt()
   }, [hunt, beginHunt])
 
+  // The result is the moment worth hearing out loud.
+  useEffect(() => {
+    if (!result) { silence(); return }
+    say(
+      result.caught
+        ? `Got it! It walked straight into your trap.${result.reward ? ` ${result.reward}` : ''}`
+        : 'It went somewhere else. But now you know one more of its moves.',
+    )
+  }, [result])
+
   if (!hunt) return null
 
   const open = roomsUnlocked(save.hunt.catches)
@@ -54,6 +64,12 @@ export function Hunt() {
     rows: HOUSE.rows,
     player,
     facingTile: null,
+    // Rooms still shut are drained of colour, so what is open reads at a glance.
+    floorTint: (x, y) => {
+      const room = roomContaining({ x, y })
+      if (!room) return '#efe6d4'
+      return inPlay(room.number) ? colourAt(x, y) : '#9d9689'
+    },
     floorLabels: HOUSE.rooms.map((r) => ({
       at: { x: r.centre.x, y: r.centre.y },
       text: inPlay(r.number) ? String(r.number) : '×',
@@ -76,7 +92,7 @@ export function Hunt() {
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden">
-      <TileWorld
+      <ThreeWorld
         start={HOUSE.spawn}
         blocked={blocked}
         buildScene={buildScene}
@@ -89,7 +105,7 @@ export function Hunt() {
         }}
         onAction={(_facing, on) => {
           const room = standingRoom(on)
-          if (room) { placeTrap(room.number); play('hint') }
+          if (room) { placeTrap(room.number); say(`Trap set in room ${room.number}.`) }
         }}
       />
 

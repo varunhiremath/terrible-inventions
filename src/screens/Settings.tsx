@@ -9,7 +9,7 @@ import { useStore } from '../store'
  * looking in here finds his own name and a text box, which is not a catastrophe.
  */
 export function Settings() {
-  const { save, saveNames, saveNote, replaceSave, setPrototype, setRewards, go } = useStore()
+  const { save, saveNames, saveNote, replaceSave, setPrototype, setRewards, setVoice, go } = useStore()
   const profile = getProfile()
 
   const [kidName, setKidName] = useState(save.names.kidName ?? '')
@@ -146,6 +146,29 @@ export function Settings() {
         >
           Save note
         </Btn>
+      </Panel>
+
+      <Panel className="flex flex-col gap-3">
+        <h2 className="font-bold">Voice</h2>
+        <p className="text-sm leading-relaxed text-dim">
+          The computer voice reads every line, including ones written later, and each
+          character gets its own pitch. Your recordings only cover the thirty-seven lines
+          you read.
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {([['computer', 'Computer'], ['papa', 'Your recordings'], ['off', 'Silent']] as const).map(
+            ([value, label]) => (
+              <Btn
+                key={value}
+                tone={save.voice === value ? 'chosen' : 'plain'}
+                onClick={() => setVoice(value)}
+                className="px-3 py-3 text-sm"
+              >
+                {label}
+              </Btn>
+            ),
+          )}
+        </div>
       </Panel>
 
       <Panel className="flex flex-col gap-3">

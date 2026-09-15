@@ -2,17 +2,19 @@ import { useEffect, useState } from 'react'
 import { isSolid, roomAt, MAP, type Point } from '../world/map'
 import { MACHINES, PAPA_AT, PAPA_LINES, isPapaAt, machineAt, wingComplete } from '../world/characters'
 import { lastPosition, rememberPosition } from '../world/position'
-import { TileWorld } from '../world/TileWorld'
+import { ThreeWorld } from '../three/ThreeWorld'
 import { PAPA_PALETTE, PAPA_SEED, type Scene } from '../world/render'
 import { fill } from '../config/profile'
 import { Btn } from '../ui/bits'
 import { useStore } from '../store'
-import { play } from '../audio'
+import { say, silence } from '../voice'
 
 interface Talk {
   who: string
   lines: string[]
   at: number
+  /** Gives the speaker its own pitch and pace. */
+  seed?: number
   action?: { label: string; run: () => void }
 }
 
@@ -31,12 +33,17 @@ export function World() {
   const fixed = save.world.fixed
   const unlocked = wingComplete(fixed)
 
+  // Speak whichever line is on screen, and stop the moment the box closes.
+  useEffect(() => {
+    if (!talk) { silence(); return }
+    say(fill(talk.lines[talk.at]), { seed: talk.seed })
+  }, [talk])
+
   useEffect(() => {
     if (!justFixed) return
     const machine = MACHINES.find((m) => m.id === justFixed.machineId)
     if (!machine) return
-    play('right')
-    setTalk({ who: machine.name, at: 0, lines: [...machine.success, justFixed.praise] })
+    setTalk({ who: machine.name, at: 0, seed: machine.seed, lines: [...machine.success, justFixed.praise] })
     clearJustFixed()
   }, [justFixed, clearJustFixed])
 
@@ -45,6 +52,7 @@ export function World() {
   const buildScene = (player: { x: number; y: number }, facing: Point): Scene => ({
     rows: MAP,
     player,
+    floorTint: (_x, y) => (y >= 9 ? '#e4d7bd' : '#f2e6cf'),
     facingTile: machineAt(facing) || isPapaAt(facing) ? facing : null,
     actors: [
       ...MACHINES.map((m) => ({
@@ -71,10 +79,10 @@ export function World() {
     const machine = machineAt(facing)
     if (machine) {
       const isFixed = fixed.includes(machine.id)
-      play(isFixed ? 'greeting' : 'struggle')
       setTalk({
         who: machine.name,
         at: 0,
+        seed: machine.seed,
         lines: isFixed ? [pick(machine.working)] : machine.broken,
         action: isFixed ? undefined : { label: `Help ${machine.name}`, run: () => startMission(machine.id) },
       })
@@ -83,10 +91,10 @@ export function World() {
 
     if (isPapaAt(facing)) {
       const stage = fixed.length === 0 ? 'none' : unlocked ? 'all' : 'some'
-      play('greeting')
       setTalk({
         who: fill('{papa}'),
         at: 0,
+        seed: PAPA_SEED,
         lines: [pick([...PAPA_LINES[stage]])],
         action: { label: 'Do a two-player puzzle', run: startCoop },
       })
@@ -95,7 +103,7 @@ export function World() {
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden">
-      <TileWorld
+      <ThreeWorld
         start={lastPosition()}
         blocked={blocked}
         buildScene={buildScene}

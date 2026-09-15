@@ -3,6 +3,7 @@ import { makeRng } from './rng'
 import {
   CALIBRATION_ATTEMPTS,
   MISSES_BEFORE_BRAKE,
+  WARMUP_ATTEMPTS,
   START_RATING,
   STRETCH_EVERY,
   TARGET_SUCCESS,
@@ -102,8 +103,8 @@ describe('selectNext', () => {
 })
 
 describe('calibration', () => {
-  it('aims at a coin flip while it is still working out his level', () => {
-    const spec = selectNext(initialSelectorState(1000, 0), wide, rng)
+  it('aims at a coin flip once the warm-up is over', () => {
+    const spec = selectNext(initialSelectorState(1000, WARMUP_ATTEMPTS), wide, rng)
     expect(expectedScore(1000, spec.rating)).toBeCloseTo(0.5, 2)
     expect(spec.stretch).toBe(false)
   })
@@ -118,15 +119,50 @@ describe('calibration', () => {
     expect(selectNext(state, wide, rng).brake).toBe(true)
   })
 
-  it('finds a strong player in a single sitting', () => {
+  it('warms up first, then calibrates, then settles', () => {
+    const targetAt = (attempts: number) =>
+      expectedScore(1000, selectNext(initialSelectorState(1000, attempts), wide, rng).rating)
+
+    expect(targetAt(0)).toBeGreaterThan(0.85)
+    expect(targetAt(WARMUP_ATTEMPTS)).toBeCloseTo(0.5, 2)
+    expect(targetAt(CALIBRATION_ATTEMPTS)).toBeCloseTo(TARGET_SUCCESS, 2)
+  })
+
+  it('closes most of the gap in a single sitting', () => {
     // A player who solves anything up to 1700 and nothing beyond, starting from
-    // the same 1000 as everyone else. Eight problems should be most of the way.
+    // the same 1000 as everyone else. The warm-up costs some of this: three
+    // problems he is meant to get right carry little information, so the first
+    // session lands lower than it did without one. Worth it for not opening on
+    // the hardest thing the app will ever show him.
     const TRUE = 1700
     let rating = START_RATING
     for (let attempts = 0; attempts < 8; attempts++) {
       const spec = selectNext(initialSelectorState(rating, attempts), wide, rng)
       rating = updateRating(rating, spec.rating, spec.rating <= TRUE, attempts)
     }
-    expect(rating).toBeGreaterThan(1450)
+    expect(rating).toBeGreaterThan(1300)
+  })
+})
+
+describe('warm-up', () => {
+  it('opens with problems he is meant to get right', () => {
+    const spec = selectNext(initialSelectorState(1000, 0), wide, rng)
+    expect(expectedScore(1000, spec.rating)).toBeGreaterThan(0.85)
+    expect(spec.stretch).toBe(false)
+  })
+
+  it('hands over to calibration once the warm-up is spent', () => {
+    const spec = selectNext(initialSelectorState(1000, WARMUP_ATTEMPTS), wide, rng)
+    expect(expectedScore(1000, spec.rating)).toBeCloseTo(0.5, 2)
+  })
+
+  it('still finds a strong player quickly despite the gentler opening', () => {
+    const TRUE = 1700
+    let rating = START_RATING
+    for (let attempts = 0; attempts < 11; attempts++) {
+      const spec = selectNext(initialSelectorState(rating, attempts), wide, rng)
+      rating = updateRating(rating, spec.rating, spec.rating <= TRUE, attempts)
+    }
+    expect(rating).toBeGreaterThan(1400)
   })
 })
