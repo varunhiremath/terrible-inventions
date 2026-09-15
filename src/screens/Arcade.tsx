@@ -12,6 +12,7 @@ import {
   type Game,
 } from '../arcade/maze/game'
 import { taunt, type TauntMoment } from '../arcade/taunts'
+import { fitBoard } from '../arcade/fit'
 import { buildVoxel, disposeVoxel } from '../render/voxel'
 import type { Palette } from '../render/sprites'
 import { fill } from '../config/profile'
@@ -68,8 +69,14 @@ export function Arcade() {
   const go = useStore((s) => s.go)
 
   const mountRef = useRef<HTMLDivElement>(null)
+  const hudRef = useRef<HTMLDivElement>(null)
+  const padRef = useRef<HTMLDivElement>(null)
+  const extrasRef = useRef<HTMLDivElement>(null)
+  const topRightRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Game | null>(null)
   const [hud, setHud] = useState({ lives: 0, score: 0, status: 'playing' as Game['status'], freezes: 0 })
+  /** Lets other effects ask the camera to re-measure when the layout shifts. */
+  const refitRef = useRef<(() => void) | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
@@ -176,21 +183,38 @@ export function Arcade() {
       return { normal, scared }
     })
 
+    /**
+     * Fits the maze into the space the interface is not already using. The
+     * panels are measured here rather than guessed at, because how big they
+     * are depends on the text in them; `fitBoard` does the arithmetic.
+     */
     const resize = () => {
       const rect = mount.getBoundingClientRect()
-      renderer.setSize(rect.width, rect.height, false)
-      const aspect = rect.width / Math.max(1, rect.height)
+      const w = Math.max(1, rect.width)
+      const h = Math.max(1, rect.height)
+      renderer.setSize(w, h, false)
 
-      // Fit the whole maze on screen with a little air around it. Tilting
-      // foreshortens the depth, so the vertical extent shrinks accordingly.
-      const spanX = WIDTH + 2
-      const spanY = (HEIGHT + 2) * Math.cos(TILT) + 2
-      const halfHeight = Math.max(spanY, spanX / aspect) / 2
+      const box = (el: HTMLElement | null) => {
+        const r = el?.getBoundingClientRect()
+        return r ? { width: r.width, height: r.height } : null
+      }
 
-      camera.left = -halfHeight * aspect
-      camera.right = halfHeight * aspect
-      camera.top = halfHeight
-      camera.bottom = -halfHeight
+      // The tilt foreshortens depth, so the maze needs less vertical room on
+      // screen than it has tiles.
+      const spanX = WIDTH + 1
+      const spanY = (HEIGHT + 1) * Math.cos(TILT) + 1.5
+
+      const { frustum } = fitBoard(w, h, spanX, spanY, {
+        hud: box(hudRef.current),
+        pad: box(padRef.current),
+        extras: box(extrasRef.current),
+        topRight: box(topRightRef.current),
+      }, 12)
+
+      camera.left = frustum.left
+      camera.right = frustum.right
+      camera.top = frustum.top
+      camera.bottom = frustum.bottom
       camera.updateProjectionMatrix()
 
       const centre = new THREE.Vector3(WIDTH / 2 - 0.5, 0, HEIGHT / 2 - 0.5)
@@ -203,6 +227,7 @@ export function Arcade() {
       camera.lookAt(centre)
     }
     resize()
+    refitRef.current = resize
     const observer = new ResizeObserver(resize)
     observer.observe(mount)
 
@@ -305,10 +330,17 @@ export function Arcade() {
         disposeVoxel(body.normal)
         disposeVoxel(body.scared)
       }
+      refitRef.current = null
       renderer.dispose()
       mount.removeChild(renderer.domElement)
     }
   }, [])
+
+  // The panels change size when the freeze button appears or an overlay takes
+  // over, and the fit depends on how much room they take.
+  useEffect(() => {
+    refitRef.current?.()
+  }, [hud.freezes, hud.status])
 
   // --- input ---------------------------------------------------------------
   const push = (dir: Dir) => {
@@ -361,14 +393,14 @@ export function Arcade() {
       <div ref={mountRef} className="absolute inset-0" />
 
       <header className="relative z-10 flex items-start justify-between gap-2 p-3">
-        <div className="block-panel px-3 py-2">
+        <div ref={hudRef} className="block-panel px-3 py-2">
           <p className="text-sm font-bold">Level {run?.level ?? 1}</p>
           <p className="text-xs text-dim">
             {'♥'.repeat(Math.max(0, hud.lives))} &middot; {hud.score}
             {save.arcade.highScore > 0 && ` · best ${save.arcade.highScore}`}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div ref={topRightRef} className="flex gap-2">
           <Btn onClick={openShop} className="px-4 py-2 text-sm">Shop</Btn>
           <button type="button" onClick={() => go('settings')} className="block-btn px-3 py-2 text-sm" aria-label="Settings">
             &#9881;
@@ -378,11 +410,14 @@ export function Arcade() {
 
       {!overlay && (
         <div
-          className="relative z-10 mt-auto flex items-end justify-between gap-3 p-4"
+          // Held upright the controls sit along the bottom; turned sideways they
+          // move to the edges, where thumbs already are and where they are not
+          // covering the board.
+          className="pointer-events-none absolute inset-0 z-10 flex items-end justify-between gap-3 p-4 landscape:items-center"
           onPointerDown={(e) => e.stopPropagation()}
         >
           {/* Visible controls. Swipe works too, but nobody should have to guess. */}
-          <div className="grid grid-cols-3 grid-rows-3 gap-1.5">
+          <div ref={padRef} className="pointer-events-auto grid grid-cols-3 grid-rows-3 gap-1.5">
             {([[null, 'up', null], ['left', null, 'right'], [null, 'down', null]] as const)
               .flat()
               .map((dir, i) =>
@@ -392,7 +427,10 @@ export function Arcade() {
                     type="button"
                     aria-label={dir}
                     onPointerDown={() => push(dir)}
-                    className="block-btn h-[62px] w-[62px] bg-ink-soft/90 p-0 text-xl backdrop-blur"
+                    // Full size on a tablet, which is what this is really played on, but
+// it gives ground on a small phone held sideways rather than crowd
+// the board off the screen. The floor stays a comfortable thumb.
+                    className="block-btn h-[clamp(48px,15vmin,62px)] w-[clamp(48px,15vmin,62px)] bg-ink-soft/90 p-0 text-xl backdrop-blur"
                   >
                     {{ up: '\u25b2', down: '\u25bc', left: '\u25c0', right: '\u25b6' }[dir]}
                   </button>
@@ -402,7 +440,7 @@ export function Arcade() {
               )}
           </div>
 
-          <div className="flex flex-col items-end gap-2">
+          <div ref={extrasRef} className="pointer-events-auto flex flex-col items-end gap-2">
             {hud.freezes > 0 && (
               <Btn
                 tone="go"
