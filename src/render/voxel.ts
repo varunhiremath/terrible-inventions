@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { SPRITE_SIZE, makeSprite, type Palette, type SpriteGrid } from '../world/sprites'
+import { SPRITE_SIZE, makeSprite, type Palette, type SpriteGrid } from './sprites'
 
 /**
  * Turns a sprite into a solid little body.

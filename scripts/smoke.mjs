@@ -1,9 +1,9 @@
 /**
  * End-to-end check, in a real browser with real WebGL.
  *
- * The unit tests cover the engine, the rules and the map. Only this catches a
- * world that will not render, a character you cannot reach, or a score leaking
- * onto a screen that has no business showing one.
+ * The unit tests cover the maze, the chasers and the game loop. Only this
+ * catches a game that will not render, a control that does nothing, or a score
+ * leaking onto a screen that has no business showing one.
  *
  *   npm run build && npm run preview &
  *   npm run smoke
@@ -26,87 +26,58 @@ page.on('console', (m) => {
   if (m.type() === 'error') problems.push(`console: ${m.text()} :: ${m.location()?.url ?? ''}`)
 })
 
-const step = async (key, n) => {
-  for (let i = 0; i < n; i++) {
-    await page.keyboard.press(key)
-    await page.waitForTimeout(180)
-  }
-}
+const hud = async () => (await page.textContent('header'))?.replace(/\s+/g, ' ').trim() ?? ''
+const scoreNow = async () => Number((await hud()).match(/· (\d+)/)?.[1] ?? -1)
 
 await page.goto(URL, { waitUntil: 'networkidle' })
-await page.waitForTimeout(2200)
+await page.waitForTimeout(1500)
 
-// --- the hunt, which is what opens by default ------------------------------
 const canvas = await page.evaluate(() => {
   const c = document.querySelector('canvas')
-  if (!c) return null
-  const gl = c.getContext('webgl2') || c.getContext('webgl')
-  return { w: c.width, h: c.height, gl: !!gl }
+  return c ? { w: c.width, gl: !!(c.getContext('webgl2') || c.getContext('webgl')) } : null
 })
-if (!canvas || !canvas.w) problems.push('no canvas rendered')
+if (!canvas?.w || !canvas.gl) problems.push('the maze did not render')
+if (!/Level 1/.test(await hud())) problems.push('did not open on level 1')
 
-if (!/Something is loose/.test(await page.textContent('header'))) {
-  problems.push('did not open on the hunt')
+// The opening pause: nothing should have been eaten yet.
+if ((await scoreNow()) > 0) problems.push('play started before the ready pause finished')
+
+// Then it should run, and run at a sensible pace rather than in slow motion.
+await page.waitForTimeout(4000)
+const afterOpening = await scoreNow()
+if (afterOpening <= 0) problems.push('nothing happened once the pause ended')
+
+for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']) {
+  await page.keyboard.press(key)
+  await page.waitForTimeout(900)
 }
+if ((await scoreNow()) <= afterOpening) problems.push('steering did not move the player')
 
-await page.getByRole('button', { name: 'Notebook' }).click()
+// --- the shop: maths buys power, and never merely permission ---------------
+await page.getByRole('button', { name: 'Shop', exact: true }).click()
+await page.waitForTimeout(700)
+
+const shopText = await page.textContent('body')
+if (!/Harder problem, better prize/.test(shopText)) problems.push('the shop is not framed as a shop')
+if (!/Two-player puzzle/.test(shopText)) problems.push('the two-player puzzle is not offered')
+
+await page.getByRole('button', { name: /Spare life/ }).click()
+await page.waitForTimeout(900)
+if (!/nudge/i.test(await page.textContent('body'))) problems.push('the shop served no problem')
+
+// A hint must always be free and reachable.
+await page.getByRole('button', { name: /nudge/i }).click()
 await page.waitForTimeout(300)
-const trail = await page.locator('.font-mono').allTextContents()
-if (trail.length < 4) problems.push(`trail too short to reason about: ${trail.join(',')}`)
-// A chase that never leaves one or two rooms offers nothing to work out.
-if (new Set(trail.filter((t) => t !== '?')).size < 3) {
-  problems.push(`degenerate trail: ${trail.join(' -> ')}`)
-}
-await page.getByRole('button', { name: 'Right' }).click()
-await page.waitForTimeout(300)
-
-await step('ArrowUp', 5)
-await page.waitForTimeout(400)
-
-const trap = page.getByRole('button', { name: /Trap/ })
-if ((await trap.count()) === 0) problems.push('could not walk into a room to set a trap')
-else {
-  await trap.click()
-  await page.waitForTimeout(300)
-  const wait = page.getByRole('button', { name: /Keep still/ })
-  if ((await wait.count()) === 0) problems.push('trap was set but nothing happened next')
-  else {
-    await wait.click()
-    await page.waitForTimeout(700)
-    const outcome = await page.textContent('body')
-    if (!/Got it|went somewhere else/.test(outcome)) problems.push('springing the trap gave no result')
-    // A miss must read as evidence gained, never as a penalty.
-    if (/went somewhere else/.test(outcome) && !/easier, not harder/.test(outcome)) {
-      problems.push('a miss is not being framed as progress')
-    }
-
-    // Clear the result overlay, which otherwise sits over everything else.
-    await page.getByRole('button', { name: /Look at the notebook|Another one has got out/ }).click()
-    await page.waitForTimeout(400)
-    const notebook = page.getByRole('button', { name: 'Right' })
-    if (await notebook.count()) {
-      await notebook.click()
-      await page.waitForTimeout(300)
-    }
-  }
-}
-
-// --- the workshop, still reachable through the switcher --------------------
-await page.getByRole('button', { name: 'Settings' }).click()
-await page.waitForTimeout(400)
-await page.getByRole('button', { name: /The workshop/ }).click()
-await page.waitForTimeout(1200)
-if (!/working/.test(await page.textContent('header'))) problems.push('could not switch to the workshop')
-
-// No screen may grow a score.
-const body = await page.textContent('body')
-if (/\d+\s*%/.test(body)) problems.push('a percentage is being shown')
-if (/\b(accuracy|score)\b/i.test(body)) problems.push('scoring language is being shown')
+if (!/Nudge 1/.test(await page.textContent('body'))) problems.push('hints are not available in the shop')
 
 await browser.close()
+
+// No screen may grow a score for being right at maths.
+if (/\d+\s*%/.test(shopText)) problems.push('a percentage is being shown')
+if (/\b(accuracy)\b/i.test(shopText)) problems.push('scoring language is being shown')
 
 if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: hunted in 3D, and the workshop still switches in')
+console.log('smoke test clean: played the maze in 3D and bought from the shop')

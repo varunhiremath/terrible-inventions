@@ -40,7 +40,7 @@ const LEFT_HALF = [
   '##.#.###.#',
   '#..#.....#',
   '#O##.###.#',
-  '#........#',
+  '#.........',
   '##########',
 ] as const
 
@@ -64,8 +64,13 @@ export interface Cell {
 /** The middle row runs off both edges; walking out of one side comes back the other. */
 export const TUNNEL_ROW = 10
 
-/** Below the middle, so the first move is a real choice rather than a corridor. */
-export const PLAYER_START: Cell = { x: 9, y: 13 }
+/**
+ * Bottom centre, a long way from the chasers.
+ *
+ * The first attempt put him four steps from the nearest one, which meant dying
+ * before the first dot. Distance is not a detail here — it is the whole opening.
+ */
+export const PLAYER_START: Cell = { x: 9, y: 19 }
 
 /** All four start clustered in the middle and fan out from there. */
 export const GHOST_STARTS: readonly Cell[] = [

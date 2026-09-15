@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
-import { World } from './screens/World'
-import { Mission } from './screens/Mission'
-import { Hunt } from './screens/Hunt'
+import { Arcade } from './screens/Arcade'
+import { Shop } from './screens/Shop'
 import { Note } from './screens/Note'
 import { Settings } from './screens/Settings'
 import { Studio } from './screens/Studio'
@@ -27,10 +26,8 @@ export default function App() {
   if (!ready) return null
 
   switch (screen) {
-    case 'hunt':
-      return <Hunt />
-    case 'mission':
-      return <Mission />
+    case 'shop':
+      return <Shop />
     case 'note':
       return <Note />
     case 'settings':
@@ -39,9 +36,7 @@ export default function App() {
       return <Studio />
     case 'coop':
       return <Coop />
-    case 'world':
-      return <World />
     default:
-      return <Hunt />
+      return <Arcade />
   }
 }

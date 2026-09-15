@@ -39,6 +39,14 @@ export const FRIGHTENED_SECONDS = 7
 export const EATEN_RESPAWN_SECONDS = 4
 export const STARTING_LIVES = 3
 
+/**
+ * The pause every arcade game opens with.
+ *
+ * Nothing moves, so the player can see the board and choose a first direction.
+ * Without it a level begins mid-chase, which is unfair rather than exciting.
+ */
+export const READY_SECONDS = 2.2
+
 export interface Mover {
   cell: Cell
   dir: Dir
@@ -77,6 +85,8 @@ export interface Game {
   elapsed: number
   frightenedFor: number
   freezeFor: number
+  /** Counts down at the start of a life. Nobody moves while it runs. */
+  readyFor: number
   status: Status
   powerUps: PowerUps
   /** Rises with each ghost eaten in one pellet, and resets when it ends. */
@@ -108,6 +118,7 @@ export function newGame(level = 1, powerUps = emptyPowerUps(), lives = STARTING_
     elapsed: 0,
     frightenedFor: 0,
     freezeFor: 0,
+    readyFor: READY_SECONDS,
     status: 'playing',
     powerUps,
     comboStep: 0,
@@ -142,7 +153,12 @@ export function step(game: Game, dt: number, roll: () => number = Math.random): 
     elapsed: game.elapsed + dt,
     frightenedFor: Math.max(0, game.frightenedFor - dt),
     freezeFor: Math.max(0, game.freezeFor - dt),
+    readyFor: Math.max(0, game.readyFor - dt),
   }
+
+  // Everyone waits, including the chasers, and a queued turn is still accepted
+  // so the first move can be lined up during the pause.
+  if (next.readyFor > 0) return next
 
   if (game.frightenedFor > 0 && next.frightenedFor === 0) {
     for (const ghost of next.ghosts) ghost.frightened = false
@@ -299,6 +315,7 @@ export function respawn(game: Game): Game {
     elapsed: 0,
     frightenedFor: 0,
     freezeFor: 0,
+    readyFor: READY_SECONDS,
     comboStep: 0,
   }
 }

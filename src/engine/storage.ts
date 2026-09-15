@@ -1,5 +1,6 @@
 import { openDB, type IDBPDatabase } from 'idb'
 import type { Attempt } from './types'
+import { emptyPowerUps, type PowerUps } from '../arcade/maze/game'
 import { START_RATING } from './elo'
 
 /**
@@ -20,14 +21,17 @@ const MAX_LOG = 2000
 
 export interface SaveState {
   version: 1
+  /** What he can do on his own. Only solo problems move it. */
   rating: number
   attempts: number
-  /** Problems taken on, right or wrong. Deliberately not a score. */
-  machinesWorked: number
   /** A short message from {papa}, shown once on the next visit. */
   note: { text: string; at: number; seen: boolean } | null
   /** Real names, entered on the device. Deliberately never in the repo. */
   names: { kidName?: string; papaName?: string }
+  /** Computer speech, {papa}'s recordings, or nothing. */
+  voice: 'computer' | 'papa' | 'off'
+  /** What {papa} has promised. Written on the device, never shipped. */
+  rewards: string[]
   log: Attempt[]
   /**
    * Two-player puzzles, kept apart from `log` on purpose. A co-op result says
@@ -35,16 +39,8 @@ export interface SaveState {
    * rating or the solo history.
    */
   coopLog: { id: string; rating: number; solved: boolean; at: number }[]
-  /** Which machines are working again. The world's only persistent state. */
-  world: { fixed: string[] }
-  /** Catches so far, which is what opens the house up. */
-  hunt: { catches: number }
-  /** What {papa} has promised, one per catch. Written on the device, never shipped. */
-  rewards: string[]
-  /** Which prototype is being tried. Here so the two can be compared honestly. */
-  prototype: 'hunt' | 'workshop'
-  /** Computer speech, {papa}'s recordings, or nothing. */
-  voice: 'computer' | 'papa' | 'off'
+  /** Power-ups carry between runs, which is what makes shopping worth doing. */
+  arcade: { level: number; highScore: number; powerUps: PowerUps }
 }
 
 export function emptySave(): SaveState {
@@ -52,16 +48,13 @@ export function emptySave(): SaveState {
     version: 1,
     rating: START_RATING,
     attempts: 0,
-    machinesWorked: 0,
     note: null,
     names: {},
+    voice: 'computer',
+    rewards: [],
     log: [],
     coopLog: [],
-    world: { fixed: [] },
-    hunt: { catches: 0 },
-    rewards: [],
-    prototype: 'hunt',
-    voice: 'computer',
+    arcade: { level: 1, highScore: 0, powerUps: emptyPowerUps() },
   }
 }
 
