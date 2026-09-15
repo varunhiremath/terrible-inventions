@@ -13,6 +13,8 @@ import {
 } from '../arcade/maze/game'
 import { taunt, type TauntMoment } from '../arcade/taunts'
 import { fitBoard } from '../arcade/fit'
+import { wallBoxes } from '../render/mazeGeometry'
+import { buildFruit, fruitForLevel } from '../render/fruit'
 import { buildVoxel, disposeVoxel } from '../render/voxel'
 import type { Palette } from '../render/sprites'
 import { fill } from '../config/profile'
@@ -38,11 +40,12 @@ const PLAYER_PALETTE: Palette = {
   outline: 'hsl(35, 60%, 16%)',
 }
 
+/** Pale and washed out, so a chaser you can eat reads at a glance. */
 const FRIGHTENED_PALETTE: Palette = {
-  body: 'hsl(225, 70%, 58%)',
-  shade: 'hsl(225, 60%, 38%)',
-  accent: 'hsl(0, 0%, 95%)',
-  outline: 'hsl(225, 50%, 14%)',
+  body: 'hsl(220, 12%, 82%)',
+  shade: 'hsl(220, 10%, 58%)',
+  accent: 'hsl(0, 0%, 100%)',
+  outline: 'hsl(220, 15%, 18%)',
 }
 
 function ghostPalette(colour: string): Palette {
@@ -77,6 +80,14 @@ export function Arcade() {
   const [hud, setHud] = useState({ lives: 0, score: 0, status: 'playing' as Game['status'], freezes: 0 })
   /** Lets other effects ask the camera to re-measure when the layout shifts. */
   const refitRef = useRef<(() => void) | null>(null)
+  /** Lets the level change the fruit on the board. */
+  const fruitRef = useRef<((level: number) => void) | null>(null)
+  /**
+   * The level, where the scene can reach it. The scene is built once, after
+   * the run is set up, so a run picked up again at level five needs to know
+   * that before it puts the fruit out.
+   */
+  const levelRef = useRef(1)
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
@@ -87,6 +98,8 @@ export function Arcade() {
   useEffect(() => {
     if (!run) return
     gameRef.current = newGame(run.level, run.powerUps)
+    levelRef.current = run.level
+    fruitRef.current?.(run.level)
     setMessage(null)
     say(fill(taunt('levelStart')), { seed: GHOSTS[0].seed })
   }, [run])
@@ -100,11 +113,20 @@ export function Arcade() {
     renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block'
     mount.appendChild(renderer.domElement)
 
+    /**
+     * Black and white, apart from what matters.
+     *
+     * Bright blue walls filled the screen with the one thing on it that the
+     * player never needs to look at. Grey walls on black push the maze into
+     * the background, which leaves the colour for the four things that are
+     * actually worth noticing: the player, the chasers, the fruit, and a
+     * chaser gone pale because it can be eaten.
+     */
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color('#0b1024')
+    scene.background = new THREE.Color('#05060a')
 
-    scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x25306a, 2.1))
-    const sun = new THREE.DirectionalLight(0xffffff, 1.3)
+    scene.add(new THREE.HemisphereLight(0xf2f5ff, 0x181a22, 2.0))
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5)
     sun.position.set(6, 18, 10)
     scene.add(sun)
 
@@ -122,31 +144,31 @@ export function Arcade() {
     const TILT = 0.52
 
     // --- maze ---------------------------------------------------------------
+    /** How much of a tile a wall takes up. The rest of the tile is corridor. */
+    const WALL_THICKNESS = 0.5
+    const WALL_HEIGHT = 0.62
+
     const cube = new THREE.BoxGeometry(1, 1, 1)
-    const wallCells: { x: number; y: number }[] = []
-    MAZE.forEach((row, y) =>
-      [...row].forEach((tile, x) => {
-        if (tile === TILE.WALL) wallCells.push({ x, y })
-      }),
-    )
+    const boxes = wallBoxes(MAZE, TILE.WALL, WALL_THICKNESS)
 
     const walls = new THREE.InstancedMesh(
       cube,
-      new THREE.MeshLambertMaterial({ color: 0x3355cc }),
-      wallCells.length,
+      new THREE.MeshLambertMaterial({ color: 0xffffff }),
+      boxes.length,
     )
     const matrix = new THREE.Matrix4()
     const colour = new THREE.Color()
-    wallCells.forEach((cell, i) => {
+    boxes.forEach((box, i) => {
       matrix.compose(
-        new THREE.Vector3(cell.x, 0.4, cell.y),
+        new THREE.Vector3(box.x, WALL_HEIGHT / 2, box.z),
         new THREE.Quaternion(),
-        new THREE.Vector3(1, 0.8, 1),
+        new THREE.Vector3(box.width, WALL_HEIGHT, box.depth),
       )
       walls.setMatrixAt(i, matrix)
-      // A gentle gradient across the maze, so a wall of flat blue does not read
-      // as one solid slab.
-      colour.setHSL(0.62 + (cell.y / HEIGHT) * 0.06, 0.62, 0.42 + (cell.x / WIDTH) * 0.06)
+      // A slight drift from light at the top to dark at the bottom, so the maze
+      // has some depth to it rather than reading as one flat stencil.
+      const shade = 0.72 - (box.z / HEIGHT) * 0.28 + (box.x / WIDTH) * 0.04
+      colour.setHSL(0.62, 0.05, shade)
       walls.setColorAt(i, colour)
     })
     walls.instanceMatrix.needsUpdate = true
@@ -155,21 +177,46 @@ export function Arcade() {
 
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(WIDTH + 2, HEIGHT + 2),
-      new THREE.MeshLambertMaterial({ color: 0x141a38 }),
+      new THREE.MeshLambertMaterial({ color: 0x0a0b10 }),
     )
     floor.rotation.x = -Math.PI / 2
     floor.position.set(WIDTH / 2 - 0.5, -0.1, HEIGHT / 2 - 0.5)
     scene.add(floor)
 
-    // --- dots ---------------------------------------------------------------
+    // --- dots and fruit -----------------------------------------------------
     const { dots, power } = edibleCells()
-    const allPellets = [...dots.map((c) => ({ c, big: false })), ...power.map((c) => ({ c, big: true }))]
+
     const pellets = new THREE.InstancedMesh(
       new THREE.SphereGeometry(0.5, 8, 6),
-      new THREE.MeshLambertMaterial({ color: 0xffd979, emissive: 0x3a2c00 }),
-      allPellets.length,
+      new THREE.MeshLambertMaterial({ color: 0xf2f4fb, emissive: 0x2a2d38 }),
+      dots.length,
     )
     scene.add(pellets)
+
+    /**
+     * The four power pellets, as fruit. Rebuilt when the level changes,
+     * because the fruit changes with it.
+     */
+    let fruit: { group: THREE.Group; dispose: () => void }[] = []
+    const clearFruit = () => {
+      for (const one of fruit) {
+        scene.remove(one.group)
+        one.dispose()
+      }
+      fruit = []
+    }
+    const dressFruit = (level: number) => {
+      clearFruit()
+      const kind = fruitForLevel(level)
+      fruit = power.map((cell) => {
+        const built = buildFruit(kind)
+        built.group.position.set(cell.x, 0, cell.y)
+        scene.add(built.group)
+        return built
+      })
+    }
+    dressFruit(levelRef.current)
+    fruitRef.current = dressFruit
 
     // --- characters ---------------------------------------------------------
     const player = buildVoxel(31337, PLAYER_PALETTE, { flat: true })
@@ -285,18 +332,28 @@ export function Arcade() {
 
         // Pellets: eaten ones shrink to nothing rather than being rebuilt.
         const zero = new THREE.Vector3(0, 0, 0)
-        allPellets.forEach((pellet, i) => {
-          const id = key(pellet.c)
-          const alive = pellet.big ? next.power.has(id) : next.dots.has(id)
-          const pulse = pellet.big ? 0.34 + Math.sin(now / 220) * 0.07 : 0.17
+        const dotSize = new THREE.Vector3(0.17, 0.17, 0.17)
+        dots.forEach((cell, i) => {
           matrix.compose(
-            new THREE.Vector3(pellet.c.x, 0.35, pellet.c.y),
+            new THREE.Vector3(cell.x, 0.35, cell.y),
             new THREE.Quaternion(),
-            alive ? new THREE.Vector3(pulse, pulse, pulse) : zero,
+            next.dots.has(key(cell)) ? dotSize : zero,
           )
           pellets.setMatrixAt(i, matrix)
         })
         pellets.instanceMatrix.needsUpdate = true
+
+        // Fruit turns on the spot and bobs, so it catches the eye from across
+        // the board. Eaten fruit is simply gone.
+        power.forEach((cell, i) => {
+          const one = fruit[i]
+          if (!one) return
+          const alive = next.power.has(key(cell))
+          one.group.visible = alive
+          if (!alive) return
+          one.group.rotation.y = now / 700
+          one.group.position.y = Math.sin(now / 340 + i) * 0.05
+        })
 
         const at = positionOf(next.player)
         player.group.position.set(at.x, 0.42 + Math.abs(Math.sin(now / 120)) * 0.06, at.y)
@@ -325,6 +382,8 @@ export function Arcade() {
     return () => {
       cancelAnimationFrame(frame)
       observer.disconnect()
+      clearFruit()
+      fruitRef.current = null
       disposeVoxel(player)
       for (const body of ghostBodies) {
         disposeVoxel(body.normal)
