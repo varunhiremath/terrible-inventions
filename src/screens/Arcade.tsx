@@ -101,7 +101,18 @@ export function Arcade() {
     sun.position.set(6, 18, 10)
     scene.add(sun)
 
-    const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 200)
+    /**
+     * Orthographic, not perspective.
+     *
+     * Pac-Man is a game about reading the board — which row lines up with
+     * which, how far the gap is. Perspective makes the far side of the maze
+     * smaller than the near side and the grid stops being square, which is
+     * exactly the information the player needs. Orthographic keeps every tile
+     * the same size, and a modest tilt still shows the walls having height.
+     */
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200)
+    /** Radians from straight down. Enough for depth, little enough to read. */
+    const TILT = 0.52
 
     // --- maze ---------------------------------------------------------------
     const cube = new THREE.BoxGeometry(1, 1, 1)
@@ -154,12 +165,12 @@ export function Arcade() {
     scene.add(pellets)
 
     // --- characters ---------------------------------------------------------
-    const player = buildVoxel(31337, PLAYER_PALETTE)
+    const player = buildVoxel(31337, PLAYER_PALETTE, { flat: true })
     scene.add(player.group)
 
     const ghostBodies = GHOSTS.map((spec) => {
-      const normal = buildVoxel(spec.seed, ghostPalette(spec.colour))
-      const scared = buildVoxel(spec.seed, FRIGHTENED_PALETTE)
+      const normal = buildVoxel(spec.seed, ghostPalette(spec.colour), { flat: true })
+      const scared = buildVoxel(spec.seed, FRIGHTENED_PALETTE, { flat: true })
       scene.add(normal.group)
       scene.add(scared.group)
       return { normal, scared }
@@ -168,17 +179,28 @@ export function Arcade() {
     const resize = () => {
       const rect = mount.getBoundingClientRect()
       renderer.setSize(rect.width, rect.height, false)
-      camera.aspect = rect.width / Math.max(1, rect.height)
+      const aspect = rect.width / Math.max(1, rect.height)
+
+      // Fit the whole maze on screen with a little air around it. Tilting
+      // foreshortens the depth, so the vertical extent shrinks accordingly.
+      const spanX = WIDTH + 2
+      const spanY = (HEIGHT + 2) * Math.cos(TILT) + 2
+      const halfHeight = Math.max(spanY, spanX / aspect) / 2
+
+      camera.left = -halfHeight * aspect
+      camera.right = halfHeight * aspect
+      camera.top = halfHeight
+      camera.bottom = -halfHeight
       camera.updateProjectionMatrix()
 
-      // Frame the whole maze, whatever the screen shape.
-      const fov = (camera.fov * Math.PI) / 180
-      const needed = Math.max(
-        (HEIGHT + 3) / (2 * Math.tan(fov / 2)),
-        (WIDTH + 3) / (2 * Math.tan(fov / 2) * camera.aspect),
+      const centre = new THREE.Vector3(WIDTH / 2 - 0.5, 0, HEIGHT / 2 - 0.5)
+      const distance = 60
+      camera.position.set(
+        centre.x,
+        centre.y + Math.cos(TILT) * distance,
+        centre.z + Math.sin(TILT) * distance,
       )
-      camera.position.set(WIDTH / 2 - 0.5, needed * 0.86, HEIGHT / 2 - 0.5 + needed * 0.52)
-      camera.lookAt(WIDTH / 2 - 0.5, 0, HEIGHT / 2 - 0.5)
+      camera.lookAt(centre)
     }
     resize()
     const observer = new ResizeObserver(resize)
@@ -252,8 +274,8 @@ export function Arcade() {
         pellets.instanceMatrix.needsUpdate = true
 
         const at = positionOf(next.player)
-        player.group.position.set(at.x, 0.55 + Math.abs(Math.sin(now / 120)) * 0.08, at.y)
-        player.group.rotation.set(-0.2, facingAngle(next.player.dir), 0)
+        player.group.position.set(at.x, 0.42 + Math.abs(Math.sin(now / 120)) * 0.06, at.y)
+        player.group.rotation.set(0, facingAngle(next.player.dir), 0)
 
         next.ghosts.forEach((ghost, i) => {
           const body = ghostBodies[i]
@@ -265,8 +287,8 @@ export function Arcade() {
           body.scared.group.visible = !hidden && scared
 
           const active = scared ? body.scared : body.normal
-          active.group.position.set(pos.x, 0.55 + Math.sin(now / 260 + i) * 0.07, pos.y)
-          active.group.rotation.set(-0.2, facingAngle(ghost.dir), 0)
+          active.group.position.set(pos.x, 0.42 + Math.sin(now / 260 + i) * 0.05, pos.y)
+          active.group.rotation.set(0, facingAngle(ghost.dir), 0)
         })
       }
 
@@ -354,18 +376,49 @@ export function Arcade() {
         </div>
       </header>
 
-      {!overlay && hud.freezes > 0 && (
-        <div className="relative z-10 mt-auto flex justify-center p-4">
-          <Btn
-            tone="go"
-            onClick={() => {
-              const game = gameRef.current
-              if (game) gameRef.current = useFreeze(game)
-            }}
-            className="px-8 py-4"
-          >
-            Freeze ({hud.freezes})
-          </Btn>
+      {!overlay && (
+        <div
+          className="relative z-10 mt-auto flex items-end justify-between gap-3 p-4"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {/* Visible controls. Swipe works too, but nobody should have to guess. */}
+          <div className="grid grid-cols-3 grid-rows-3 gap-1.5">
+            {([[null, 'up', null], ['left', null, 'right'], [null, 'down', null]] as const)
+              .flat()
+              .map((dir, i) =>
+                dir ? (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={dir}
+                    onPointerDown={() => push(dir)}
+                    className="block-btn h-[62px] w-[62px] bg-ink-soft/90 p-0 text-xl backdrop-blur"
+                  >
+                    {{ up: '\u25b2', down: '\u25bc', left: '\u25c0', right: '\u25b6' }[dir]}
+                  </button>
+                ) : (
+                  <span key={i} />
+                ),
+              )}
+          </div>
+
+          <div className="flex flex-col items-end gap-2">
+            {hud.freezes > 0 && (
+              <Btn
+                tone="go"
+                onClick={() => {
+                  const game = gameRef.current
+                  if (game) gameRef.current = useFreeze(game)
+                }}
+                className="px-6 py-4"
+              >
+                Freeze ({hud.freezes})
+              </Btn>
+            )}
+            <p className="rounded-lg bg-ink/70 px-3 py-1 text-xs text-dim backdrop-blur">
+              or swipe anywhere
+            </p>
+          </div>
         </div>
       )}
 

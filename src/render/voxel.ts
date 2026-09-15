@@ -19,7 +19,18 @@ export interface Voxel {
   mesh: THREE.InstancedMesh
 }
 
-export function buildVoxel(seed: number, palette?: Palette): Voxel {
+export interface VoxelOptions {
+  /**
+   * Lay the body flat, face upwards.
+   *
+   * A sprite extruded upright is five voxels thick, and from a near-overhead
+   * camera that is all you see — a sliver. Laid flat it reads as a character
+   * again, which is how top-down games have always drawn their sprites.
+   */
+  flat?: boolean
+}
+
+export function buildVoxel(seed: number, palette?: Palette, options: VoxelOptions = {}): Voxel {
   const grid: SpriteGrid = makeSprite(seed, palette)
 
   const cells: { x: number; y: number; colour: THREE.Color }[] = []
@@ -61,9 +72,13 @@ export function buildVoxel(seed: number, palette?: Palette): Voxel {
   const inner = new THREE.Group()
   // Slightly over a tile wide, so a character stands up against the walls
   // rather than looking like something dropped on the floor.
-  inner.scale.setScalar(1.35 / SPRITE_SIZE)
+  inner.scale.setScalar(1.5 / SPRITE_SIZE)
   inner.add(mesh)
 
+  if (options.flat) inner.rotation.x = -Math.PI / 2
+
+  // The holder only ever turns about the world's vertical, so facing a
+  // direction stays a single clean rotation whichever way the body is laid.
   const holder = new THREE.Group()
   holder.add(inner)
   return { group: holder, mesh }

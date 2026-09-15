@@ -72,6 +72,12 @@ These are not preferences. Breaking one defeats the point of the project.
 - Only a game over costs a compulsory problem, and it is pitched easier than anything in
   the shop. It is a coin slot, not a test.
 
+## Controls
+
+- **Every control must be visible on screen.** Swipe and arrow keys both worked in a
+  build that was still unplayable, because nothing told the player they existed. The
+  smoke test asserts the on-screen pad is present and drives the game; keep it.
+
 ## Rendering
 
 - Characters are procedural sprites extruded into voxels. A new character costs a seed.
@@ -80,6 +86,10 @@ These are not preferences. Breaking one defeats the point of the project.
   that is not there and everything renders black.
 - **Colours must be written `hsl(h, s%, l%)` with commas.** Canvas accepts the modern
   space-separated form; three.js does not, and silently renders white.
+- **A board game uses an orthographic camera.** Perspective makes the far side of a maze
+  smaller than the near side, and the grid a player is reasoning about stops being square.
+- **Characters seen from overhead must be laid flat** (`buildVoxel(..., { flat: true })`).
+  An upright sprite is five voxels thick and from above that is all you see.
 
 ## Conventions
 

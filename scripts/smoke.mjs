@@ -47,6 +47,22 @@ await page.waitForTimeout(4000)
 const afterOpening = await scoreNow()
 if (afterOpening <= 0) problems.push('nothing happened once the pause ended')
 
+// Controls have to be *visible*. Swipe and arrow keys both worked in an
+// earlier build and the game was still unplayable, because nothing on screen
+// said so.
+for (const dir of ['up', 'down', 'left', 'right']) {
+  if ((await page.locator(`button[aria-label="${dir}"]`).count()) === 0) {
+    problems.push(`no on-screen ${dir} control`)
+  }
+}
+
+const beforePad = await scoreNow()
+for (const dir of ['left', 'up', 'right', 'down']) {
+  await page.locator(`button[aria-label="${dir}"]`).click()
+  await page.waitForTimeout(800)
+}
+if ((await scoreNow()) <= beforePad) problems.push('the on-screen pad did not move the player')
+
 for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']) {
   await page.keyboard.press(key)
   await page.waitForTimeout(900)
