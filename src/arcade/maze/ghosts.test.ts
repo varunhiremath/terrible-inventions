@@ -1,0 +1,191 @@
+import { describe, expect, it } from 'vitest'
+import { HEIGHT, PLAYER_START, WIDTH, isWall, reachableFrom, key, wrapCell } from './maze'
+import {
+  DIRS,
+  GHOSTS,
+  OPPOSITE,
+  PHASE_SCHEDULE,
+  SHY_DISTANCE,
+  STEP,
+  ahead,
+  chooseDirection,
+  distanceSquared,
+  legalDirections,
+  phaseAt,
+  randomDirection,
+  targetFor,
+  targetForAt,
+  type Dir,
+} from './ghosts'
+
+const papa = GHOSTS[0]
+const bolt = GHOSTS[1]
+const cog = GHOSTS[2]
+const rivet = GHOSTS[3]
+
+describe('the cast', () => {
+  it('is four distinct chasers with four personalities', () => {
+    expect(GHOSTS).toHaveLength(4)
+    expect(new Set(GHOSTS.map((g) => g.personality)).size).toBe(4)
+    expect(new Set(GHOSTS.map((g) => g.seed)).size).toBe(4)
+    expect(new Set(GHOSTS.map((g) => g.colour)).size).toBe(4)
+  })
+
+  it('sends each one to a different corner when scattering', () => {
+    const corners = GHOSTS.map((g) => targetFor(g, 'scatter', PLAYER_START, 'up', papa.start))
+    expect(new Set(corners.map((c) => key(c))).size).toBe(4)
+  })
+
+  it('starts everyone on open floor', () => {
+    for (const ghost of GHOSTS) expect(isWall(ghost.start)).toBe(false)
+  })
+})
+
+describe('targeting', () => {
+  const player = { x: 9, y: 13 }
+
+  it('sends the relentless one straight at the player', () => {
+    expect(targetFor(papa, 'chase', player, 'up', papa.start)).toEqual(player)
+  })
+
+  it('sends the ambusher to where the player is going, not where he is', () => {
+    expect(targetFor(bolt, 'chase', player, 'up', papa.start)).toEqual({ x: 9, y: 9 })
+    expect(targetFor(bolt, 'chase', player, 'right', papa.start)).toEqual({ x: 13, y: 13 })
+  })
+
+  it('swings the flanker round the far side', () => {
+    // Two ahead of the player, doubled away from the relentless one.
+    const papaAt = { x: 5, y: 13 }
+    const pivot = ahead(player, 'right', 2)
+    expect(targetFor(cog, 'chase', player, 'right', papaAt)).toEqual({
+      x: 2 * pivot.x - papaAt.x,
+      y: 2 * pivot.y - papaAt.y,
+    })
+  })
+
+  it('makes the shy one bold far away and timid up close', () => {
+    const far = { x: player.x + SHY_DISTANCE + 2, y: player.y }
+    const near = { x: player.x + 1, y: player.y }
+    expect(targetForAt(rivet, 'chase', far, player, 'up', papa.start)).toEqual(player)
+    expect(targetForAt(rivet, 'chase', near, player, 'up', papa.start)).toEqual(rivet.corner)
+  })
+
+  it('allows targets outside the maze, which is what makes ambushing work', () => {
+    const edge = { x: 1, y: 1 }
+    const target = targetFor(bolt, 'chase', edge, 'up', papa.start)
+    expect(target.y).toBeLessThan(0)
+  })
+})
+
+describe('steering', () => {
+  it('never walks into a wall', () => {
+    for (let y = 0; y < HEIGHT; y++) {
+      for (let x = 0; x < WIDTH; x++) {
+        const at = { x, y }
+        if (isWall(at)) continue
+        for (const facing of DIRS) {
+          const dir = chooseDirection(at, facing, { x: 9, y: 13 })
+          expect(isWall(wrapCell({ x: x + STEP[dir].x, y: y + STEP[dir].y }))).toBe(false)
+        }
+      }
+    }
+  })
+
+  it('never turns back on itself unless there is nowhere else to go', () => {
+    for (let y = 0; y < HEIGHT; y++) {
+      for (let x = 0; x < WIDTH; x++) {
+        const at = { x, y }
+        if (isWall(at)) continue
+        for (const facing of DIRS) {
+          const exits = DIRS.filter(
+            (d) => !isWall(wrapCell({ x: x + STEP[d].x, y: y + STEP[d].y })),
+          )
+          const isDeadEnd = exits.filter((d) => d !== OPPOSITE[facing]).length === 0
+          const dir = chooseDirection(at, facing, { x: 1, y: 1 })
+          if (!isDeadEnd) expect(dir).not.toBe(OPPOSITE[facing])
+        }
+      }
+    }
+  })
+
+  it('always has somewhere to go', () => {
+    for (let y = 0; y < HEIGHT; y++) {
+      for (let x = 0; x < WIDTH; x++) {
+        if (isWall({ x, y })) continue
+        for (const facing of DIRS) expect(legalDirections({ x, y }, facing).length).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('moves closer to its target when it can', () => {
+    const at = { x: 9, y: 10 } // the open tunnel row, so all turns are available
+    const target = { x: 1, y: 10 }
+    expect(chooseDirection(at, 'left', target)).toBe('left')
+    expect(chooseDirection(at, 'right', { x: 17, y: 10 })).toBe('right')
+  })
+
+  it('resolves ties the same way every time', () => {
+    const at = { x: 9, y: 10 }
+    const first = chooseDirection(at, 'left', { x: 9, y: 10 })
+    for (let i = 0; i < 20; i++) expect(chooseDirection(at, 'left', { x: 9, y: 10 })).toBe(first)
+  })
+
+  it('wanders legally when frightened', () => {
+    for (let roll = 0; roll < 1; roll += 0.05) {
+      for (const facing of DIRS) {
+        const dir = randomDirection({ x: 9, y: 10 }, facing, roll)
+        expect(isWall(wrapCell({ x: 9 + STEP[dir].x, y: 10 + STEP[dir].y }))).toBe(false)
+      }
+    }
+  })
+
+  // A chaser that cannot reach the player is not a chaser.
+  it('can steer from anywhere to the player, given enough turns', () => {
+    const reachable = reachableFrom(PLAYER_START)
+    for (const ghost of GHOSTS) {
+      let at = { ...ghost.start }
+      let facing: Dir = 'up'
+      let caught = false
+
+      for (let tick = 0; tick < 400 && !caught; tick++) {
+        facing = chooseDirection(at, facing, PLAYER_START)
+        at = wrapCell({ x: at.x + STEP[facing].x, y: at.y + STEP[facing].y })
+        expect(reachable.has(key(at))).toBe(true)
+        if (at.x === PLAYER_START.x && at.y === PLAYER_START.y) caught = true
+      }
+
+      expect(caught).toBe(true)
+    }
+  })
+})
+
+describe('phases', () => {
+  it('opens on scatter and settles into chase', () => {
+    expect(phaseAt(0)).toBe('scatter')
+    expect(phaseAt(6.9)).toBe('scatter')
+    expect(phaseAt(7.1)).toBe('chase')
+    expect(phaseAt(10_000)).toBe('chase')
+  })
+
+  it('gives less and less respite as the level goes on', () => {
+    const scatters = PHASE_SCHEDULE.filter((p) => p.phase === 'scatter').map((p) => p.seconds)
+    expect(scatters[scatters.length - 1]).toBeLessThan(scatters[0])
+  })
+
+  it('alternates rather than repeating itself', () => {
+    for (let i = 1; i < PHASE_SCHEDULE.length; i++) {
+      expect(PHASE_SCHEDULE[i].phase).not.toBe(PHASE_SCHEDULE[i - 1].phase)
+    }
+  })
+})
+
+describe('geometry', () => {
+  it('measures distance without square roots', () => {
+    expect(distanceSquared({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe(25)
+  })
+
+  it('looks ahead in the direction of travel', () => {
+    expect(ahead({ x: 5, y: 5 }, 'up', 4)).toEqual({ x: 5, y: 1 })
+    expect(ahead({ x: 5, y: 5 }, 'left', 2)).toEqual({ x: 3, y: 5 })
+  })
+})
