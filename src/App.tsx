@@ -7,21 +7,51 @@ import { Studio } from './screens/Studio'
 import { Coop } from './screens/Coop'
 import { useStore } from './store'
 import { unlock } from './audio'
+import { startMusic, stopMusic, unlockAudio } from './music/player'
 
 export default function App() {
-  const { ready, screen, boot } = useStore()
+  const { ready, screen, save, boot } = useStore()
 
   useEffect(() => {
     void boot()
   }, [boot])
 
   // iOS keeps audio muted until a real gesture opens it, so the first tap
-  // anywhere is what makes {papa}'s voice possible later in the session.
+  // anywhere is what makes {papa}'s voice possible later in the session. The
+  // music needs the same permission and is easy to forget, because on a
+  // desktop browser it starts without it and everything looks fine.
   useEffect(() => {
-    const open = () => unlock()
+    const open = () => {
+      unlock()
+      unlockAudio()
+    }
     window.addEventListener('pointerdown', open, { once: true })
-    return () => window.removeEventListener('pointerdown', open)
+    window.addEventListener('keydown', open, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', open)
+      window.removeEventListener('keydown', open)
+    }
   }, [])
+
+  /*
+   * Each screen gets its tune. The maze is the chase; the shop is the same
+   * four chords at half the speed, because a maths problem is on screen there
+   * and music that hurries you is the last thing that helps. Everywhere else
+   * is quiet.
+   */
+  useEffect(() => {
+    if (!save.music) {
+      stopMusic()
+      return
+    }
+    if (screen === 'arcade') startMusic('chase')
+    else if (screen === 'shop') startMusic('shop')
+    else stopMusic()
+    // `save.music` is in here so switching it back on in settings starts the
+    // tune again, rather than waiting for the next change of screen.
+  }, [screen, save.music])
+
+  useEffect(() => stopMusic, [])
 
   if (!ready) return null
 

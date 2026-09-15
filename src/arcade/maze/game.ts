@@ -32,9 +32,41 @@ import {
  * predictable, and it is why the turn buffer below matters so much.
  */
 
-export const PLAYER_SPEED = 5.6 // tiles per second
-export const GHOST_SPEED = 5.0
-export const FRIGHTENED_SPEED = 3.2
+/**
+ * How fast anyone moves, in tiles per second.
+ *
+ * The first cut opened at full arcade pace, which is a lot to ask of someone
+ * meeting the controls for the first time — the maze is unfamiliar, the turns
+ * come up fast, and losing three lives in twenty seconds teaches nothing.
+ *
+ * So it opens slow and climbs a little each level. The chasers climb faster
+ * than the player does, which is where the difficulty actually comes from: the
+ * gap between them narrows from comfortable to nearly nothing. It never closes
+ * completely — a chaser is always a shade slower than the player, so being
+ * caught is always a cornering mistake rather than simply being outrun.
+ */
+const OPENING_PLAYER_SPEED = 3.6
+const OPENING_GHOST_SPEED = 2.9
+const PLAYER_SPEED_PER_LEVEL = 0.18
+const GHOST_SPEED_PER_LEVEL = 0.24
+const TOP_PLAYER_SPEED = 6.4
+/** Kept under the player's, always. */
+const CHASER_HANDICAP = 0.2
+
+export function playerSpeed(level: number): number {
+  const climb = OPENING_PLAYER_SPEED + PLAYER_SPEED_PER_LEVEL * (Math.max(1, level) - 1)
+  return Math.min(TOP_PLAYER_SPEED, climb)
+}
+
+export function ghostSpeed(level: number): number {
+  const climb = OPENING_GHOST_SPEED + GHOST_SPEED_PER_LEVEL * (Math.max(1, level) - 1)
+  return Math.min(playerSpeed(level) - CHASER_HANDICAP, climb)
+}
+
+/** A frightened chaser dawdles, so catching one is a decision, not a race. */
+export function frightenedSpeed(level: number): number {
+  return ghostSpeed(level) * 0.62
+}
 export const FRIGHTENED_SECONDS = 7
 export const EATEN_RESPAWN_SECONDS = 4
 export const STARTING_LIVES = 3
@@ -179,7 +211,7 @@ export function step(game: Game, dt: number, roll: () => number = Math.random): 
 
 function movePlayer(game: Game, dt: number): void {
   const player = game.player
-  let remaining = PLAYER_SPEED * dt
+  let remaining = playerSpeed(game.level) * dt
 
   while (remaining > 0) {
     // A queued turn is taken the moment it becomes legal. Without this the
@@ -242,7 +274,8 @@ function moveGhost(game: Game, ghost: GhostState, dt: number, frozen: boolean, r
   if (frozen) return
 
   const phase: Phase = ghost.frightened ? 'frightened' : phaseAt(game.elapsed)
-  let remaining = (ghost.frightened ? FRIGHTENED_SPEED : GHOST_SPEED) * dt
+  let remaining =
+    (ghost.frightened ? frightenedSpeed(game.level) : ghostSpeed(game.level)) * dt
 
   while (remaining > 0) {
     if (ghost.progress === 0) {

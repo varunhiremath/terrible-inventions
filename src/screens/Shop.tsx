@@ -128,7 +128,7 @@ export function Shop() {
             type="button"
             onClick={() => {
               attempt(item.id)
-              say(fill(item.blurb))
+              say(fill(item.blurb), { as: 'papa' })
             }}
             className="block-btn text-left"
           >

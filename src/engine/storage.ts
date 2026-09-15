@@ -30,6 +30,8 @@ export interface SaveState {
   names: { kidName?: string; papaName?: string }
   /** Computer speech, {papa}'s recordings, or nothing. */
   voice: 'computer' | 'papa' | 'off'
+  /** Background music. Some days it is the last thing anyone wants. */
+  music: boolean
   /** What {papa} has promised. Written on the device, never shipped. */
   rewards: string[]
   log: Attempt[]
@@ -51,6 +53,7 @@ export function emptySave(): SaveState {
     note: null,
     names: {},
     voice: 'computer',
+    music: true,
     rewards: [],
     log: [],
     coopLog: [],

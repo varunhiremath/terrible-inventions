@@ -9,7 +9,7 @@ import { useStore } from '../store'
  * looking in here finds his own name and a text box, which is not a catastrophe.
  */
 export function Settings() {
-  const { save, saveNames, saveNote, replaceSave, setRewards, setVoice, go } = useStore()
+  const { save, saveNames, saveNote, replaceSave, setRewards, setVoice, setMusic, go } = useStore()
   const profile = getProfile()
 
   const [kidName, setKidName] = useState(save.names.kidName ?? '')
@@ -143,6 +143,27 @@ export function Settings() {
               </Btn>
             ),
           )}
+        </div>
+      </Panel>
+
+      <Panel className="flex flex-col gap-3">
+        <h2 className="font-bold">Music</h2>
+        <p className="text-sm leading-relaxed text-dim">
+          A tune plays under the maze and a slower one in the shop. It drops out of the way
+          on its own whenever {fill('{papa}')} says something. Some days it is the last thing
+          anyone wants.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {([[true, 'On'], [false, 'Off']] as const).map(([value, label]) => (
+            <Btn
+              key={label}
+              tone={save.music === value ? 'chosen' : 'plain'}
+              onClick={() => setMusic(value)}
+              className="px-3 py-3 text-sm"
+            >
+              {label}
+            </Btn>
+          ))}
         </div>
       </Panel>
 

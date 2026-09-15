@@ -1,10 +1,20 @@
 /**
  * What {papa} says while chasing his own son round a maze.
  *
- * Smug and beatable. He gloats, he is a terrible loser, and he is transparently
- * meant to be beaten — the joke only works if losing to him stings a little and
- * beating him is obviously the point. Nothing here is ever disappointed in the
- * player; {papa} is only ever pleased with himself.
+ * He is a pantomime villain, not a dry one. The first pass was too clever by
+ * half — it read as a grown man being mildly sardonic, which is funny to grown
+ * men and to nobody else. These lines are louder, sillier, and full of
+ * themselves: {papa} boasts about nothing, takes credit for luck, blames the
+ * furniture, and is never, ever gracious.
+ *
+ * The rules that keep it kind:
+ *  - {papa} is pleased with himself, never disappointed in the player.
+ *  - The joke is always on {papa}. He is transparently meant to be beaten.
+ *  - Nothing is ever about how clever or slow the player is.
+ *
+ * They are spoken aloud, so they are written to be *said*: short, punchy, and
+ * punctuated so the synthesiser gives them some shape. Exclamation marks earn
+ * their keep here.
  */
 
 export type TauntMoment =
@@ -19,50 +29,59 @@ export type TauntMoment =
 
 export const TAUNTS: Record<TauntMoment, readonly string[]> = {
   levelStart: [
-    'Try to keep up.',
-    'I have been practising. You have not.',
-    'Off you go. I will be right behind you.',
-    'Bolt, Cog, Rivet — spread out. He is quicker than he looks.',
+    'Behold! The greatest maze runner in this entire house!',
+    'I had toast for breakfast. I am unstoppable!',
+    'Ha! Off you go, little snack. I will be RIGHT behind you!',
+    'Bolt! Cog! Rivet! Formation... whatever that means! Go!',
+    'I have trained for this my whole life. Since Tuesday!',
+    'Ready? No? Excellent. Begin!',
   ],
   caught: [
-    'Got you. Again.',
-    'Oh dear. Was that your plan?',
-    'I barely moved and you walked into me.',
-    'That is one. Shall we make it two?',
-    'You went left. You always go left.',
+    'HA! Got you! Did you see that? Somebody write that down!',
+    'Oh no! Oh no! Oh... wait, that was good for me. Never mind!',
+    'I did not even move! You ran into me! That still counts!',
+    'That is ONE. I am going to need a bigger scoreboard!',
+    'You went left. You ALWAYS go left. I have a chart!',
+    'Caught! By me! A man who gets tired walking upstairs!',
   ],
   eaten: [
-    'That does not count.',
-    'I let you do that.',
-    'Lucky pellet. Anyone could have done that.',
-    'I was going that way anyway.',
-    'Right. That is the last time I fall for it.',
+    'AAAH! No! That does not count! The rules are different here!',
+    'I LET you do that. Obviously. Clearly. Definitely.',
+    'Lucky fruit! Anyone could have done that! A baby could!',
+    'I was going that way anyway! I had plans over there!',
+    'Right! RIGHT! That is the last time I fall for the old fruit trick!',
+    'My hat! You have knocked off my imaginary hat!',
   ],
   nearMiss: [
-    'Close.',
-    'Ooh, nearly.',
-    'I felt the wind off you there.',
+    'Ooooh! So close!',
+    'I felt the wind off you! I need a lie down!',
+    'Nearly! NEARLY!',
+    'My whiskers! You nearly had my whiskers!',
   ],
   lastLife: [
-    'One left. No pressure.',
-    'This is the interesting bit.',
-    'Careful now. I do enjoy this part.',
+    'One life left! Do not think about that! Think about anything else!',
+    'Ooh, this is the exciting bit! I have got snacks!',
+    'Careful now... I am doing my scary walk!',
+    'Last one! I am not nervous! YOU are nervous!',
   ],
   gameOver: [
-    'And that is that. Shall we stop there?',
-    'Beaten by your own father. Again.',
-    'You can always buy yourself another go, you know.',
+    'And THAT is why they call me... um. Nobody calls me anything. Yet!',
+    'Beaten by your own father! I am going to tell everyone!',
+    'Victory! I shall celebrate by having a sit down!',
+    'You can buy another go, you know. I would. I definitely would.',
   ],
   levelDone: [
-    'Fine. That was... fine.',
-    'You cleared it. I am not saying well done.',
-    'Beginner’s luck. Twice.',
-    'Right. The next one is harder. I made sure.',
+    'Fine! FINE! That was... fine. I am not upset. I am FINE.',
+    'You cleared it! I am NOT saying well done! I am saying words near it!',
+    'Beginner luck! Twice! That is a thing! Look it up!',
+    'Right. The next one is harder. I made it harder. With my hands!',
+    'Pfff! I was barely trying! I was thinking about lunch!',
   ],
   shopping: [
-    'Buying your way out of trouble, I see.',
-    'Go on then. Earn something.',
-    'I would not bother. But go on.',
+    'Buying your way out of trouble! I respect it! I hate it! Both!',
+    'Go on then! Earn something! Show off!',
+    'Shopping! In MY maze! The cheek of it!',
+    'I would not bother. But... go on.',
   ],
 }
 

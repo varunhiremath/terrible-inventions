@@ -7,6 +7,7 @@ import { emptySave, loadSave, persistSave, type SaveState } from './engine/stora
 import { setProfileOverride } from './config/profile'
 import { loadVoice } from './audio'
 import { setVoiceMode, type VoiceMode } from './voice'
+import { setMusicEnabled } from './music/player'
 import { emptyPowerUps, type PowerUps } from './arcade/maze/game'
 import { CONTINUE_DELTA, SHOP, ratingFor, type ShopItem } from './arcade/shop'
 import type { Attempt, Problem } from './engine/types'
@@ -59,6 +60,7 @@ interface State {
   markNoteSeen: () => void
   saveNames: (names: { kidName?: string; papaName?: string }) => void
   setVoice: (voice: VoiceMode) => void
+  setMusic: (music: boolean) => void
   setRewards: (rewards: string[]) => void
   replaceSave: (save: SaveState) => void
 }
@@ -86,6 +88,7 @@ export const useStore = create<State>((set, get) => ({
     const save = await loadSave()
     setProfileOverride(save.names)
     setVoiceMode(save.voice)
+    setMusicEnabled(save.music)
     await loadVoice()
     set({ save, ready: true })
   },
@@ -250,6 +253,13 @@ export const useStore = create<State>((set, get) => ({
     void persistSave(next)
   },
 
+  setMusic: (music) => {
+    const next: SaveState = { ...get().save, music }
+    setMusicEnabled(music)
+    set({ save: next })
+    void persistSave(next)
+  },
+
   setRewards: (rewards) => {
     const next: SaveState = { ...get().save, rewards }
     set({ save: next })
@@ -259,6 +269,7 @@ export const useStore = create<State>((set, get) => ({
   replaceSave: (save) => {
     setProfileOverride(save.names)
     setVoiceMode(save.voice)
+    setMusicEnabled(save.music)
     set({ save, run: null, screen: 'arcade' })
     void persistSave(save)
   },

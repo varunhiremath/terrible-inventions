@@ -101,7 +101,7 @@ export function Arcade() {
     levelRef.current = run.level
     fruitRef.current?.(run.level)
     setMessage(null)
-    say(fill(taunt('levelStart')), { seed: GHOSTS[0].seed })
+    say(fill(taunt('levelStart')), { as: 'papa' })
   }, [run])
 
   useEffect(() => {
@@ -145,7 +145,7 @@ export function Arcade() {
 
     // --- maze ---------------------------------------------------------------
     /** How much of a tile a wall takes up. The rest of the tile is corridor. */
-    const WALL_THICKNESS = 0.5
+    const WALL_THICKNESS = 0.34
     const WALL_HEIGHT = 0.62
 
     const cube = new THREE.BoxGeometry(1, 1, 1)
@@ -317,7 +317,7 @@ export function Arcade() {
             next.status === 'gameOver' ? 'gameOver' : next.status === 'levelComplete' ? 'levelDone' : 'caught'
           const line = fill(taunt(moment))
           setMessage(line)
-          say(line, { seed: GHOSTS[0].seed })
+          say(line, { as: 'papa' })
         }
 
         if (

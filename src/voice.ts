@@ -1,5 +1,6 @@
 import { play, type Cue } from './audio'
-import { NARRATOR, profileFor, speak, stopSpeaking, type VoiceProfile } from './speech'
+import { duckMusic, speakingSeconds } from './music/player'
+import { NARRATOR, PAPA, profileFor, speak, stopSpeaking, type VoiceProfile } from './speech'
 
 /**
  * One way in for everything the app says out loud.
@@ -29,15 +30,23 @@ export function getVoiceMode(): VoiceMode {
  * `cue` is only a hint for which recording to reach for; the text is what gets
  * spoken. A line with no matching recording still gets a voice.
  */
-export function say(text: string, options: { cue?: Cue; seed?: number } = {}): void {
+export function say(
+  text: string,
+  options: { cue?: Cue; seed?: number; as?: 'papa' } = {},
+): void {
   if (mode === 'off') return
+
+  // Under the bass, a joke is just noise.
+  duckMusic(speakingSeconds(text))
 
   if (mode === 'papa') {
     if (options.cue) play(options.cue)
     return
   }
 
-  speak(text, options.seed === undefined ? NARRATOR : profileFor(options.seed))
+  const profile =
+    options.as === 'papa' ? PAPA : options.seed === undefined ? NARRATOR : profileFor(options.seed)
+  speak(text, profile)
 }
 
 /** Wordless punctuation — a right answer, a nudge. Never spoken aloud. */

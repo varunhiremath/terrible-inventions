@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { MAZE, TILE, WIDTH } from '../arcade/maze/maze'
 import { wallBoxes, type WallBox } from './mazeGeometry'
 
-const T = 0.55
+const T = 0.34
 const boxes = wallBoxes(MAZE, TILE.WALL, T)
 
 const wallCells = () => {
