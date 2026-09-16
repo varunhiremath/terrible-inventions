@@ -19,29 +19,52 @@ export const TILE = {
   EMPTY: ' ',
 } as const
 
-/** Columns 0..9; column 9 is the centre and is not mirrored. */
+/**
+ * Columns 0..13; column 13 is the centre spine and is not mirrored, so the
+ * maze comes out twenty-seven wide with single-tile corridors down the middle.
+ *
+ * Twenty-seven by thirty-one, which is the shape of the arcade original and
+ * very nearly the shape of a phone held upright. The first maze here was
+ * nineteen by twenty-one — almost square, which left a band of nothing above
+ * and below it on every phone it was played on.
+ *
+ * The block in the middle is the chasers' room. It has no door and no rules
+ * about leaving: the pen, its timers and the eyes-go-home behaviour are a lot
+ * of machinery for something an eight year old will not notice. It is there
+ * because the shape of it is half of what makes a maze look like this one.
+ */
 const LEFT_HALF = [
-  '##########',
-  '#........#',
-  '#O##.###.#',
-  '#..#.....#',
-  '##.#.###.#',
-  '#....#...#',
-  '#.####.###',
-  '#......#..',
-  '####.#.#.#',
-  '#....#....',
-  '..........',
-  '#....#....',
-  '####.#.#.#',
-  '#......#..',
-  '#.####.###',
-  '#....#...#',
-  '##.#.###.#',
-  '#..#.....#',
-  '#O##.###.#',
-  '#.........',
-  '##########',
+  '##############',
+  '#............#',
+  '#.####.#####.#',
+  '#O####.#####.#',
+  '#.####.#####.#',
+  '#.............',
+  '#.####.##.####',
+  '#.####.##.####',
+  '#......##....#',
+  '######.#####.#',
+  '######.#####.#',
+  '######.##....#',
+  '######.##.#..#',
+  '######.##.#   ',
+  '..........#   ',
+  '######.##.#   ',
+  '######.##.####',
+  '######.##....#',
+  '######.#####.#',
+  '######.#####.#',
+  '#......##....#',
+  '#.####.##.####',
+  '#.####.##.####',
+  '#...##........',
+  '###.##.##.####',
+  '###.##.##.####',
+  '#O.....##....#',
+  '#.##########.#',
+  '#.##########.#',
+  '#.............',
+  '##############',
 ] as const
 
 function mirror(): string[] {
@@ -62,7 +85,7 @@ export interface Cell {
 }
 
 /** The middle row runs off both edges; walking out of one side comes back the other. */
-export const TUNNEL_ROW = 10
+export const TUNNEL_ROW = 14
 
 /**
  * Bottom centre, a long way from the chasers.
@@ -70,18 +93,18 @@ export const TUNNEL_ROW = 10
  * The first attempt put him four steps from the nearest one, which meant dying
  * before the first dot. Distance is not a detail here — it is the whole opening.
  */
-export const PLAYER_START: Cell = { x: 9, y: 19 }
+export const PLAYER_START: Cell = { x: 13, y: 23 }
 
-/** All four start clustered in the middle and fan out from there. */
+/** All four start in the room in the middle and fan out from there. */
 export const GHOST_STARTS: readonly Cell[] = [
-  { x: 9, y: 9 },
-  { x: 8, y: 9 },
-  { x: 10, y: 9 },
-  { x: 9, y: 11 },
+  { x: 13, y: 13 },
+  { x: 12, y: 14 },
+  { x: 14, y: 14 },
+  { x: 13, y: 15 },
 ]
 
 /** Where a ghost reappears after being eaten. */
-export const GHOST_RESPAWN: Cell = { x: 9, y: 9 }
+export const GHOST_RESPAWN: Cell = { x: 13, y: 14 }
 
 /** Wraps x through the tunnel; y never wraps. */
 export function wrapCell({ x, y }: Cell): Cell {

@@ -1,40 +1,43 @@
 /**
  * Fitting the board to the screen.
  *
- * Scaling the maze to the viewport is not enough. The score sits over the top
- * of the board and the thumb pad over the bottom or the side, so a maze fitted
- * to the whole screen still had its corners buried under the controls — worst
- * on a phone held sideways, which is how the game is actually played.
+ * Scaling the maze to the viewport is not enough on its own. The score sits
+ * above the board and the lives below it, so a maze fitted to the whole screen
+ * has its top and bottom rows underneath them.
  *
- * So: subtract the panels, fit the maze to what is left, and slide the camera
- * so the maze lands in the middle of the free space rather than the middle of
- * the screen. The panels are measured rather than guessed at, because how big
- * they are depends on the text in them.
+ * So: subtract the bars, fit the maze to what is left, and slide the camera so
+ * the maze lands in the middle of the free space rather than the middle of the
+ * screen. The bars are measured rather than guessed at, because how tall they
+ * are depends on the text in them.
+ *
+ * There used to be a second layout here for landscape, which moved the panels
+ * into side gutters because that is where a thumb pad wanted to be. The thumb
+ * pad is gone — the board itself takes the touches now — and the score and
+ * lives sit in a bar above and below in every orientation. Keeping the branch
+ * would have been keeping a special case with nothing left to be special
+ * about, and while it was still here it reserved the full width of the screen
+ * on both sides and pushed the maze out of sight.
  *
  * The maths lives here, away from the DOM, so it can be tested.
  */
 
-/** A measured panel. Null when it is not on screen. */
-export type Panel = { width: number; height: number } | null
-
-export type Panels = {
-  /** Lives and the clock. */
-  hud: Panel
-  /** The thumb pad. */
-  pad: Panel
-  /** Whatever sits opposite the pad, such as the swipe hint. */
-  extras: Panel
-  /** Shop and settings. */
-  topRight: Panel
+/** Margins in pixels that the board must keep clear of. */
+export interface Inset {
+  top: number
+  bottom: number
+  left: number
+  right: number
 }
 
-/** Margins in pixels that the board must keep clear of. */
-export type Inset = { top: number; bottom: number; left: number; right: number }
-
 /** An orthographic camera's frustum, in world units either side of centre. */
-export type Frustum = { left: number; right: number; top: number; bottom: number }
+export interface Frustum {
+  left: number
+  right: number
+  top: number
+  bottom: number
+}
 
-export type Fit = {
+export interface Fit {
   inset: Inset
   /** The rectangle the board gets, in pixels. */
   free: { w: number; h: number }
@@ -43,52 +46,28 @@ export type Fit = {
   frustum: Frustum
 }
 
-const width = (p: Panel) => p?.width ?? 0
-const height = (p: Panel) => p?.height ?? 0
-
 /** The smallest a board may be squeezed to before we stop giving ground. */
 const MIN_FREE = 40
 
-export function insetFor(w: number, h: number, panels: Panels, gap: number): Inset {
-  // Turned sideways, the score and the shop button move into the same gutters
-  // as the controls rather than sitting over the board, so the board keeps its
-  // full height — which is the scarce axis on a phone in landscape. Held
-  // upright the score spans the top and the board starts below it.
-  return w > h
-    ? {
-        top: gap,
-        bottom: gap,
-        left: Math.max(width(panels.pad), width(panels.hud)) + gap,
-        right: Math.max(width(panels.extras), width(panels.topRight)) + gap,
-      }
-    : {
-        top: height(panels.hud) + gap,
-        bottom: Math.max(height(panels.pad), height(panels.extras)) + gap,
-        left: gap,
-        right: gap,
-      }
-}
-
 /**
- * @param spanX  how wide the board is in world units
- * @param spanY  how tall it looks after the camera tilt foreshortens it
+ * @param spanX how wide the board is in world units
+ * @param spanY how tall it is
  */
 export function fitBoard(
   w: number,
   h: number,
   spanX: number,
   spanY: number,
-  panels: Panels,
-  gap: number,
+  inset: Inset,
 ): Fit {
-  const inset = insetFor(w, h, panels, gap)
-
   const free = {
     w: Math.max(MIN_FREE, w - inset.left - inset.right),
     h: Math.max(MIN_FREE, h - inset.top - inset.bottom),
   }
 
-  // Whichever axis runs out first decides the scale.
+  // Whichever axis runs out first decides the scale, so the whole board stays
+  // on screen. Filling both would mean cropping it, and a maze you cannot see
+  // all of is not this game.
   const perPixel = Math.max(spanX / free.w, spanY / free.h)
 
   const halfW = (w * perPixel) / 2

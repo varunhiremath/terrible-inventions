@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { PLAYER_START, isWall, key, neighbours, wrapCell } from './maze'
+import { PLAYER_START, TUNNEL_ROW, WIDTH, isWall, key, neighbours, wrapCell } from './maze'
+import type { Dir } from './ghosts'
 import {
   FRIGHTENED_SECONDS,
   READY_SECONDS,
@@ -12,7 +13,17 @@ import {
   step,
   turn,
   useFreeze,
+  playerSpeed,
 } from './game'
+
+/** One tile in each direction, and each direction's opposite. */
+const STEP: Record<Dir, { x: number; y: number }> = {
+  up: { x: 0, y: -1 },
+  down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
+}
+const OPPOSITE_OF: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' }
 
 /** Deterministic wandering, so a frightened chase is reproducible. */
 const roll = () => 0.5
@@ -63,10 +74,38 @@ describe('moving', () => {
   // The single most important control detail: a turn pressed slightly early
   // must be remembered, or the game feels broken rather than hard.
   it('remembers a turn pressed before the corner', () => {
+    // Worked out from the maze rather than assumed: find a turn that is a wall
+    // right now but opens up a tile or two further along the corridor. Pinning
+    // this to fixed cells is what broke it the last time the maze changed.
     let game = fresh()
-    game = turn(game, 'up')
-    game = run(game, 0.6)
-    expect(game.player.dir).toBe('up')
+    const facing = game.player.dir
+    const along = STEP[facing]
+
+    let wanted: Dir | null = null
+    let steps = 0
+    for (let ahead = 1; ahead <= 4 && !wanted; ahead++) {
+      const cell = wrapCell({
+        x: PLAYER_START.x + along.x * ahead,
+        y: PLAYER_START.y + along.y * ahead,
+      })
+      if (isWall(cell)) break
+      for (const dir of ['up', 'down', 'left', 'right'] as const) {
+        if (dir === facing || dir === OPPOSITE_OF[facing]) continue
+        const here = !isWall(wrapCell({ x: PLAYER_START.x + STEP[dir].x, y: PLAYER_START.y + STEP[dir].y }))
+        const there = !isWall(wrapCell({ x: cell.x + STEP[dir].x, y: cell.y + STEP[dir].y }))
+        if (!here && there) {
+          wanted = dir
+          steps = ahead
+          break
+        }
+      }
+    }
+    expect(wanted).not.toBeNull()
+
+    game = turn(game, wanted!)
+    // Long enough to reach the corner, with room to spare.
+    game = run(game, (steps + 1) / playerSpeed(game.level))
+    expect(game.player.dir).toBe(wanted)
   })
 
   it('ignores a turn into a wall and carries straight on', () => {
@@ -191,9 +230,9 @@ describe('being caught', () => {
     let game = fresh()
     game = {
       ...game,
-      player: { ...game.player, cell: { x: 18, y: 10 }, progress: 0.5, dir: 'right' },
+      player: { ...game.player, cell: { x: WIDTH - 1, y: TUNNEL_ROW }, progress: 0.5, dir: 'right' },
       ghosts: game.ghosts.map((g, i) =>
-        i === 0 ? { ...g, cell: { x: 0, y: 10 }, progress: 0, dir: 'right' } : g,
+        i === 0 ? { ...g, cell: { x: 0, y: TUNNEL_ROW }, progress: 0, dir: 'right' } : g,
       ),
     }
     expect(step(game, 1 / 60, roll).status).not.toBe('playing')
@@ -203,9 +242,9 @@ describe('being caught', () => {
     let game = fresh()
     game = {
       ...game,
-      player: { ...game.player, cell: { x: 0, y: 10 }, progress: 0, dir: 'left' },
+      player: { ...game.player, cell: { x: 0, y: TUNNEL_ROW }, progress: 0, dir: 'left' },
       ghosts: game.ghosts.map((g, i) =>
-        i === 0 ? { ...g, cell: { x: 17, y: 10 }, progress: 0, dir: 'right' } : g,
+        i === 0 ? { ...g, cell: { x: WIDTH - 2, y: TUNNEL_ROW }, progress: 0, dir: 'right' } : g,
       ),
     }
     expect(step(game, 1 / 60, roll).status).toBe('playing')
@@ -244,7 +283,10 @@ describe('the chase is real', () => {
   // The honest version of "can a ghost reach the player": play the actual game
   // with nobody at the controls and see whether they close in.
   it('catches a player who never moves', () => {
-    const game = run(fresh(), 40)
+    // Generous: the maze is twenty-seven by thirty-one and the chasers open
+    // slowly, so crossing it takes a while. The claim is that standing still
+    // is fatal eventually, not that it is fatal quickly.
+    const game = run(fresh(), 120)
     expect(game.lives).toBeLessThan(STARTING_LIVES)
   })
 
@@ -287,9 +329,13 @@ describe('a fair start', () => {
   })
 
   it('accepts a turn queued during the pause', () => {
-    let game = turn(newGame(), 'up')
+    // Turning back the way he came is legal from anywhere in a corridor, so
+    // this asks the question without depending on where the start happens to be.
+    const opening = newGame()
+    const back = OPPOSITE_OF[opening.player.dir]
+    let game = turn(opening, back)
     game = run(game, READY_SECONDS + 0.4)
-    expect(game.player.dir).toBe('up')
+    expect(game.player.dir).toBe(back)
   })
 
   // The bug this exists to prevent: the player started four steps from a

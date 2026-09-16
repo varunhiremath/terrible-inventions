@@ -14,10 +14,9 @@ import {
 import { taunt, type TauntMoment } from '../arcade/taunts'
 import { fitBoard } from '../arcade/fit'
 import { directionFromGesture, toScreen } from '../arcade/steer'
-import { wallBoxes } from '../render/mazeGeometry'
+import { wallBars } from '../render/mazeGeometry'
 import { buildFruit, fruitForLevel } from '../render/fruit'
-import { buildVoxel, disposeVoxel } from '../render/voxel'
-import type { Palette } from '../render/sprites'
+import { buildGhost, buildPlayer, type Ghost } from '../render/characters'
 import { fill } from '../config/profile'
 import { Btn } from '../ui/bits'
 import { say, silence } from '../voice'
@@ -46,36 +45,14 @@ import { useStore } from '../store'
  * The player rides a hair above the chasers so he is drawn on top when they
  * overlap, which is the moment you most need to see him.
  */
-const ACTOR_HEIGHT = 0.42
-const PLAYER_HEIGHT = 0.46
+const ACTOR_HEIGHT = 0.02
 
-const PLAYER_PALETTE: Palette = {
-  body: 'hsl(48, 95%, 58%)',
-  shade: 'hsl(40, 90%, 44%)',
-  accent: 'hsl(20, 90%, 55%)',
-  outline: 'hsl(35, 60%, 16%)',
-}
-
-/** Pale and washed out, so a chaser you can eat reads at a glance. */
-const FRIGHTENED_PALETTE: Palette = {
-  body: 'hsl(220, 12%, 82%)',
-  shade: 'hsl(220, 10%, 58%)',
-  accent: 'hsl(0, 0%, 100%)',
-  outline: 'hsl(220, 15%, 18%)',
-}
-
-function ghostPalette(colour: string): Palette {
-  const base = new THREE.Color(colour)
-  const hsl = { h: 0, s: 0, l: 0 }
-  base.getHSL(hsl)
-  const deg = Math.round(hsl.h * 360)
-  return {
-    body: `hsl(${deg}, ${Math.round(hsl.s * 100)}%, ${Math.round(hsl.l * 100)}%)`,
-    shade: `hsl(${deg}, ${Math.round(hsl.s * 100)}%, ${Math.round(hsl.l * 62)}%)`,
-    accent: 'hsl(0, 0%, 96%)',
-    outline: `hsl(${deg}, 50%, 14%)`,
-  }
-}
+/** Peach, like the arcade's. */
+const DOT_COLOUR = 0xffc9a8
+/** The maze's own colour. Thin lines, so it can be bright without shouting. */
+const WALL_COLOUR = 0xf24fd6
+/** A chaser you can eat. */
+const FRIGHTENED_COLOUR = 0x2632d6
 
 export function Arcade() {
   const save = useStore((s) => s.save)
@@ -89,14 +66,29 @@ export function Arcade() {
 
   const mountRef = useRef<HTMLDivElement>(null)
   const hudRef = useRef<HTMLDivElement>(null)
-  const padRef = useRef<HTMLDivElement>(null)
   const extrasRef = useRef<HTMLDivElement>(null)
-  const topRightRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Game | null>(null)
   const [hud, setHud] = useState({ lives: 0, score: 0, status: 'playing' as Game['status'], freezes: 0 })
   /** Lets other effects ask the camera to re-measure when the layout shifts. */
   const refitRef = useRef<(() => void) | null>(null)
-  /** Where the player is drawn, in screen pixels, for a tap to be aimed at. */
+  /** The player, small, for the lives row. */
+function PlayerIcon() {
+  return (
+    <span
+      aria-hidden
+      className="inline-block h-3.5 w-3.5 bg-bolt"
+      style={{
+        // A disc with a wedge out of it, in one clip path: the lives row is
+        // the same character as the one on the board.
+        clipPath:
+          'polygon(100% 28%, 50% 50%, 100% 72%, 84% 90%, 58% 100%, 25% 92%, 4% 65%, 4% 35%, 25% 8%, 58% 0%, 84% 10%)',
+        borderRadius: '50%',
+      }}
+    />
+  )
+}
+
+/** Where the player is drawn, in screen pixels, for a tap to be aimed at. */
   const playerOnScreen = useRef<{ x: number; y: number } | null>(null)
   /** Lets the level change the fruit on the board. */
   const fruitRef = useRef<((level: number) => void) | null>(null)
@@ -145,72 +137,65 @@ export function Arcade() {
     const scene = new THREE.Scene()
     scene.background = new THREE.Color('#05060a')
 
-    scene.add(new THREE.HemisphereLight(0xf2f5ff, 0x181a22, 2.0))
-    const sun = new THREE.DirectionalLight(0xffffff, 1.5)
-    sun.position.set(6, 18, 10)
+    // Only the fruit are lit; everything else draws its own flat colour. The
+    // light comes from straight above, because so does the camera.
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x404040, 2.2))
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2)
+    sun.position.set(2, 20, 4)
     scene.add(sun)
 
     /**
-     * Orthographic, not perspective.
+     * Straight down, and orthographic.
      *
-     * Pac-Man is a game about reading the board — which row lines up with
-     * which, how far the gap is. Perspective makes the far side of the maze
-     * smaller than the near side and the grid stops being square, which is
-     * exactly the information the player needs. Orthographic keeps every tile
-     * the same size, and a modest tilt still shows the walls having height.
+     * The original is a flat picture and every attempt to tilt it has cost
+     * more than it bought: a tilted camera draws anything above the floor
+     * further up the screen than the tile it stands on, hides characters
+     * behind walls, and stops the grid reading as a grid. Looking straight
+     * down, a tile is a tile.
      */
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200)
-    /** Radians from straight down. Enough for depth, little enough to read. */
-    const TILT = 0.52
 
     // --- maze ---------------------------------------------------------------
-    /** How much of a tile a wall takes up. The rest of the tile is corridor. */
-    const WALL_THICKNESS = 0.34
-    const WALL_HEIGHT = 0.62
+    /**
+     * The maze is drawn as an outline, not as blocks.
+     *
+     * Flat planes on the floor, no lighting, no height: the arcade original is
+     * a two-dimensional picture and every attempt to give it depth has made it
+     * harder to read. `wallBars` produces one thin bar per wall edge that faces
+     * open floor, which is what draws a one-tile wall as the two parallel
+     * lines everyone pictures when they picture this game.
+     */
+    const WALL_THICKNESS = 0.16
 
-    const cube = new THREE.BoxGeometry(1, 1, 1)
-    const boxes = wallBoxes(MAZE, TILE.WALL, WALL_THICKNESS)
-
+    const plane = new THREE.PlaneGeometry(1, 1)
+    const bars = wallBars(MAZE, TILE.WALL, WALL_THICKNESS)
     const walls = new THREE.InstancedMesh(
-      cube,
-      new THREE.MeshLambertMaterial({ color: 0xffffff }),
-      boxes.length,
+      plane,
+      new THREE.MeshBasicMaterial({ color: WALL_COLOUR }),
+      bars.length,
     )
     const matrix = new THREE.Matrix4()
-    const colour = new THREE.Color()
-    boxes.forEach((box, i) => {
+    const flatDown = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0))
+    bars.forEach((bar, i) => {
       matrix.compose(
-        new THREE.Vector3(box.x, WALL_HEIGHT / 2, box.z),
-        new THREE.Quaternion(),
-        new THREE.Vector3(box.width, WALL_HEIGHT, box.depth),
+        new THREE.Vector3(bar.x, 0, bar.z),
+        flatDown,
+        new THREE.Vector3(bar.width, bar.depth, 1),
       )
       walls.setMatrixAt(i, matrix)
-      // A slight drift from light at the top to dark at the bottom, so the maze
-      // has some depth to it rather than reading as one flat stencil.
-      const shade = 0.72 - (box.z / HEIGHT) * 0.28 + (box.x / WIDTH) * 0.04
-      colour.setHSL(0.62, 0.05, shade)
-      walls.setColorAt(i, colour)
     })
     walls.instanceMatrix.needsUpdate = true
-    if (walls.instanceColor) walls.instanceColor.needsUpdate = true
     scene.add(walls)
-
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(WIDTH + 2, HEIGHT + 2),
-      new THREE.MeshLambertMaterial({ color: 0x0a0b10 }),
-    )
-    floor.rotation.x = -Math.PI / 2
-    floor.position.set(WIDTH / 2 - 0.5, -0.1, HEIGHT / 2 - 0.5)
-    scene.add(floor)
 
     // --- dots and fruit -----------------------------------------------------
     const { dots, power } = edibleCells()
 
     const pellets = new THREE.InstancedMesh(
-      new THREE.SphereGeometry(0.5, 8, 6),
-      new THREE.MeshLambertMaterial({ color: 0xf2f4fb, emissive: 0x2a2d38 }),
+      plane,
+      new THREE.MeshBasicMaterial({ color: DOT_COLOUR }),
       dots.length,
     )
+    pellets.renderOrder = 1
     scene.add(pellets)
 
     /**
@@ -231,6 +216,7 @@ export function Arcade() {
       fruit = power.map((cell) => {
         const built = buildFruit(kind)
         built.group.position.set(cell.x, 0, cell.y)
+        built.group.scale.setScalar(0.95)
         scene.add(built.group)
         return built
       })
@@ -239,36 +225,15 @@ export function Arcade() {
     fruitRef.current = dressFruit
 
     // --- characters ---------------------------------------------------------
-    const player = buildVoxel(31337, PLAYER_PALETTE, { flat: true })
+    const player = buildPlayer()
+    player.group.position.y = ACTOR_HEIGHT
     scene.add(player.group)
 
-    /**
-     * A ring around the player.
-     *
-     * Four chasers, four fruit and two hundred dots, and the one thing a player
-     * needs to find instantly is himself. It is drawn at his own height rather
-     * than on the floor, so it stays centred on him instead of trailing below;
-     * and after everything else, with no depth test, so nothing can ever cover
-     * it. Even behind a wall, you can see where you are.
-     */
-    // Wider than the body is: a character is a tile and a half across, so a
-    // ring any smaller than this is hidden inside him and does nothing.
-    const markerGeometry = new THREE.RingGeometry(0.8, 0.92, 28)
-    const markerMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffd23f,
-      transparent: true,
-      opacity: 0.7,
-      side: THREE.DoubleSide,
-      depthTest: false,
-    })
-    const marker = new THREE.Mesh(markerGeometry, markerMaterial)
-    marker.rotation.x = -Math.PI / 2
-    marker.renderOrder = 2
-    scene.add(marker)
-
-    const ghostBodies = GHOSTS.map((spec) => {
-      const normal = buildVoxel(spec.seed, ghostPalette(spec.colour), { flat: true })
-      const scared = buildVoxel(spec.seed, FRIGHTENED_PALETTE, { flat: true })
+    const ghosts: { normal: Ghost; scared: Ghost }[] = GHOSTS.map((spec) => {
+      const normal = buildGhost(new THREE.Color(spec.colour).getHex())
+      const scared = buildGhost(FRIGHTENED_COLOUR)
+      normal.group.position.y = ACTOR_HEIGHT
+      scared.group.position.y = ACTOR_HEIGHT
       scene.add(normal.group)
       scene.add(scared.group)
       return { normal, scared }
@@ -285,22 +250,20 @@ export function Arcade() {
       const h = Math.max(1, rect.height)
       renderer.setSize(w, h, false)
 
-      const box = (el: HTMLElement | null) => {
-        const r = el?.getBoundingClientRect()
-        return r ? { width: r.width, height: r.height } : null
-      }
+      const height = (el: HTMLElement | null) => el?.getBoundingClientRect().height ?? 0
 
-      // The tilt foreshortens depth, so the maze needs less vertical room on
-      // screen than it has tiles.
-      const spanX = WIDTH + 1
-      const spanY = (HEIGHT + 1) * Math.cos(TILT) + 1.5
+      // Exactly the maze, with no margin left or right: the tunnel mouths sit
+      // on the very edge of the screen, so walking out of one side really is
+      // walking off the edge of the phone.
+      const spanX = WIDTH
+      const spanY = HEIGHT
 
       const { frustum } = fitBoard(w, h, spanX, spanY, {
-        hud: box(hudRef.current),
-        pad: box(padRef.current),
-        extras: box(extrasRef.current),
-        topRight: box(topRightRef.current),
-      }, 12)
+        top: height(hudRef.current),
+        bottom: height(extrasRef.current),
+        left: 0,
+        right: 0,
+      })
 
       camera.left = frustum.left
       camera.right = frustum.right
@@ -309,12 +272,11 @@ export function Arcade() {
       camera.updateProjectionMatrix()
 
       const centre = new THREE.Vector3(WIDTH / 2 - 0.5, 0, HEIGHT / 2 - 0.5)
-      const distance = 60
-      camera.position.set(
-        centre.x,
-        centre.y + Math.cos(TILT) * distance,
-        centre.z + Math.sin(TILT) * distance,
-      )
+      camera.position.set(centre.x, 60, centre.z)
+      camera.lookAt(centre)
+      // Looking straight down, "up" on screen has to be named explicitly or
+      // the camera has no way to choose one.
+      camera.up.set(0, 0, -1)
       camera.lookAt(centre)
     }
     resize()
@@ -383,11 +345,11 @@ export function Arcade() {
 
         // Pellets: eaten ones shrink to nothing rather than being rebuilt.
         const zero = new THREE.Vector3(0, 0, 0)
-        const dotSize = new THREE.Vector3(0.17, 0.17, 0.17)
+        const dotSize = new THREE.Vector3(0.16, 0.16, 1)
         dots.forEach((cell, i) => {
           matrix.compose(
-            new THREE.Vector3(cell.x, 0.35, cell.y),
-            new THREE.Quaternion(),
+            new THREE.Vector3(cell.x, 0.01, cell.y),
+            flatDown,
             next.dots.has(key(cell)) ? dotSize : zero,
           )
           pellets.setMatrixAt(i, matrix)
@@ -403,23 +365,17 @@ export function Arcade() {
           one.group.visible = alive
           if (!alive) return
           one.group.rotation.y = now / 700
-          one.group.position.y = Math.sin(now / 340 + i) * 0.05
+          one.group.position.y = 0.02
         })
 
         const at = positionBetween(previous.player, next.player, alpha)
-        const bob = Math.abs(Math.sin(now / 120)) * 0.06
-        player.group.position.set(at.x, PLAYER_HEIGHT + bob, at.y)
+        player.group.position.set(at.x, ACTOR_HEIGHT, at.y)
         player.group.rotation.set(0, facingAngle(next.player.dir), 0)
-
-        // The ring under him, so he is findable at a glance among four chasers
-        // on a board this size.
-        marker.position.set(at.x, PLAYER_HEIGHT, at.y)
-        const beat = 0.9 + Math.sin(now / 260) * 0.12
-        marker.scale.setScalar(beat)
-        marker.visible = next.status === 'playing'
+        // Four chomps a second, and only while there is something to chomp at.
+        if (next.status === 'playing') player.animate((now / 250) % 1)
 
         // Where he is on screen, for a tap to be measured against.
-        const projected = new THREE.Vector3(at.x, PLAYER_HEIGHT, at.y).project(camera)
+        const projected = new THREE.Vector3(at.x, ACTOR_HEIGHT, at.y).project(camera)
         const rect = renderer.domElement
         playerOnScreen.current = toScreen(
           projected,
@@ -428,7 +384,7 @@ export function Arcade() {
         )
 
         next.ghosts.forEach((ghost, i) => {
-          const body = ghostBodies[i]
+          const body = ghosts[i]
           const pos = positionBetween(previous.ghosts[i] ?? ghost, ghost, alpha)
           const hidden = ghost.eatenFor > 0
           const scared = ghost.frightened
@@ -437,8 +393,11 @@ export function Arcade() {
           body.scared.group.visible = !hidden && scared
 
           const active = scared ? body.scared : body.normal
-          active.group.position.set(pos.x, ACTOR_HEIGHT + Math.sin(now / 260 + i) * 0.05, pos.y)
-          active.group.rotation.set(0, facingAngle(ghost.dir), 0)
+          active.group.position.set(pos.x, ACTOR_HEIGHT, pos.y)
+          // A chaser never turns to face its way: it always faces the screen
+          // and only its eyes move, which is exactly how the original reads.
+          active.animate((now / 400 + i * 0.25) % 1)
+          active.look(STEP_OF[ghost.dir].x, STEP_OF[ghost.dir].y)
         })
       }
 
@@ -452,13 +411,10 @@ export function Arcade() {
       observer.disconnect()
       clearFruit()
       fruitRef.current = null
-      scene.remove(marker)
-      markerGeometry.dispose()
-      markerMaterial.dispose()
-      disposeVoxel(player)
-      for (const body of ghostBodies) {
-        disposeVoxel(body.normal)
-        disposeVoxel(body.scared)
+      player.dispose()
+      for (const body of ghosts) {
+        body.normal.dispose()
+        body.scared.dispose()
       }
       refitRef.current = null
       renderer.dispose()
@@ -551,57 +507,85 @@ export function Arcade() {
     >
       <div ref={mountRef} className="absolute inset-0" />
 
-      <header className="relative z-10 flex items-start justify-between gap-2 p-3">
-        <div ref={hudRef} className="block-panel px-3 py-2">
-          <p className="text-sm font-bold">Level {run?.level ?? 1}</p>
-          <p className="text-xs text-dim">
-            {'♥'.repeat(Math.max(0, hud.lives))} &middot; {hud.score}
-            {save.arcade.highScore > 0 && ` · best ${save.arcade.highScore}`}
-          </p>
+      {/*
+        * The score above, the lives below, and nothing else.
+        *
+        * There were a Shop button and a settings gear sitting over the board.
+        * The arcade puts nothing on screen but the numbers you are playing
+        * for, and it was right: a button is an invitation to stop playing.
+        * The shop is still there — it is offered when a life is lost, which is
+        * where it belongs anyway.
+        */}
+      <header
+        ref={hudRef}
+        className="pointer-events-none relative z-10 flex items-start justify-between px-4 pt-2 font-mono text-sm uppercase tracking-widest text-chalk"
+      >
+        <div>
+          <p className="text-[0.65rem] text-dim">1up</p>
+          <p className="text-base leading-none">{hud.score}</p>
         </div>
-        <div ref={topRightRef} className="flex gap-2">
-          <Btn onClick={openShop} className="px-4 py-2 text-sm">Shop</Btn>
-          <button type="button" onClick={() => go('settings')} className="block-btn px-3 py-2 text-sm" aria-label="Settings">
-            &#9881;
-          </button>
+        <div className="text-center">
+          <p className="text-[0.65rem] text-dim">high score</p>
+          <p className="text-base leading-none">{Math.max(save.arcade.highScore, hud.score)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[0.65rem] text-dim">level</p>
+          <p className="text-base leading-none">{run?.level ?? 1}</p>
         </div>
       </header>
 
-      {!overlay && (
-        <div
-          // Nothing here takes a touch: the board underneath handles every
-          // gesture. This layer only holds the freeze button and the hint.
-          className="pointer-events-none absolute inset-0 z-10 flex items-end justify-between gap-3 p-4 landscape:items-center"
-        >
-          <div ref={padRef} />
+      <div className="flex-1" />
 
-          <div ref={extrasRef} className="flex flex-col items-end gap-2">
-            {hud.freezes > 0 && (
-              <div
-                className="pointer-events-auto"
-                onPointerDown={(e) => e.stopPropagation()}
-                onPointerUp={(e) => e.stopPropagation()}
-              >
-                <Btn
-                  tone="go"
-                  onClick={() => {
-                    const game = gameRef.current
-                    if (game) gameRef.current = useFreeze(game)
-                  }}
-                  className="px-6 py-4"
-                >
-                  Freeze ({hud.freezes})
-                </Btn>
-              </div>
-            )}
-            {showHint && (
-              <p className="rounded-lg bg-ink/70 px-3 py-1 text-xs text-dim backdrop-blur">
-                tap where you want to go
-              </p>
-            )}
-          </div>
+      <footer
+        ref={extrasRef}
+        className="pointer-events-none relative z-10 flex items-center justify-between px-4 pb-2"
+      >
+        {/* Lives left, drawn as the player himself, exactly as the arcade does. */}
+        <div className="flex items-center gap-1.5" aria-label={`${Math.max(0, hud.lives)} lives left`}>
+          {Array.from({ length: Math.max(0, hud.lives) }).map((_, i) => (
+            <PlayerIcon key={i} />
+          ))}
         </div>
-      )}
+
+        {showHint && !overlay && (
+          <p className="font-mono text-[0.7rem] uppercase tracking-widest text-dim">
+            tap where you want to go
+          </p>
+        )}
+
+        <div className="flex items-center gap-3">
+          {hud.freezes > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const game = gameRef.current
+                if (game) gameRef.current = useFreeze(game)
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              className="pointer-events-auto rounded-md border border-bolt/60 px-3 py-1 font-mono text-xs uppercase tracking-widest text-bolt"
+            >
+              freeze {hud.freezes}
+            </button>
+          )}
+          {/*
+            * Tucked into the corner where the arcade keeps its collected
+            * fruit, and deliberately quiet. A grown-up needs a way in to the
+            * voice, the music and the rewards; a child playing does not need
+            * to be looking at it.
+            */}
+          <button
+            type="button"
+            onClick={() => go('settings')}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+            aria-label="Settings"
+            className="pointer-events-auto px-2 text-base text-dim/50"
+          >
+            &#9881;
+          </button>
+        </div>
+      </footer>
 
       {overlay && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-ink/85 p-4">
@@ -639,6 +623,21 @@ export function Arcade() {
   )
 }
 
+/**
+ * Which way the player's mouth points.
+ *
+ * Seen from straight above with z running down the screen, a turn is a
+ * rotation about the world's vertical. Right is where the wedge sits when it
+ * is built, and the rest follow round from there.
+ */
 function facingAngle(dir: Dir): number {
-  return { up: Math.PI, down: 0, left: Math.PI / 2, right: -Math.PI / 2 }[dir]
+  return { right: 0, down: -Math.PI / 2, left: Math.PI, up: Math.PI / 2 }[dir]
+}
+
+/** One tile in each direction, for pointing a chaser's eyes. */
+const STEP_OF: Record<Dir, { x: number; y: number }> = {
+  up: { x: 0, y: -1 },
+  down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
 }

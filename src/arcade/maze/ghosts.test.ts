@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HEIGHT, PLAYER_START, WIDTH, isWall, reachableFrom, key, wrapCell } from './maze'
+import { HEIGHT, PLAYER_START, TUNNEL_ROW, WIDTH, isWall, reachableFrom, key, wrapCell } from './maze'
 import {
   DIRS,
   GHOSTS,
@@ -118,23 +118,23 @@ describe('steering', () => {
   })
 
   it('moves closer to its target when it can', () => {
-    const at = { x: 9, y: 10 } // the open tunnel row, so all turns are available
-    const target = { x: 1, y: 10 }
-    expect(chooseDirection(at, 'left', target)).toBe('left')
-    expect(chooseDirection(at, 'right', { x: 17, y: 10 })).toBe('right')
+    // Out along the tunnel row, where the corridor runs clear both ways.
+    const at = { x: 5, y: TUNNEL_ROW }
+    expect(chooseDirection(at, 'left', { x: 1, y: TUNNEL_ROW })).toBe('left')
+    expect(chooseDirection(at, 'right', { x: WIDTH - 2, y: TUNNEL_ROW })).toBe('right')
   })
 
   it('resolves ties the same way every time', () => {
-    const at = { x: 9, y: 10 }
-    const first = chooseDirection(at, 'left', { x: 9, y: 10 })
-    for (let i = 0; i < 20; i++) expect(chooseDirection(at, 'left', { x: 9, y: 10 })).toBe(first)
+    const at = { x: 5, y: TUNNEL_ROW }
+    const first = chooseDirection(at, 'left', at)
+    for (let i = 0; i < 20; i++) expect(chooseDirection(at, 'left', at)).toBe(first)
   })
 
   it('wanders legally when frightened', () => {
     for (let roll = 0; roll < 1; roll += 0.05) {
       for (const facing of DIRS) {
-        const dir = randomDirection({ x: 9, y: 10 }, facing, roll)
-        expect(isWall(wrapCell({ x: 9 + STEP[dir].x, y: 10 + STEP[dir].y }))).toBe(false)
+        const dir = randomDirection({ x: 5, y: TUNNEL_ROW }, facing, roll)
+        expect(isWall(wrapCell({ x: 5 + STEP[dir].x, y: TUNNEL_ROW + STEP[dir].y }))).toBe(false)
       }
     }
   })

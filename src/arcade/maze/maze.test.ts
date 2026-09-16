@@ -20,8 +20,11 @@ import {
 describe('maze shape', () => {
   it('is a consistent rectangle', () => {
     expect(new Set(MAZE.map((r) => r.length)).size).toBe(1)
-    expect(WIDTH).toBe(19)
-    expect(HEIGHT).toBe(21)
+    expect(WIDTH).toBe(27)
+    expect(HEIGHT).toBe(31)
+    // Taller than it is wide, like the arcade original and like a phone. An
+    // almost-square maze leaves a band of nothing above and below it.
+    expect(HEIGHT).toBeGreaterThan(WIDTH)
   })
 
   it('is left-right symmetric, which is what mirroring buys', () => {

@@ -26,8 +26,11 @@ page.on('console', (m) => {
   if (m.type() === 'error') problems.push(`console: ${m.text()} :: ${m.location()?.url ?? ''}`)
 })
 
-const hud = async () => (await page.textContent('header'))?.replace(/\s+/g, ' ').trim() ?? ''
-const scoreNow = async () => Number((await hud()).match(/· (\d+)/)?.[1] ?? -1)
+// innerText, not textContent: the bar is a row of separate blocks, and
+// textContent runs them together into "1up80high score80level1".
+const hud = async () => (await page.innerText('header'))?.replace(/\s+/g, ' ').trim() ?? ''
+/** The arcade bar reads "1UP <score> HIGH SCORE <best> LEVEL <n>". */
+const scoreNow = async () => Number((await hud()).match(/1up (\d+)/i)?.[1] ?? -1)
 
 await page.goto(URL, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1500)
@@ -37,7 +40,7 @@ const canvas = await page.evaluate(() => {
   return c ? { w: c.width, gl: !!(c.getContext('webgl2') || c.getContext('webgl')) } : null
 })
 if (!canvas?.w || !canvas.gl) problems.push('the maze did not render')
-if (!/Level 1/.test(await hud())) problems.push('did not open on level 1')
+if (!/level 1/i.test(await hud())) problems.push('did not open on level 1')
 
 // The opening pause: nothing should have been eaten yet.
 if ((await scoreNow()) > 0) problems.push('play started before the ready pause finished')
@@ -58,18 +61,46 @@ if ((await page.locator('button[aria-label="up"]').count()) > 0) {
   problems.push('the d-pad is still on screen')
 }
 
+// Nothing to press while playing except the quiet settings gear. A button on
+// the board is an invitation to stop playing, and the arcade puts none there.
+// The shop moved to the screen shown when a life is lost, which is where it
+// belongs anyway.
+const loud = await page
+  .locator('header button, footer button')
+  .filter({ hasNotText: /^\s*$/ })
+  .evaluateAll((nodes) =>
+    nodes
+      .filter((n) => n.getAttribute('aria-label') !== 'Settings')
+      .map((n) => n.textContent?.trim())
+      .filter(Boolean),
+  )
+if (loud.length > 0) problems.push(`buttons on the board while playing: ${loud.join(', ')}`)
+if ((await page.locator('button[aria-label="Settings"]').count()) !== 1) {
+  problems.push('no way to reach settings')
+}
+
+// The lives left are shown, and shown as the player himself.
+if ((await page.locator('[aria-label$="lives left"]').count()) !== 1) {
+  problems.push('the lives are not on screen')
+}
+
 // Tapping: aim well away from the player on each side in turn. Wherever he is,
 // at least some of these must be legal turns.
 const board = await page.locator('canvas').boundingBox()
 const beforeTaps = await scoreNow()
-for (const [x, y] of [
-  [board.x + board.width * 0.5, board.y + board.height * 0.05],
-  [board.x + board.width * 0.95, board.y + board.height * 0.5],
-  [board.x + board.width * 0.5, board.y + board.height * 0.95],
-  [board.x + board.width * 0.05, board.y + board.height * 0.5],
-]) {
-  await page.mouse.click(x, y)
-  await page.waitForTimeout(700)
+// Twice round the compass. Once is not enough to prove anything: a single
+// turn can easily send him back down a corridor he has already cleared, and
+// then the score sits still however well the tapping works.
+for (let pass = 0; pass < 2; pass++) {
+  for (const [fx, fy] of [
+    [0.5, 0.05],
+    [0.95, 0.5],
+    [0.5, 0.95],
+    [0.05, 0.5],
+  ]) {
+    await page.mouse.click(board.x + board.width * fx, board.y + board.height * fy)
+    await page.waitForTimeout(700)
+  }
 }
 if ((await scoreNow()) <= beforeTaps) problems.push('tapping the board did not move the player')
 
