@@ -49,10 +49,15 @@ export function buildVoxel(seed: number, palette?: Palette, options: VoxelOption
 
   for (const cell of cells) {
     for (let z = 0; z < DEPTH; z++) {
-      // Sprite rows run downward; the world's y runs up.
+      // Sprite rows run downward; the world's y runs up. Every axis is
+      // centred on the origin, which matters more than it looks: the holder
+      // turns about its origin to face the way it is going, so a body built
+      // off-centre does not merely sit in the wrong place, it *swings* as it
+      // turns. This was three quarters of a tile out, and it made the board
+      // very hard to read.
       matrix.setPosition(
         cell.x - SPRITE_SIZE / 2 + 0.5,
-        SPRITE_SIZE - cell.y - 0.5,
+        SPRITE_SIZE / 2 - cell.y - 0.5,
         z - DEPTH / 2 + 0.5,
       )
       mesh.setMatrixAt(i, matrix)

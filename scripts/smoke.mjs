@@ -47,21 +47,47 @@ await page.waitForTimeout(4000)
 const afterOpening = await scoreNow()
 if (afterOpening <= 0) problems.push('nothing happened once the pause ended')
 
-// Controls have to be *visible*. Swipe and arrow keys both worked in an
-// earlier build and the game was still unplayable, because nothing on screen
-// said so.
-for (const dir of ['up', 'down', 'left', 'right']) {
-  if ((await page.locator(`button[aria-label="${dir}"]`).count()) === 0) {
-    problems.push(`no on-screen ${dir} control`)
-  }
+// There are no control buttons any more: the board itself is the control. A
+// tap to one side of the player steers him that way, a drag steers as it goes.
+// An earlier build worked only by swipe and arrow key and was unplayable
+// because nothing said so, so the hint that replaced the pad is checked too.
+if (!/tap where you want to go/i.test(await page.locator('body').innerText())) {
+  problems.push('nothing on screen says the board can be touched')
+}
+if ((await page.locator('button[aria-label="up"]').count()) > 0) {
+  problems.push('the d-pad is still on screen')
 }
 
-const beforePad = await scoreNow()
-for (const dir of ['left', 'up', 'right', 'down']) {
-  await page.locator(`button[aria-label="${dir}"]`).click()
-  await page.waitForTimeout(800)
+// Tapping: aim well away from the player on each side in turn. Wherever he is,
+// at least some of these must be legal turns.
+const board = await page.locator('canvas').boundingBox()
+const beforeTaps = await scoreNow()
+for (const [x, y] of [
+  [board.x + board.width * 0.5, board.y + board.height * 0.05],
+  [board.x + board.width * 0.95, board.y + board.height * 0.5],
+  [board.x + board.width * 0.5, board.y + board.height * 0.95],
+  [board.x + board.width * 0.05, board.y + board.height * 0.5],
+]) {
+  await page.mouse.click(x, y)
+  await page.waitForTimeout(700)
 }
-if ((await scoreNow()) <= beforePad) problems.push('the on-screen pad did not move the player')
+if ((await scoreNow()) <= beforeTaps) problems.push('tapping the board did not move the player')
+
+// Dragging: a drag has to steer too, and a vertical one especially, since
+// that is the gesture a phone user reaches for first. All four directions get
+// a turn, because any one of them may be a wall or an already-cleared corridor
+// — the score is what proves he moved, and he has to be able to move at all.
+const beforeDrag = await scoreNow()
+for (const [dx, dy] of [[0, -300], [300, 0], [0, 300], [-300, 0]]) {
+  const midX = board.x + board.width / 2
+  const midY = board.y + board.height / 2
+  await page.mouse.move(midX, midY)
+  await page.mouse.down()
+  await page.mouse.move(midX + dx, midY + dy, { steps: 10 })
+  await page.mouse.up()
+  await page.waitForTimeout(900)
+}
+if ((await scoreNow()) <= beforeDrag) problems.push('dragging did not move the player')
 
 for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']) {
   await page.keyboard.press(key)

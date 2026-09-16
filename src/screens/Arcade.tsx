@@ -4,7 +4,7 @@ import { HEIGHT, MAZE, TILE, WIDTH, edibleCells, key } from '../arcade/maze/maze
 import { GHOSTS, type Dir } from '../arcade/maze/ghosts'
 import {
   newGame,
-  positionOf,
+  positionBetween,
   respawn,
   step,
   turn,
@@ -13,6 +13,7 @@ import {
 } from '../arcade/maze/game'
 import { taunt, type TauntMoment } from '../arcade/taunts'
 import { fitBoard } from '../arcade/fit'
+import { directionFromGesture, toScreen } from '../arcade/steer'
 import { wallBoxes } from '../render/mazeGeometry'
 import { buildFruit, fruitForLevel } from '../render/fruit'
 import { buildVoxel, disposeVoxel } from '../render/voxel'
@@ -32,6 +33,21 @@ import { useStore } from '../store'
  * The simulation runs in a ref against an animation frame; only the handful of
  * numbers the HUD shows ever reach React.
  */
+
+/**
+ * How high the characters ride.
+ *
+ * Low, and this is not a free choice. The camera is tilted, so anything lifted
+ * off the floor is drawn further up the screen than the tile it is standing
+ * on — lift a character half a tile and he appears a quarter of a tile out of
+ * position, which makes the board harder to read, not easier. Raising them
+ * above the walls to stop the walls hiding them was worse than the problem.
+ *
+ * The player rides a hair above the chasers so he is drawn on top when they
+ * overlap, which is the moment you most need to see him.
+ */
+const ACTOR_HEIGHT = 0.42
+const PLAYER_HEIGHT = 0.46
 
 const PLAYER_PALETTE: Palette = {
   body: 'hsl(48, 95%, 58%)',
@@ -80,6 +96,8 @@ export function Arcade() {
   const [hud, setHud] = useState({ lives: 0, score: 0, status: 'playing' as Game['status'], freezes: 0 })
   /** Lets other effects ask the camera to re-measure when the layout shifts. */
   const refitRef = useRef<(() => void) | null>(null)
+  /** Where the player is drawn, in screen pixels, for a tap to be aimed at. */
+  const playerOnScreen = useRef<{ x: number; y: number } | null>(null)
   /** Lets the level change the fruit on the board. */
   const fruitRef = useRef<((level: number) => void) | null>(null)
   /**
@@ -89,6 +107,8 @@ export function Arcade() {
    */
   const levelRef = useRef(1)
   const [message, setMessage] = useState<string | null>(null)
+  /** Shown until the first steer, because a board with no buttons on it needs saying. */
+  const [showHint, setShowHint] = useState(true)
 
   useEffect(() => {
     if (!run) beginRun()
@@ -222,6 +242,30 @@ export function Arcade() {
     const player = buildVoxel(31337, PLAYER_PALETTE, { flat: true })
     scene.add(player.group)
 
+    /**
+     * A ring around the player.
+     *
+     * Four chasers, four fruit and two hundred dots, and the one thing a player
+     * needs to find instantly is himself. It is drawn at his own height rather
+     * than on the floor, so it stays centred on him instead of trailing below;
+     * and after everything else, with no depth test, so nothing can ever cover
+     * it. Even behind a wall, you can see where you are.
+     */
+    // Wider than the body is: a character is a tile and a half across, so a
+    // ring any smaller than this is hidden inside him and does nothing.
+    const markerGeometry = new THREE.RingGeometry(0.8, 0.92, 28)
+    const markerMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffd23f,
+      transparent: true,
+      opacity: 0.7,
+      side: THREE.DoubleSide,
+      depthTest: false,
+    })
+    const marker = new THREE.Mesh(markerGeometry, markerMaterial)
+    marker.rotation.x = -Math.PI / 2
+    marker.renderOrder = 2
+    scene.add(marker)
+
     const ghostBodies = GHOSTS.map((spec) => {
       const normal = buildVoxel(spec.seed, ghostPalette(spec.colour), { flat: true })
       const scared = buildVoxel(spec.seed, FRIGHTENED_PALETTE, { flat: true })
@@ -306,11 +350,18 @@ export function Arcade() {
         const before = game.status
 
         let next = game
+        let previous = game
         while (carry >= FIXED) {
+          previous = next
           next = step(next, FIXED)
           carry -= FIXED
         }
         gameRef.current = next
+
+        // How far into the slice that has not been simulated yet this frame
+        // falls. Everything below is drawn at that point between the last two
+        // states, which is what keeps the motion even at any frame rate.
+        const alpha = carry / FIXED
 
         if (next.status !== before && before === 'playing') {
           const moment: TauntMoment =
@@ -355,13 +406,30 @@ export function Arcade() {
           one.group.position.y = Math.sin(now / 340 + i) * 0.05
         })
 
-        const at = positionOf(next.player)
-        player.group.position.set(at.x, 0.42 + Math.abs(Math.sin(now / 120)) * 0.06, at.y)
+        const at = positionBetween(previous.player, next.player, alpha)
+        const bob = Math.abs(Math.sin(now / 120)) * 0.06
+        player.group.position.set(at.x, PLAYER_HEIGHT + bob, at.y)
         player.group.rotation.set(0, facingAngle(next.player.dir), 0)
+
+        // The ring under him, so he is findable at a glance among four chasers
+        // on a board this size.
+        marker.position.set(at.x, PLAYER_HEIGHT, at.y)
+        const beat = 0.9 + Math.sin(now / 260) * 0.12
+        marker.scale.setScalar(beat)
+        marker.visible = next.status === 'playing'
+
+        // Where he is on screen, for a tap to be measured against.
+        const projected = new THREE.Vector3(at.x, PLAYER_HEIGHT, at.y).project(camera)
+        const rect = renderer.domElement
+        playerOnScreen.current = toScreen(
+          projected,
+          (v) => v,
+          { width: rect.clientWidth, height: rect.clientHeight },
+        )
 
         next.ghosts.forEach((ghost, i) => {
           const body = ghostBodies[i]
-          const pos = positionOf(ghost)
+          const pos = positionBetween(previous.ghosts[i] ?? ghost, ghost, alpha)
           const hidden = ghost.eatenFor > 0
           const scared = ghost.frightened
 
@@ -369,7 +437,7 @@ export function Arcade() {
           body.scared.group.visible = !hidden && scared
 
           const active = scared ? body.scared : body.normal
-          active.group.position.set(pos.x, 0.42 + Math.sin(now / 260 + i) * 0.05, pos.y)
+          active.group.position.set(pos.x, ACTOR_HEIGHT + Math.sin(now / 260 + i) * 0.05, pos.y)
           active.group.rotation.set(0, facingAngle(ghost.dir), 0)
         })
       }
@@ -384,6 +452,9 @@ export function Arcade() {
       observer.disconnect()
       clearFruit()
       fruitRef.current = null
+      scene.remove(marker)
+      markerGeometry.dispose()
+      markerMaterial.dispose()
       disposeVoxel(player)
       for (const body of ghostBodies) {
         disposeVoxel(body.normal)
@@ -405,6 +476,8 @@ export function Arcade() {
   const push = (dir: Dir) => {
     const game = gameRef.current
     if (game) gameRef.current = turn(game, dir)
+    // The hint has done its job the moment he steers once.
+    setShowHint(false)
   }
 
   useEffect(() => {
@@ -420,17 +493,38 @@ export function Arcade() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Swipe anywhere, which is how this is played on a tablet.
-  const swipe = useRef<{ x: number; y: number } | null>(null)
-  const onDown = (e: React.PointerEvent) => { swipe.current = { x: e.clientX, y: e.clientY } }
+  /*
+   * Touch anywhere. There are no buttons.
+   *
+   * Tap to one side of the player and he goes that way; drag and he follows
+   * the drag. Both are measured in screen pixels against where he is actually
+   * drawn, so the gesture means the same thing wherever he has got to in the
+   * maze. A phone already knows how to do this; it does not need a d-pad
+   * painted on top of it.
+   */
+  const touchStart = useRef<{ x: number; y: number } | null>(null)
+  const onDown = (e: React.PointerEvent) => {
+    touchStart.current = { x: e.clientX, y: e.clientY }
+  }
   const onUp = (e: React.PointerEvent) => {
-    const from = swipe.current
-    swipe.current = null
+    const from = touchStart.current
+    touchStart.current = null
     if (!from) return
-    const dx = e.clientX - from.x
-    const dy = e.clientY - from.y
-    if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return
-    push(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up')
+    const dir = directionFromGesture(from, { x: e.clientX, y: e.clientY }, playerOnScreen.current)
+    if (dir) push(dir)
+  }
+
+  // A drag steers as it happens rather than waiting for the finger to lift, so
+  // holding a direction feels like holding a direction.
+  const onMove = (e: React.PointerEvent) => {
+    const from = touchStart.current
+    if (!from) return
+    const to = { x: e.clientX, y: e.clientY }
+    const dir = directionFromGesture(from, to, null)
+    if (dir) {
+      push(dir)
+      touchStart.current = to
+    }
   }
 
   const again = () => {
@@ -448,7 +542,13 @@ export function Arcade() {
   const overlay = hud.status !== 'playing'
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden" onPointerDown={onDown} onPointerUp={onUp}>
+    <div
+      className="relative flex h-full w-full touch-none select-none flex-col overflow-hidden"
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerCancel={() => { touchStart.current = null }}
+    >
       <div ref={mountRef} className="absolute inset-0" />
 
       <header className="relative z-10 flex items-start justify-between gap-2 p-3">
@@ -469,52 +569,36 @@ export function Arcade() {
 
       {!overlay && (
         <div
-          // Held upright the controls sit along the bottom; turned sideways they
-          // move to the edges, where thumbs already are and where they are not
-          // covering the board.
+          // Nothing here takes a touch: the board underneath handles every
+          // gesture. This layer only holds the freeze button and the hint.
           className="pointer-events-none absolute inset-0 z-10 flex items-end justify-between gap-3 p-4 landscape:items-center"
-          onPointerDown={(e) => e.stopPropagation()}
         >
-          {/* Visible controls. Swipe works too, but nobody should have to guess. */}
-          <div ref={padRef} className="pointer-events-auto grid grid-cols-3 grid-rows-3 gap-1.5">
-            {([[null, 'up', null], ['left', null, 'right'], [null, 'down', null]] as const)
-              .flat()
-              .map((dir, i) =>
-                dir ? (
-                  <button
-                    key={i}
-                    type="button"
-                    aria-label={dir}
-                    onPointerDown={() => push(dir)}
-                    // Full size on a tablet, which is what this is really played on, but
-// it gives ground on a small phone held sideways rather than crowd
-// the board off the screen. The floor stays a comfortable thumb.
-                    className="block-btn h-[clamp(48px,15vmin,62px)] w-[clamp(48px,15vmin,62px)] bg-ink-soft/90 p-0 text-xl backdrop-blur"
-                  >
-                    {{ up: '\u25b2', down: '\u25bc', left: '\u25c0', right: '\u25b6' }[dir]}
-                  </button>
-                ) : (
-                  <span key={i} />
-                ),
-              )}
-          </div>
+          <div ref={padRef} />
 
-          <div ref={extrasRef} className="pointer-events-auto flex flex-col items-end gap-2">
+          <div ref={extrasRef} className="flex flex-col items-end gap-2">
             {hud.freezes > 0 && (
-              <Btn
-                tone="go"
-                onClick={() => {
-                  const game = gameRef.current
-                  if (game) gameRef.current = useFreeze(game)
-                }}
-                className="px-6 py-4"
+              <div
+                className="pointer-events-auto"
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
               >
-                Freeze ({hud.freezes})
-              </Btn>
+                <Btn
+                  tone="go"
+                  onClick={() => {
+                    const game = gameRef.current
+                    if (game) gameRef.current = useFreeze(game)
+                  }}
+                  className="px-6 py-4"
+                >
+                  Freeze ({hud.freezes})
+                </Btn>
+              </div>
             )}
-            <p className="rounded-lg bg-ink/70 px-3 py-1 text-xs text-dim backdrop-blur">
-              or swipe anywhere
-            </p>
+            {showHint && (
+              <p className="rounded-lg bg-ink/70 px-3 py-1 text-xs text-dim backdrop-blur">
+                tap where you want to go
+              </p>
+            )}
           </div>
         </div>
       )}

@@ -2,6 +2,7 @@ import {
   GHOST_RESPAWN,
   PLAYER_START,
   WIDTH,
+  HEIGHT,
   TILE,
   edibleCells,
   isWall,
@@ -161,6 +162,35 @@ export function newGame(level = 1, powerUps = emptyPowerUps(), lives = STARTING_
 export function positionOf(mover: Mover): { x: number; y: number } {
   const step = STEP[mover.dir]
   return { x: mover.cell.x + step.x * mover.progress, y: mover.cell.y + step.y * mover.progress }
+}
+
+/**
+ * Where to draw something, part way between two simulation states.
+ *
+ * The simulation runs in fixed slices and the screen refreshes on its own
+ * schedule, so a frame almost never lands on a slice boundary: at sixty frames
+ * and a hundred and twenty steps a second, a frame usually covers two steps but
+ * jitter makes it sometimes one and sometimes three. Drawing the latest state
+ * as-is therefore moves everything by an uneven amount each frame, which reads
+ * as a fine stutter — worst running alongside a wall, where there is a straight
+ * edge to judge it against.
+ *
+ * Interpolating between the last two states fixes it: the simulation stays
+ * exact and fixed-step, and the drawing is smooth regardless of frame rate.
+ *
+ * @param t how far through the pending slice the frame falls, 0 to 1
+ */
+export function positionBetween(before: Mover, after: Mover, t: number): { x: number; y: number } {
+  const a = positionOf(before)
+  const b = positionOf(after)
+  const blend = Math.min(1, Math.max(0, t))
+
+  // Stepping through the tunnel takes x from one edge of the maze to the other.
+  // Interpolating across that would fly the whole way back instead, so a wrap
+  // simply snaps — for one frame, at the one place nobody is looking closely.
+  if (Math.abs(b.x - a.x) > WIDTH / 2 || Math.abs(b.y - a.y) > HEIGHT / 2) return b
+
+  return { x: a.x + (b.x - a.x) * blend, y: a.y + (b.y - a.y) * blend }
 }
 
 function canGo(cell: Cell, dir: Dir): boolean {
