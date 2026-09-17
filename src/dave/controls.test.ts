@@ -1,85 +1,112 @@
 import { describe, expect, it } from 'vitest'
-import { DEAD_STRIP, UP_BAND, combine, zoneFor } from './controls'
+import { NOTHING_PRESSED, combine, keyAt, keyRadius, padHeight, padLayout, type Key } from './controls'
 
-const W = 800
-const H = 400
-const at = (fx: number, fy: number) => zoneFor(fx * W, fy * H, W, H)
+const W = 900
+const H = 500
+const plain = padLayout(W, H)
+const armed = padLayout(W, H, { gun: true, jetpack: true })
 
-describe('reading a touch', () => {
-  it('walks towards the side you are touching', () => {
-    expect(at(0.15, 0.7).left).toBe(true)
-    expect(at(0.15, 0.7).right).toBe(false)
-    expect(at(0.85, 0.7).right).toBe(true)
-    expect(at(0.85, 0.7).left).toBe(false)
+const find = (keys: Key[], id: string) => keys.find((k) => k.id === id)!
+
+describe('where the buttons are', () => {
+  it('puts walking in the bottom left and jumping in the bottom right', () => {
+    // Where thumbs already are when a tablet is held in two hands.
+    expect(find(plain, 'left').cx).toBeLessThan(W / 3)
+    expect(find(plain, 'right').cx).toBeLessThan(W / 2)
+    expect(find(plain, 'up').cx).toBeGreaterThan((W * 2) / 3)
+    for (const key of plain) expect(key.cy).toBeGreaterThan(H * 0.6)
   })
 
-  it('jumps from the upper band, wherever across it is', () => {
-    expect(at(0.15, 0.1).up).toBe(true)
-    expect(at(0.85, 0.1).up).toBe(true)
-    expect(at(0.5, 0.1).up).toBe(true)
-  })
-
-  it('lets one finger mean a jump to the right', () => {
-    // The whole reason for bands instead of buttons.
-    const touch = at(0.85, 0.15)
-    expect(touch.right).toBe(true)
-    expect(touch.up).toBe(true)
-  })
-
-  it('leaves a strip up the middle that asks for nothing', () => {
-    // Standing still has to be something you can ask for, or a platformer is
-    // unplayable: you cannot line up a jump you cannot stop for.
-    const middle = at(0.5, 0.7)
-    expect(middle.left).toBe(false)
-    expect(middle.right).toBe(false)
-  })
-
-  it('makes the dead strip narrow enough to be hard to hit by accident', () => {
-    expect(DEAD_STRIP).toBeLessThan(0.2)
-    expect(at(0.5 - DEAD_STRIP, 0.7).left).toBe(true)
-    expect(at(0.5 + DEAD_STRIP, 0.7).right).toBe(true)
-  })
-
-  it('reads the very bottom as down, for flying back to the ground', () => {
-    expect(at(0.3, 0.97).down).toBe(true)
-    expect(at(0.3, 0.6).down).toBe(false)
-  })
-
-  it('gives the walking band most of the screen', () => {
-    // Most of a touch's life is spent walking, so most of the glass should
-    // mean walking rather than jumping.
-    expect(UP_BAND).toBeLessThan(0.5)
-  })
-
-  it('never asks for left and right at once from one finger', () => {
-    for (let i = 0; i <= 20; i++) {
-      const touch = at(i / 20, 0.7)
-      expect(touch.left && touch.right).toBe(false)
+  it('keeps every button on the board', () => {
+    for (const keys of [plain, armed]) {
+      for (const key of keys) {
+        expect(key.cx - key.r).toBeGreaterThanOrEqual(0)
+        expect(key.cx + key.r).toBeLessThanOrEqual(W)
+        expect(key.cy - key.r).toBeGreaterThanOrEqual(0)
+        expect(key.cy + key.r).toBeLessThanOrEqual(H)
+      }
     }
   })
 
+  it('never overlaps two buttons', () => {
+    for (let i = 0; i < armed.length; i++) {
+      for (let j = i + 1; j < armed.length; j++) {
+        const apart = Math.hypot(armed[i].cx - armed[j].cx, armed[i].cy - armed[j].cy)
+        expect(apart).toBeGreaterThanOrEqual(armed[i].r + armed[j].r)
+      }
+    }
+  })
+
+  it('shows only three buttons until there is more to do', () => {
+    // A button for a thing you have not got is a button that teaches nothing.
+    expect(plain.map((k) => k.id).sort()).toEqual(['left', 'right', 'up'])
+    expect(armed).toHaveLength(5)
+  })
+
+  it('asks for room rather than borrowing it', () => {
+    /*
+     * Drawn over the board, the walk-left button sits exactly where Dave
+     * starts, and the first thing a player sees is a level with no Dave in it.
+     * The strip has to be subtracted from the board's height before the board
+     * is fitted.
+     */
+    const strip = padHeight(W, H)
+    expect(strip).toBeGreaterThan(keyRadius(W, H) * 2)
+    for (const key of padLayout(W, H)) {
+      expect(key.cy - key.r).toBeGreaterThanOrEqual(H - strip)
+    }
+  })
+
+  it('stays a thumb on a phone and does not become a plate on a desktop', () => {
+    expect(padLayout(360, 200)[0].r).toBeGreaterThanOrEqual(26)
+    expect(padLayout(2400, 1500)[0].r).toBeLessThanOrEqual(58)
+  })
+
   it('survives a board with no size yet', () => {
-    const none = zoneFor(0, 0, 0, 0)
-    expect(none.left).toBe(false)
-    expect(none.right).toBe(false)
+    expect(() => padLayout(0, 0)).not.toThrow()
   })
 })
 
-describe('several fingers at once', () => {
-  it('adds them together, because that is how two thumbs work', () => {
-    const both = combine([at(0.15, 0.7), at(0.85, 0.1)])
-    expect(both.left).toBe(true)
-    expect(both.right).toBe(true)
-    expect(both.up).toBe(true)
+describe('pressing them', () => {
+  it('reads a touch in the middle of a button', () => {
+    const up = find(plain, 'up')
+    expect(keyAt(up.cx, up.cy, plain)).toBe('up')
+  })
+
+  it('reads a touch a little outside one, because thumbs are wide', () => {
+    const left = find(plain, 'left')
+    expect(keyAt(left.cx, left.cy + left.r * 1.15, plain)).toBe('left')
+  })
+
+  it('reads nothing in the middle of the board', () => {
+    expect(keyAt(W / 2, H / 2, plain)).toBeNull()
+  })
+
+  it('takes the nearer button when two are close', () => {
+    const left = find(plain, 'left')
+    const right = find(plain, 'right')
+    const between = (left.cx + right.cx) / 2
+    expect(keyAt(between - 6, left.cy, plain)).toBe('left')
+    expect(keyAt(between + 6, left.cy, plain)).toBe('right')
+  })
+
+  it('lets two thumbs walk and jump at once', () => {
+    const left = find(plain, 'left')
+    const up = find(plain, 'up')
+    const pressed = combine([keyAt(left.cx, left.cy, plain), keyAt(up.cx, up.cy, plain)])
+    expect(pressed.left).toBe(true)
+    expect(pressed.up).toBe(true)
+    expect(pressed.right).toBe(false)
   })
 
   it('asks for nothing when nothing is touching', () => {
-    expect(combine([])).toEqual({ left: false, right: false, up: false, down: false })
+    expect(combine([])).toEqual(NOTHING_PRESSED)
+    expect(combine([null, null])).toEqual(NOTHING_PRESSED)
   })
 
-  it('lets a thumb walk while the other jumps', () => {
-    const run = combine([at(0.8, 0.75), at(0.2, 0.12)])
-    expect(run.right).toBe(true)
-    expect(run.up).toBe(true)
+  it('reaches the fire button only once he has a gun', () => {
+    const fire = find(armed, 'fire')
+    expect(keyAt(fire.cx, fire.cy, armed)).toBe('fire')
+    expect(keyAt(fire.cx, fire.cy, plain)).toBeNull()
   })
 })

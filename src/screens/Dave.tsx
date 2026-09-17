@@ -3,7 +3,9 @@ import { LEVEL_TILES_X, VIEW_TILES_X, VIEW_TILES_Y } from '../dave/level'
 import { JET_SECONDS, NO_INPUT, cameraFor, type Input } from '../dave/physics'
 import { newGame, respawn, shoot, step, type Game } from '../dave/game'
 import { levelFor } from '../dave/levels'
-import { combine, zoneFor, type Zones } from '../dave/controls'
+import { createPacer } from '../arcade/pacing'
+import { blendDave, blendMonster } from '../dave/blend'
+import { combine, keyAt, padHeight, padLayout, type Button, type Key } from '../dave/controls'
 import {
   drawBullet,
   drawDave,
@@ -11,6 +13,7 @@ import {
   drawLevel,
   drawLifeIcon,
   drawMonster,
+  drawPad,
   drawSky,
   EGA,
   type View,
@@ -37,9 +40,12 @@ export function Dave() {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gameRef = useRef<Game | null>(null)
-  const touches = useRef(new Map<number, Zones>())
+  const touches = useRef(new Map<number, Button | null>())
+  /** Where the buttons are this frame, so a touch can be matched to one. */
+  const padRef = useRef<Key[]>([])
   /** Jump is the frame the up-band is first touched, not every frame it is held. */
   const wasUp = useRef(false)
+  const wasFire = useRef(false)
   const clock = useRef(0)
 
   const [hud, setHud] = useState({
@@ -62,7 +68,7 @@ export function Dave() {
 
     let frame = 0
     let last = performance.now()
-    let carry = 0
+    const pacer = createPacer<Game>(FIXED, MAX_CATCHUP)
 
     const resize = () => {
       const rect = wrap.getBoundingClientRect()
@@ -81,7 +87,7 @@ export function Dave() {
 
     const loop = () => {
       const now = performance.now()
-      carry = Math.min(MAX_CATCHUP, carry + (now - last) / 1000)
+      const elapsed = (now - last) / 1000
       last = now
 
       const game = gameRef.current
@@ -90,13 +96,23 @@ export function Dave() {
         const jump = held.up && !wasUp.current
         wasUp.current = held.up
         const input: Input = { ...NO_INPUT, left: held.left, right: held.right, up: held.up, down: held.down, jump }
-
-        let next = game
-        while (carry >= FIXED) {
-          next = step(next, { ...input, jump: jump && next === game }, FIXED)
-          carry -= FIXED
-          clock.current += FIXED
+        if (held.fire && !wasFire.current) {
+          const armed = shoot(gameRef.current!)
+          gameRef.current = armed
         }
+        wasFire.current = held.fire
+
+        // Drawn between the last two states, not at the latest one. Without
+        // it everything moves by however many slices happened to fit in the
+        // frame — one, two or three — which is a fine stutter that gets worse
+        // the faster the screen refreshes.
+        let first = true
+        const { previous, next, alpha } = pacer.advance(game, elapsed, (s) => {
+          const out = step(s, { ...input, jump: jump && first }, FIXED)
+          first = false
+          clock.current += FIXED
+          return out
+        })
         gameRef.current = next
 
         if (
@@ -116,10 +132,20 @@ export function Dave() {
         // --- draw -----------------------------------------------------------
         const w = canvas.width
         const h = canvas.height
-        // The board is exactly twenty tiles across and ten down, letterboxed
-        // into whatever shape the screen is. Cropping it would hide the jump
-        // you are about to make.
-        const size = Math.min(w / VIEW_TILES_X, h / VIEW_TILES_Y)
+        /*
+         * Three bands down the screen: the score along the top, the room in
+         * the middle, and the buttons along the bottom. The buttons get their
+         * own room rather than sitting over the board — Dave starts in the
+         * bottom left corner, exactly under the walk-left button.
+         *
+         * The room is exactly twenty tiles across and ten down, letterboxed
+         * into whatever is left. Cropping it would hide the jump you are about
+         * to make.
+         */
+        const headerH = Math.max(h * 0.085, 30)
+        const padH = padHeight(w, h)
+        const middle = Math.max(40, h - headerH - padH)
+        const size = Math.min(w / VIEW_TILES_X, middle / VIEW_TILES_Y)
         const boardW = size * VIEW_TILES_X
         const boardH = size * VIEW_TILES_Y
 
@@ -130,30 +156,36 @@ export function Dave() {
         // is drawn — resetting the transform does not clear a clip, and the
         // score was being quietly cut away at the top of the board.
         ctx.save()
-        ctx.translate(Math.round((w - boardW) / 2), Math.round((h - boardH) / 2))
+        ctx.translate(
+          Math.round((w - boardW) / 2),
+          Math.round(headerH + (middle - boardH) / 2),
+        )
         ctx.beginPath()
         ctx.rect(0, 0, boardW, boardH)
         ctx.clip()
 
+        const drawn = blendDave(previous.dave, next.dave, alpha)
         const view: View = {
-          camera: cameraFor(next.dave, VIEW_TILES_X, LEVEL_TILES_X),
+          camera: cameraFor(drawn, VIEW_TILES_X, LEVEL_TILES_X),
           size,
           clock: clock.current,
         }
         drawSky(ctx, view, boardW, boardH)
         drawLevel(ctx, next.level, view, next.taken, next.dave.hasTrophy, boardW)
-        for (const monster of next.monsters) drawMonster(ctx, monster, view)
+        next.monsters.forEach((monster, i) =>
+          drawMonster(ctx, blendMonster(previous.monsters[i], monster, alpha), view),
+        )
         for (const bullet of next.bullets) drawBullet(ctx, bullet, view)
-        if (next.dave.alive) drawDave(ctx, next.dave, view)
+        if (next.dave.alive) drawDave(ctx, drawn, view)
         drawFrame(ctx, next.level, view, boardW, boardH)
 
         // The score bar and the fuel gauge belong to the picture, not to the
         // page around it: same pixels, same font, same colours as the game.
         ctx.restore()
-        const bar = Math.max(14, size * 0.52)
+        const bar = Math.max(14, Math.min(size * 0.52, headerH * 0.52))
         ctx.font = `bold ${bar}px ui-monospace, Menlo, Consolas, monospace`
         ctx.textBaseline = 'middle'
-        const midline = Math.max(bar, (h - boardH) / 4 + bar * 0.2)
+        const midline = headerH / 2
 
         ctx.fillStyle = EGA.brightGreen
         ctx.textAlign = 'left'
@@ -171,8 +203,15 @@ export function Dave() {
           drawLifeIcon(ctx, livesRight + 6 + i * (icon + 4), midline - icon / 2, icon)
         }
 
+        padRef.current = padLayout(w, h, {
+          gun: next.dave.hasGun,
+          jetpack: next.dave.hasJetpack && next.dave.fuel > 0,
+        })
+        drawPad(ctx, padRef.current, held as unknown as Record<string, boolean>)
+
         if (next.dave.hasJetpack && next.dave.fuel > 0) {
-          const gaugeY = h - bar * 1.6
+          // Just under the room, above the buttons.
+          const gaugeY = headerH + middle - bar * 1.2
           ctx.fillStyle = EGA.brightGreen
           ctx.textAlign = 'left'
           ctx.fillText('JETPACK', pad, gaugeY + bar * 0.5)
@@ -200,7 +239,10 @@ export function Dave() {
   // --- the glass ------------------------------------------------------------
   const readTouch = (e: React.PointerEvent) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    return zoneFor(e.clientX - rect.left, e.clientY - rect.top, rect.width, rect.height)
+    // The buttons are laid out in canvas pixels, which may be denser than CSS
+    // pixels on a good screen; the touch arrives in CSS pixels.
+    const scale = rect.width > 0 ? (canvasRef.current?.width ?? rect.width) / rect.width : 1
+    return keyAt((e.clientX - rect.left) * scale, (e.clientY - rect.top) * scale, padRef.current)
   }
   const onDown = (e: React.PointerEvent) => {
     touches.current.set(e.pointerId, readTouch(e))
@@ -214,14 +256,12 @@ export function Dave() {
   }
 
   useEffect(() => {
-    const keys: Record<string, keyof Zones> = {
+    const keys: Record<string, Button> = {
       ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right',
       ArrowUp: 'up', w: 'up', ArrowDown: 'down', s: 'down',
     }
-    const held: Zones = { left: false, right: false, up: false, down: false }
-    const KEYBOARD = -1
-    const sync = () => touches.current.set(KEYBOARD, { ...held })
-
+    // Each key held gets its own slot, so several at once work like several
+    // fingers do.
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === ' ') {
         e.preventDefault()
@@ -232,14 +272,12 @@ export function Dave() {
       const which = keys[e.key]
       if (!which) return
       e.preventDefault()
-      held[which] = true
-      sync()
+      touches.current.set(-1 - Object.keys(keys).indexOf(e.key), which)
     }
     const onKeyUp = (e: KeyboardEvent) => {
       const which = keys[e.key]
       if (!which) return
-      held[which] = false
-      sync()
+      touches.current.delete(-1 - Object.keys(keys).indexOf(e.key))
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)

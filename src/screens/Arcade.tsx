@@ -13,6 +13,7 @@ import {
 } from '../arcade/maze/game'
 import { taunt, type TauntMoment } from '../arcade/taunts'
 import { fitBoard } from '../arcade/fit'
+import { createPacer } from '../arcade/pacing'
 import { directionFromGesture, directionFromSwipe, toScreen } from '../arcade/steer'
 import { wallBars } from '../render/mazeGeometry'
 import { buildFruit, fruitForLevel } from '../render/fruit'
@@ -101,6 +102,15 @@ function PlayerIcon() {
   const [message, setMessage] = useState<string | null>(null)
   /** Shown until the first steer, because a board with no buttons on it needs saying. */
   const [showHint, setShowHint] = useState(true)
+  /**
+   * The last touch, drawn as a ring with an arrow in it.
+   *
+   * Without it the board gives no sign it heard you. A tap that lands on a
+   * turn he cannot take yet looks exactly like a tap that missed, and there is
+   * no way to tell which from the other side of the screen — so you tap again,
+   * harder, and learn nothing. The ring says "heard, going this way".
+   */
+  const [ping, setPing] = useState<{ x: number; y: number; dir: Dir; at: number } | null>(null)
 
   useEffect(() => {
     if (!run) beginRun()
@@ -286,7 +296,6 @@ function PlayerIcon() {
 
     let frame = 0
     let last = performance.now()
-    let carry = 0
     let shown = { lives: -1, score: -1, status: 'playing' as Game['status'], freezes: -1 }
 
     /**
@@ -301,29 +310,23 @@ function PlayerIcon() {
     const FIXED = 1 / 120
     /** Enough catch-up for a stutter, not enough to teleport after a long pause. */
     const MAX_CATCHUP = 0.25
+    const pacer = createPacer<Game>(FIXED, MAX_CATCHUP)
 
     const loop = () => {
       const now = performance.now()
-      carry = Math.min(MAX_CATCHUP, carry + (now - last) / 1000)
+      const elapsed = (now - last) / 1000
       last = now
 
       const game = gameRef.current
       if (game) {
         const before = game.status
 
-        let next = game
-        let previous = game
-        while (carry >= FIXED) {
-          previous = next
-          next = step(next, FIXED)
-          carry -= FIXED
-        }
+        // The pacer keeps the pair of states to draw between, including across
+        // a frame too short to take a step. Keeping that pair here, in the
+        // loop, is what was wrong: rebuilt each frame it drew the newest state
+        // outright on those frames, and the motion jerked.
+        const { previous, next, alpha } = pacer.advance(game, elapsed, (s) => step(s, FIXED))
         gameRef.current = next
-
-        // How far into the slice that has not been simulated yet this frame
-        // falls. Everything below is drawn at that point between the last two
-        // states, which is what keeps the motion even at any frame rate.
-        const alpha = carry / FIXED
 
         if (next.status !== before && before === 'playing') {
           const moment: TauntMoment =
@@ -429,11 +432,12 @@ function PlayerIcon() {
   }, [hud.freezes, hud.status])
 
   // --- input ---------------------------------------------------------------
-  const push = (dir: Dir) => {
+  const push = (dir: Dir, at?: { x: number; y: number }) => {
     const game = gameRef.current
     if (game) gameRef.current = turn(game, dir)
     // The hint has done its job the moment he steers once.
     setShowHint(false)
+    if (at) setPing({ ...at, dir, at: Date.now() })
   }
 
   useEffect(() => {
@@ -484,13 +488,9 @@ function PlayerIcon() {
     touchStart.current = null
     dragged.current = false
     if (!from || wasDragged) return
-    const dir = directionFromGesture(
-      from,
-      { x: e.clientX, y: e.clientY },
-      playerOnScreen.current,
-      gameRef.current?.player.dir,
-    )
-    if (dir) push(dir)
+    const to = { x: e.clientX, y: e.clientY }
+    const dir = directionFromGesture(from, to, playerOnScreen.current, gameRef.current?.player.dir)
+    if (dir) push(dir, to)
   }
 
   // A drag steers as it happens rather than waiting for the finger to lift, so
@@ -501,7 +501,7 @@ function PlayerIcon() {
     const to = { x: e.clientX, y: e.clientY }
     const dir = directionFromSwipe(from, to)
     if (dir) {
-      push(dir)
+      push(dir, to)
       touchStart.current = to
       if (!dragged.current) {
         dragged.current = true
@@ -627,6 +627,8 @@ function PlayerIcon() {
         </div>
       </footer>
 
+      {ping && !overlay && <Ping ping={ping} />}
+
       {overlay && (
         <div
           className="absolute inset-0 z-30 flex items-center justify-center bg-ink/85 p-4"
@@ -665,6 +667,43 @@ function PlayerIcon() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The ring left behind by a touch, with an arrow in it pointing the way he was
+ * sent. It fades out on its own; a control that leaves marks on the screen is
+ * worse than one that leaves none.
+ */
+function Ping({ ping }: { ping: { x: number; y: number; dir: Dir; at: number } }) {
+  const [gone, setGone] = useState(false)
+  useEffect(() => {
+    setGone(false)
+    const timer = setTimeout(() => setGone(true), 480)
+    return () => clearTimeout(timer)
+  }, [ping.at])
+
+  const turn = { right: 0, down: 90, left: 180, up: -90 }[ping.dir]
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute z-20 transition-opacity duration-300"
+      style={{
+        left: ping.x,
+        top: ping.y,
+        transform: 'translate(-50%, -50%)',
+        opacity: gone ? 0 : 1,
+      }}
+    >
+      <svg width="88" height="88" viewBox="-44 -44 88 88">
+        <circle r="34" fill="rgba(242,79,214,0.10)" stroke="rgba(242,79,214,0.85)" strokeWidth="3" />
+        <circle r="34" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
+        <g transform={`rotate(${turn})`}>
+          <path d="M -6 -11 L 16 0 L -6 11 Z" fill="#ffd23f" />
+          <rect x="-19" y="-3.5" width="15" height="7" fill="#ffd23f" opacity="0.8" />
+        </g>
+      </svg>
     </div>
   )
 }

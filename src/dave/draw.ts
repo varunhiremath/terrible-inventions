@@ -483,3 +483,50 @@ export function drawLifeIcon(ctx: Ctx, x: number, y: number, s: number): void {
   ctx.fillRect(x + s * 0.14, y + s * 0.12, s * 0.72, s * 0.2)
   ctx.fillRect(x + s * 0.06, y + s * 0.28, s * 0.88, s * 0.07)
 }
+
+/**
+ * The buttons, drawn where they are.
+ *
+ * Translucent, because they sit over the room and the room is the thing you
+ * are looking at; solid enough to find without hunting. A pressed one lights
+ * up, which is the only feedback a sheet of glass can give you.
+ */
+export function drawPad(
+  ctx: Ctx,
+  keys: { id: string; cx: number; cy: number; r: number }[],
+  pressed: Record<string, boolean>,
+): void {
+  for (const key of keys) {
+    const down = pressed[key.id]
+    ctx.globalAlpha = down ? 0.78 : 0.4
+
+    ctx.fillStyle = EGA.black
+    ctx.beginPath()
+    ctx.arc(key.cx, key.cy, key.r, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.strokeStyle = down ? EGA.yellow : EGA.silver
+    ctx.lineWidth = Math.max(2, key.r * 0.1)
+    ctx.stroke()
+
+    ctx.fillStyle = down ? EGA.yellow : EGA.white
+    const a = key.r * 0.42
+    ctx.beginPath()
+    if (key.id === 'fire') {
+      ctx.arc(key.cx, key.cy, a * 0.7, 0, Math.PI * 2)
+    } else {
+      // A triangle pointing whichever way the button means.
+      const turn = { left: Math.PI, right: 0, up: -Math.PI / 2, down: Math.PI / 2 }[key.id] ?? 0
+      for (let i = 0; i < 3; i++) {
+        const angle = turn + (i * Math.PI * 2) / 3
+        const px2 = key.cx + Math.cos(angle) * a
+        const py2 = key.cy + Math.sin(angle) * a
+        if (i === 0) ctx.moveTo(px2, py2)
+        else ctx.lineTo(px2, py2)
+      }
+      ctx.closePath()
+    }
+    ctx.fill()
+    ctx.globalAlpha = 1
+  }
+}

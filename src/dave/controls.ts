@@ -1,61 +1,114 @@
 /**
- * Reading a platformer off a sheet of glass.
+ * Dave's controls: round buttons in the bottom corners, drawn where you can
+ * see them.
  *
- * Pac-Man's "tap where you want to go" does not transfer: Dave has to walk and
- * jump at the same time, and one finger cannot mean two things at once.
+ * The first go divided the whole screen into invisible bands — hold the left
+ * half to walk left, the top to jump. It reads well on paper and plays badly:
+ * your hands end up in the middle of the glass, over the very thing you are
+ * trying to look at, and nothing on screen tells you any of it exists.
  *
- * So the screen is divided into zones and nothing is drawn on top of them.
- * Hold anywhere on the left of the board to walk left, the right to walk
- * right, and touch the upper band to jump — or, once he has a jetpack, to
- * fly, because holding up is what a jetpack is for. Two thumbs do what two
- * thumbs do on a console, without a console painted on the screen.
- *
- * The zones are worked out here, away from the DOM, so they can be tested and
- * so the boundaries can be moved by changing one number.
+ * Buttons in the corners instead, where thumbs already rest when a tablet is
+ * held in two hands: walking on the left, jumping on the right, and the two
+ * extras only when there is anything to use them for. Visible, because a
+ * control you have to be told about is a control that does not work.
  */
 
-/** How much of the height, from the top, means up. */
-export const UP_BAND = 0.42
-/** How much of the height, from the bottom, means down. */
-export const DOWN_BAND = 0.16
-/**
- * A strip up the middle that means neither left nor right, so standing still
- * is something you can actually ask for.
- */
-export const DEAD_STRIP = 0.12
+export type Button = 'left' | 'right' | 'up' | 'down' | 'fire'
 
-export interface Zones {
+export interface Key {
+  id: Button
+  /** Centre and radius, in pixels. */
+  cx: number
+  cy: number
+  r: number
+}
+
+export interface Pressed {
   left: boolean
   right: boolean
   up: boolean
   down: boolean
+  fire: boolean
+}
+
+export const NOTHING_PRESSED: Pressed = {
+  left: false,
+  right: false,
+  up: false,
+  down: false,
+  fire: false,
+}
+
+export interface PadOptions {
+  /** Show the fire button. */
+  gun?: boolean
+  /** Show the descend button. */
+  jetpack?: boolean
 }
 
 /**
- * What a touch at (x, y) is asking for, on a board `width` by `height`.
- *
- * A touch can mean two things at once — up and right is a jump to the right —
- * which is the whole reason for bands rather than buttons.
+ * How big a button is: sized from the smaller side, so it stays thumb-sized on
+ * a phone and does not become a dinner plate on a desktop.
  */
-export function zoneFor(x: number, y: number, width: number, height: number): Zones {
-  const across = width > 0 ? x / width : 0.5
-  const down = height > 0 ? y / height : 0.5
-
-  const middle = Math.abs(across - 0.5) < DEAD_STRIP / 2
-  return {
-    left: !middle && across < 0.5,
-    right: !middle && across > 0.5,
-    up: down < UP_BAND,
-    down: down > 1 - DOWN_BAND,
-  }
+export function keyRadius(width: number, height: number): number {
+  return Math.max(26, Math.min(58, Math.min(width, height) * 0.085))
 }
 
-/** Every finger on the glass at once, folded into one set of intentions. */
-export function combine(touches: Zones[]): Zones {
-  return {
-    left: touches.some((t) => t.left),
-    right: touches.some((t) => t.right),
-    up: touches.some((t) => t.up),
-    down: touches.some((t) => t.down),
+/**
+ * How much room the pad needs along the bottom.
+ *
+ * The room has to be *reserved*, not borrowed. The first go drew the buttons
+ * over the board and Dave starts in the bottom left corner, directly under the
+ * walk-left button — so the first thing the player saw was a level with no
+ * Dave in it.
+ */
+export function padHeight(width: number, height: number): number {
+  return keyRadius(width, height) * 2.9
+}
+
+/** Where the buttons sit, in the strip along the bottom. */
+export function padLayout(width: number, height: number, options: PadOptions = {}): Key[] {
+  const r = keyRadius(width, height)
+  const edge = r * 0.85
+  const bottom = height - edge - r
+  const gap = r * 2.25
+
+  const keys: Key[] = [
+    { id: 'left', cx: edge + r, cy: bottom, r },
+    { id: 'right', cx: edge + r + gap, cy: bottom, r },
+    { id: 'up', cx: width - edge - r, cy: bottom, r },
+  ]
+  if (options.gun) keys.push({ id: 'fire', cx: width - edge - r - gap, cy: bottom, r })
+  if (options.jetpack) keys.push({ id: 'down', cx: width - edge - r, cy: bottom - gap, r })
+  return keys
+}
+
+/**
+ * Which button a touch at (x, y) is on, if any.
+ *
+ * A touch counts a little way outside the circle it is drawn as. A thumb is
+ * wider than the point the browser reports and nobody aims at the middle.
+ */
+export const TOUCH_SLACK = 1.25
+
+export function keyAt(x: number, y: number, keys: Key[]): Button | null {
+  let best: Button | null = null
+  let nearest = Infinity
+  for (const key of keys) {
+    const distance = Math.hypot(x - key.cx, y - key.cy)
+    if (distance <= key.r * TOUCH_SLACK && distance < nearest) {
+      nearest = distance
+      best = key.id
+    }
   }
+  return best
+}
+
+/** Every finger on the glass, folded into one set of intentions. */
+export function combine(buttons: (Button | null)[]): Pressed {
+  const pressed = { ...NOTHING_PRESSED }
+  for (const button of buttons) {
+    if (button) pressed[button] = true
+  }
+  return pressed
 }

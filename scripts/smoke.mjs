@@ -189,20 +189,34 @@ if ((await daveButton.count()) === 0) {
   if (!/level:?\s*0*1\b/i.test(await daveHud())) problems.push('Dave did not open on level 1')
   if (!/daves:?\s*3\b/i.test(await daveHud())) problems.push('Dave did not start with three lives')
 
-  // No buttons on the board: holding the right of the glass walks him right,
-  // and walking him right is what picks things up.
+  /*
+   * The buttons sit in a strip along the bottom: walking on the left, jumping
+   * on the right. Worked out here the same way the game works them out, so
+   * this keeps testing the buttons rather than two guessed spots on the glass.
+   */
   const board = await page.locator('canvas').boundingBox()
+  const radius = Math.max(26, Math.min(58, Math.min(board.width, board.height) * 0.085))
+  const buttonY = board.y + board.height - radius * 0.85 - radius
+  const at = {
+    left: board.x + radius * 1.85,
+    right: board.x + radius * 4.1,
+    up: board.x + board.width - radius * 1.85,
+  }
+  if (!Number.isFinite(at.right) || at.right >= at.up) {
+    problems.push('the walk and jump buttons are not where they should be')
+  }
+
   const before = await daveScore()
-  await page.mouse.move(board.x + board.width * 0.8, board.y + board.height * 0.75)
+  await page.mouse.move(at.right, buttonY)
   await page.mouse.down()
   await page.waitForTimeout(2500)
   await page.mouse.up()
-  if ((await daveScore()) <= before) problems.push('holding the right of the board did not move Dave')
+  if ((await daveScore()) <= before) problems.push('the walk-right button did not move Dave')
 
-  // And the upper band jumps: from the floor he has to get on top of a ledge.
-  await page.mouse.move(board.x + board.width * 0.8, board.y + board.height * 0.2)
+  // And the jump button, which has to be reachable by a different thumb.
+  await page.mouse.move(at.up, buttonY)
   await page.mouse.down()
-  await page.waitForTimeout(1200)
+  await page.waitForTimeout(900)
   await page.mouse.up()
   await page.waitForTimeout(600)
 
