@@ -127,8 +127,31 @@ for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']) {
 if ((await scoreNow()) <= afterOpening) problems.push('steering did not move the player')
 
 // --- the shop: maths buys power, and never merely permission ---------------
-await page.getByRole('button', { name: 'Shop', exact: true }).click()
-await page.waitForTimeout(700)
+/*
+ * The only way to the shop is to lose a life, which is the whole design: the
+ * maths is what you do when the game beats you, not a button that interrupts
+ * it. So the way in has to be earned here too — drive at the chasers in the
+ * middle until one of them catches him.
+ *
+ * This used to be a click on a Shop button sitting over the board. That button
+ * is gone, and for a while this test only passed because the player happened
+ * to die on his own before it got here.
+ */
+const shopButton = page.getByRole('button', { name: 'Shop', exact: true })
+const middle = [board.x + board.width / 2, board.y + board.height / 2]
+const deadline = Date.now() + 60000
+while ((await shopButton.count()) === 0 && Date.now() < deadline) {
+  await page.mouse.click(middle[0], middle[1] - 120)
+  await page.waitForTimeout(400)
+  await page.mouse.click(middle[0], middle[1] + 120)
+  await page.waitForTimeout(400)
+}
+if ((await shopButton.count()) === 0) {
+  problems.push('never reached the shop: nothing caught the player in a minute of trying')
+} else {
+  await shopButton.first().click()
+  await page.waitForTimeout(700)
+}
 
 const shopText = await page.textContent('body')
 if (!/Harder problem, better prize/.test(shopText)) problems.push('the shop is not framed as a shop')

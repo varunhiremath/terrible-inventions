@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PLAYER_START, TUNNEL_ROW, WIDTH, isWall, key, neighbours, wrapCell } from './maze'
+import { HEIGHT, PLAYER_START, TUNNEL_ROW, WIDTH, isWall, key, neighbours, wrapCell } from './maze'
 import type { Dir } from './ghosts'
 import {
   FRIGHTENED_SECONDS,
@@ -14,6 +14,7 @@ import {
   turn,
   useFreeze,
   playerSpeed,
+  TURN_BUFFER_TILES,
 } from './game'
 
 /** One tile in each direction, and each direction's opposite. */
@@ -73,39 +74,102 @@ describe('moving', () => {
 
   // The single most important control detail: a turn pressed slightly early
   // must be remembered, or the game feels broken rather than hard.
-  it('remembers a turn pressed before the corner', () => {
-    // Worked out from the maze rather than assumed: find a turn that is a wall
-    // right now but opens up a tile or two further along the corridor. Pinning
-    // this to fixed cells is what broke it the last time the maze changed.
-    let game = fresh()
-    const facing = game.player.dir
-    const along = STEP[facing]
+  /**
+   * Puts the player some way short of a corner, facing it, with the turn he
+   * wants blocked the whole way until he gets there. Worked out from the maze
+   * rather than assumed: pinning this to fixed cells is what broke it the last
+   * time the maze changed.
+   *
+   * @param runUp how many tiles of approach must be blocked
+   */
+  const beforeACorner = (runUp: number) => {
+    for (let y = 1; y < HEIGHT - 1; y++) {
+      for (let x = 1; x < WIDTH - 1; x++) {
+        for (const facing of ['up', 'down', 'left', 'right'] as const) {
+          for (const wanted of ['up', 'down', 'left', 'right'] as const) {
+            if (wanted === facing || wanted === OPPOSITE_OF[facing]) continue
 
-    let wanted: Dir | null = null
-    let steps = 0
-    for (let ahead = 1; ahead <= 4 && !wanted; ahead++) {
-      const cell = wrapCell({
-        x: PLAYER_START.x + along.x * ahead,
-        y: PLAYER_START.y + along.y * ahead,
-      })
-      if (isWall(cell)) break
-      for (const dir of ['up', 'down', 'left', 'right'] as const) {
-        if (dir === facing || dir === OPPOSITE_OF[facing]) continue
-        const here = !isWall(wrapCell({ x: PLAYER_START.x + STEP[dir].x, y: PLAYER_START.y + STEP[dir].y }))
-        const there = !isWall(wrapCell({ x: cell.x + STEP[dir].x, y: cell.y + STEP[dir].y }))
-        if (!here && there) {
-          wanted = dir
-          steps = ahead
-          break
+            // Walk back from the corner, checking the corridor runs straight
+            // and the wanted turn is a wall at every step of the way.
+            const corner = { x, y }
+            const openAtCorner = !isWall(
+              wrapCell({ x: x + STEP[wanted].x, y: y + STEP[wanted].y }),
+            )
+            if (isWall(corner) || !openAtCorner) continue
+
+            let ok = true
+            for (let back = 1; back <= runUp && ok; back++) {
+              const cell = wrapCell({
+                x: x - STEP[facing].x * back,
+                y: y - STEP[facing].y * back,
+              })
+              const blocked = isWall(wrapCell({ x: cell.x + STEP[wanted].x, y: cell.y + STEP[wanted].y }))
+              if (isWall(cell) || !blocked) ok = false
+            }
+            if (!ok) continue
+
+            const start = wrapCell({
+              x: x - STEP[facing].x * runUp,
+              y: y - STEP[facing].y * runUp,
+            })
+            return { start, facing, wanted, tiles: runUp }
+          }
         }
       }
     }
-    expect(wanted).not.toBeNull()
+    throw new Error(`the maze has no corner with ${runUp} tiles of approach`)
+  }
 
-    game = turn(game, wanted!)
-    // Long enough to reach the corner, with room to spare.
-    game = run(game, (steps + 1) / playerSpeed(game.level))
+  const placed = (at: { x: number; y: number }, dir: Dir, progress = 0) => {
+    const game = fresh()
+    return { ...game, player: { ...game.player, cell: { ...at }, dir, progress } }
+  }
+
+  // The single most important control detail: a turn pressed slightly early
+  // must be remembered, or the game feels broken rather than hard.
+  it('remembers a turn pressed before the corner', () => {
+    const { start, facing, wanted, tiles } = beforeACorner(1)
+    let game = turn(placed(start, facing), wanted)
+    game = run(game, (tiles + 0.4) / playerSpeed(game.level))
     expect(game.player.dir).toBe(wanted)
+  })
+
+  it('forgets a turn pressed far too early', () => {
+    /*
+     * The other half of the same idea. A turn held for ever means the first
+     * opening half a board away takes it, and the game appears to steer
+     * itself. Two tiles of grace, then it is dropped.
+     */
+    const runUp = TURN_BUFFER_TILES + 2
+    const { start, facing, wanted, tiles } = beforeACorner(runUp)
+    let game = turn(placed(start, facing), wanted)
+    game = run(game, (tiles + 0.4) / playerSpeed(game.level))
+    expect(game.player.dir).not.toBe(wanted)
+  })
+
+  it('turns back the way it came on the spot, not at the next tile', () => {
+    /*
+     * Reversing is always legal — you have just come from there — and making
+     * it wait up to a whole tile is the most obvious way this game can feel
+     * unresponsive. The position must not jump when it happens.
+     */
+    const { start, facing } = beforeACorner(1)
+    const game = placed(start, facing, 0.4)
+    const before = positionOf(game.player)
+
+    const turned = turn(game, OPPOSITE_OF[facing])
+    expect(turned.player.dir).toBe(OPPOSITE_OF[facing])
+    const after = positionOf(turned.player)
+    expect(after.x).toBeCloseTo(before.x, 9)
+    expect(after.y).toBeCloseTo(before.y, 9)
+  })
+
+  it('does not shuffle the player when it reverses at a tile centre', () => {
+    const { start, facing } = beforeACorner(1)
+    const game = placed(start, facing, 0)
+    const turned = turn(game, OPPOSITE_OF[facing])
+    // Standing exactly on a tile, the ordinary queued turn does the job.
+    expect(positionOf(turned.player)).toEqual(positionOf(game.player))
   })
 
   it('ignores a turn into a wall and carries straight on', () => {

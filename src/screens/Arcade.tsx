@@ -13,7 +13,7 @@ import {
 } from '../arcade/maze/game'
 import { taunt, type TauntMoment } from '../arcade/taunts'
 import { fitBoard } from '../arcade/fit'
-import { directionFromGesture, toScreen } from '../arcade/steer'
+import { directionFromGesture, directionFromSwipe, toScreen } from '../arcade/steer'
 import { wallBars } from '../render/mazeGeometry'
 import { buildFruit, fruitForLevel } from '../render/fruit'
 import { buildGhost, buildPlayer, type Ghost } from '../render/characters'
@@ -459,14 +459,37 @@ function PlayerIcon() {
    * painted on top of it.
    */
   const touchStart = useRef<{ x: number; y: number } | null>(null)
+  /**
+   * Whether this touch has already steered by being dragged.
+   *
+   * Without it, every drag fired a second, unasked-for direction the moment
+   * the finger came up: the drag handler had moved the start point along to
+   * keep up, so by the time of the release the finger had barely travelled,
+   * the release read as a *tap*, and the tap sent him wherever the thumb
+   * happened to be resting relative to him. Swipe up, turn up, and then
+   * immediately turn somewhere else. It is the worst of the three control
+   * faults and the hardest to see, because it only shows up at the end of a
+   * gesture that had just worked.
+   */
+  const dragged = useRef(false)
+
   const onDown = (e: React.PointerEvent) => {
     touchStart.current = { x: e.clientX, y: e.clientY }
+    dragged.current = false
   }
+
   const onUp = (e: React.PointerEvent) => {
     const from = touchStart.current
+    const wasDragged = dragged.current
     touchStart.current = null
-    if (!from) return
-    const dir = directionFromGesture(from, { x: e.clientX, y: e.clientY }, playerOnScreen.current)
+    dragged.current = false
+    if (!from || wasDragged) return
+    const dir = directionFromGesture(
+      from,
+      { x: e.clientX, y: e.clientY },
+      playerOnScreen.current,
+      gameRef.current?.player.dir,
+    )
     if (dir) push(dir)
   }
 
@@ -476,10 +499,24 @@ function PlayerIcon() {
     const from = touchStart.current
     if (!from) return
     const to = { x: e.clientX, y: e.clientY }
-    const dir = directionFromGesture(from, to, null)
+    const dir = directionFromSwipe(from, to)
     if (dir) {
       push(dir)
       touchStart.current = to
+      if (!dragged.current) {
+        dragged.current = true
+        /*
+         * Capture only once this is definitely a drag, so the moves keep
+         * coming even if the finger slides off the board.
+         *
+         * Capturing on the way down instead breaks every button on the screen:
+         * the release gets retargeted to whatever captured the pointer, so the
+         * browser fires the click on that rather than on the button under the
+         * finger. It cost the Shop button on the death screen, which is the
+         * only way in to the maths, and nothing said a word about it.
+         */
+        ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
+      }
     }
   }
 
@@ -503,7 +540,10 @@ function PlayerIcon() {
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
-      onPointerCancel={() => { touchStart.current = null }}
+      onPointerCancel={() => {
+        touchStart.current = null
+        dragged.current = false
+      }}
     >
       <div ref={mountRef} className="absolute inset-0" />
 
@@ -588,7 +628,12 @@ function PlayerIcon() {
       </footer>
 
       {overlay && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-ink/85 p-4">
+        <div
+          className="absolute inset-0 z-30 flex items-center justify-center bg-ink/85 p-4"
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerMove={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+        >
           <div className="block-panel w-full max-w-md p-5">
             <p className="text-sm font-bold uppercase tracking-wider text-rust">{fill('{papa}')}</p>
             <p className="mt-2 text-xl leading-snug">{message ?? '…'}</p>

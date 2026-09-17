@@ -35,19 +35,45 @@ export const TAP_DEADZONE = 28
 export const SWIPE_THRESHOLD = 24
 
 /**
+ * How far off the line of travel a tap has to be before it is read as a turn
+ * rather than as noise. Small, because it only ever decides between a turn and
+ * doing nothing.
+ */
+const CROSS = 14
+
+/**
  * The direction a tap at `touch` means, for a player drawn at `player`.
  *
  * Screen coordinates: y grows downward, which is also how the maze is laid
  * out, so down is down in both.
+ *
+ * `facing` is which way the player is already going, and it matters more than
+ * it looks. Running right and wanting to turn down, you tap below him — but
+ * your thumb lands below *and ahead*, because that is where he is going and
+ * that is where you are looking. Taking whichever axis is larger then reads
+ * that as "right", which he is already doing, and nothing happens. You tap
+ * again, harder, further down, and it still does nothing. That is what "it
+ * doesn't respond" feels like from the other side of the screen.
+ *
+ * So a tap that resolves to the way he is already travelling is no answer at
+ * all, and the across-axis is taken instead whenever there is one to take.
+ * Nothing is lost by it: the direction it replaces was doing nothing.
  */
-export function directionFromTap(touch: Point, player: Point): Dir | null {
+export function directionFromTap(touch: Point, player: Point, facing?: Dir): Dir | null {
   const dx = touch.x - player.x
   const dy = touch.y - player.y
   if (Math.hypot(dx, dy) < TAP_DEADZONE) return null
 
-  // Whichever axis the touch is furthest along. On the diagonal, across beats
-  // along: a maze is read in rows, and sideways is the more common intention.
-  return Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up'
+  const sideways: Dir = dx > 0 ? 'right' : 'left'
+  const along: Dir = dy > 0 ? 'down' : 'up'
+  const first = Math.abs(dx) >= Math.abs(dy) ? sideways : along
+  if (first !== facing) return first
+
+  // The bigger axis only says "carry on". Take the other one if it is a real
+  // gesture rather than a wobble.
+  const second = first === sideways ? along : sideways
+  const offBy = first === sideways ? Math.abs(dy) : Math.abs(dx)
+  return offBy >= CROSS ? second : first
 }
 
 /** The direction a drag means, or null if the finger barely moved. */
@@ -66,10 +92,15 @@ export function directionFromSwipe(from: Point, to: Point): Dir | null {
  * pause, say — and then a tap has nothing to be relative to and is ignored,
  * while a swipe still works.
  */
-export function directionFromGesture(from: Point, to: Point, player: Point | null): Dir | null {
+export function directionFromGesture(
+  from: Point,
+  to: Point,
+  player: Point | null,
+  facing?: Dir,
+): Dir | null {
   const swipe = directionFromSwipe(from, to)
   if (swipe) return swipe
-  return player ? directionFromTap(to, player) : null
+  return player ? directionFromTap(to, player, facing) : null
 }
 
 /**

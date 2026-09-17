@@ -43,6 +43,54 @@ describe('tapping', () => {
     expect(directionFromTap(at(550, 700), PLAYER)).toBe('down')
   })
 
+  describe('when he is already going somewhere', () => {
+    /*
+     * The fault this is all for. Running right and wanting to turn down, your
+     * thumb lands below him *and ahead* of him, because ahead is where he is
+     * going and where you are looking. Taking the larger axis reads that as
+     * "right", which he is already doing, so nothing happens — and from the
+     * other side of the screen that is the game ignoring you.
+     */
+    it('turns across rather than repeating the way he is already going', () => {
+      expect(directionFromTap(at(700, 460), PLAYER, 'right')).toBe('down')
+      expect(directionFromTap(at(700, 340), PLAYER, 'right')).toBe('up')
+      expect(directionFromTap(at(300, 460), PLAYER, 'left')).toBe('down')
+      expect(directionFromTap(at(560, 700), PLAYER, 'down')).toBe('right')
+      expect(directionFromTap(at(440, 200), PLAYER, 'up')).toBe('left')
+    })
+
+    it('still lets him carry straight on when the tap is dead ahead', () => {
+      // Nothing across to speak of, so there is no turn being asked for.
+      expect(directionFromTap(at(700, 402), PLAYER, 'right')).toBe('right')
+      expect(directionFromTap(at(498, 700), PLAYER, 'down')).toBe('down')
+    })
+
+    it('reads a tap behind him as turning round', () => {
+      expect(directionFromTap(at(300, 400), PLAYER, 'right')).toBe('left')
+      expect(directionFromTap(at(500, 200), PLAYER, 'down')).toBe('up')
+    })
+
+    it('is unchanged when the across axis is the bigger one anyway', () => {
+      expect(directionFromTap(at(560, 700), PLAYER, 'right')).toBe('down')
+      expect(directionFromTap(at(700, 420), PLAYER, 'up')).toBe('right')
+    })
+
+    it('behaves as before when nobody says which way he is going', () => {
+      expect(directionFromTap(at(700, 460), PLAYER)).toBe('right')
+    })
+
+    it('never answers with the direction he is already going, given a real turn', () => {
+      // Every tap at least a little way off the line of travel is a turn.
+      for (let i = 0; i < 360; i += 5) {
+        const rad = (i * Math.PI) / 180
+        const touch = at(500 + Math.cos(rad) * 200, 400 + Math.sin(rad) * 200)
+        const dir = directionFromTap(touch, PLAYER, 'right')
+        const offLine = Math.abs(touch.y - PLAYER.y) >= 14
+        if (offLine) expect(dir).not.toBe('right')
+      }
+    })
+  })
+
   it('never returns a direction it cannot mean', () => {
     for (let i = 0; i < 360; i += 7) {
       const rad = (i * Math.PI) / 180

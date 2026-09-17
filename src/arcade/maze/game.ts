@@ -110,7 +110,7 @@ export interface Game {
   level: number
   lives: number
   score: number
-  player: Mover & { queued: Dir | null }
+  player: Mover & { queued: Dir | null; queuedFor: number }
   ghosts: GhostState[]
   dots: Set<string>
   power: Set<string>
@@ -137,7 +137,7 @@ export function newGame(level = 1, powerUps = emptyPowerUps(), lives = STARTING_
     level,
     lives: lives + powerUps.spareLives,
     score: 0,
-    player: { cell: { ...PLAYER_START }, dir: 'left', progress: 0, queued: null },
+    player: { cell: { ...PLAYER_START }, dir: 'left', progress: 0, queued: null, queuedFor: 0 },
     ghosts: GHOSTS.map((spec) => ({
       spec,
       cell: { ...spec.start },
@@ -243,6 +243,16 @@ function movePlayer(game: Game, dt: number): void {
   const player = game.player
   let remaining = playerSpeed(game.level) * dt
 
+  // A turn pressed early gets a couple of tiles to find its corner, then
+  // gives up. Spent in tiles travelled, so it is the same grace at any speed.
+  if (player.queued) {
+    player.queuedFor -= remaining
+    if (player.queuedFor <= 0) {
+      player.queued = null
+      player.queuedFor = 0
+    }
+  }
+
   while (remaining > 0) {
     // A queued turn is taken the moment it becomes legal. Without this the
     // controls feel unresponsive, because a turn pressed a fraction early is
@@ -250,6 +260,7 @@ function movePlayer(game: Game, dt: number): void {
     if (player.progress === 0 && player.queued && canGo(player.cell, player.queued)) {
       player.dir = player.queued
       player.queued = null
+      player.queuedFor = 0
     }
 
     if (!canGo(player.cell, player.dir)) {
@@ -366,7 +377,7 @@ export function respawn(game: Game): Game {
   return {
     ...game,
     status: 'playing',
-    player: { cell: { ...PLAYER_START }, dir: 'left', progress: 0, queued: null },
+    player: { cell: { ...PLAYER_START }, dir: 'left', progress: 0, queued: null, queuedFor: 0 },
     ghosts: GHOSTS.map((spec) => ({
       spec,
       cell: { ...spec.start },
@@ -383,8 +394,52 @@ export function respawn(game: Game): Game {
   }
 }
 
+/**
+ * How far a turn pressed early waits for a corner to arrive, in tiles.
+ *
+ * It used to wait for ever, which sounds generous and is not: press up in a
+ * corridor with no way up, carry on for half the board, and the first opening
+ * that appears takes it — a turn you asked for seconds ago and had forgotten
+ * about. That reads as the game doing something of its own accord.
+ *
+ * Measured in tiles rather than seconds on purpose. Two tiles of grace is
+ * about how early a thumb presses, and it stays two tiles at every level;
+ * a fixed number of seconds would quietly become four tiles of grace by the
+ * time the game is running fast.
+ */
+export const TURN_BUFFER_TILES = 2
+
 export function turn(game: Game, dir: Dir): Game {
-  return { ...game, player: { ...game.player, queued: dir } }
+  const player = game.player
+
+  /*
+   * Turning back the way you came happens on the spot, not at the next tile
+   * centre.
+   *
+   * It is always legal — you have just come from there — and waiting up to a
+   * whole tile to honour it is the single most obvious way this game can feel
+   * unresponsive. The position does not change: the same point is described
+   * from the other end, as the tile ahead with the progress counted backwards.
+   */
+  if (dir === OPPOSITE[player.dir] && player.progress > 0) {
+    const ahead = wrapCell({
+      x: player.cell.x + STEP[player.dir].x,
+      y: player.cell.y + STEP[player.dir].y,
+    })
+    return {
+      ...game,
+      player: {
+        ...player,
+        cell: ahead,
+        dir,
+        progress: 1 - player.progress,
+        queued: null,
+        queuedFor: 0,
+      },
+    }
+  }
+
+  return { ...game, player: { ...player, queued: dir, queuedFor: TURN_BUFFER_TILES } }
 }
 
 export function useFreeze(game: Game): Game {
