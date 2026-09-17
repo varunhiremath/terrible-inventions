@@ -181,10 +181,13 @@ if ((await daveButton.count()) === 0) {
   await daveButton.first().click()
   await page.waitForTimeout(1200)
 
-  const daveHud = async () => (await page.innerText('header')).replace(/\s+/g, ' ').trim()
-  const daveScore = async () => Number((await daveHud()).match(/score (\d+)/i)?.[1] ?? -1)
-  if (!/level 1/i.test(await daveHud())) problems.push('Dave did not open on level 1')
-  if (!/daves 3/i.test(await daveHud())) problems.push('Dave did not start with three lives')
+  // textContent, not innerText: Dave's score bar is drawn into the picture and
+  // the text copy of it is there for screen readers, out of sight. innerText
+  // reads what is rendered, so it reads nothing at all.
+  const daveHud = async () => (await page.textContent('header')).replace(/\s+/g, ' ').trim()
+  const daveScore = async () => Number((await daveHud()).match(/score:?\s*(\d+)/i)?.[1] ?? -1)
+  if (!/level:?\s*0*1\b/i.test(await daveHud())) problems.push('Dave did not open on level 1')
+  if (!/daves:?\s*3\b/i.test(await daveHud())) problems.push('Dave did not start with three lives')
 
   // No buttons on the board: holding the right of the glass walks him right,
   // and walking him right is what picks things up.

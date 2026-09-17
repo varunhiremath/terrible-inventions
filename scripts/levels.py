@@ -1,20 +1,3 @@
-"""
-Where src/dave/levels.ts comes from.
-
-The levels are drawn here as five screens of twenty columns, because that is
-exactly what the player sees at a time and it is the only way anyone can
-picture one. `emit.py` joins each set of screens into the hundred-wide rows the
-game wants and writes the TypeScript.
-
-Running this file on its own checks the drawings: screen sizes, one trophy and
-one door apiece, a floor with no see-through gaps, and a start that is not
-inside a wall. It also caps how wide a pit may be on the levels meant to be
-crossed on foot. Nine faults in the first draft came out of these checks, and
-not one of them was visible by looking.
-
-Whether a level can actually be *finished* is a harder question and lives in
-src/dave/solve.ts, which plays each one with the real physics.
-"""
 # Each screen is 10 rows of exactly 20 characters: one viewport.
 # ' ' sky   '#' brick   '^' fire   '~' water   '!' tentacle
 # 'T' trophy 'D' door   'J' jetpack 'G' gun
@@ -588,6 +571,77 @@ for n in FOOT_LEVELS:
     lv = L[n]
     rows = [''.join(sc[r] for sc in lv['screens']) for r in range(10)]
     rows = tame_floor(rows)
+    lv['screens'] = [[rows[r][s * 20:(s + 1) * 20] for r in range(10)] for s in range(5)]
+
+
+# The rooms were drawn one ledge to a screenful, which leaves most of the
+# height empty black. The original's rooms are dense: a rhythm of small brick
+# blocks at four or five heights with diamonds strung between them, and the
+# whole picture full. So each drawing gets a second pass that fills it out.
+#
+# Only additions, and only into space that is already empty on all sides: more
+# ledges is more places to stand, which can only help a route. Whether any of
+# them gets in the way of a jump is not something to reason about -- it is
+# something for src/dave/solve.ts to answer, and it is run again afterwards.
+
+LEDGE_ROWS = [2, 4, 6, 3, 5, 7]
+
+def clear_for(rows, y, x0, x1):
+    """
+    True when a ledge could go here without touching anything.
+
+    Only the ledge's own row and the one above it -- that is where it would
+    collide with something already drawn, and where its diamonds go. Checking
+    two rows up as well was so cautious that almost every extra ledge was
+    rejected and the rooms stayed empty.
+    """
+    if y < 2 or y > 7:
+        return False
+    for yy in (y - 1, y):
+        if any(c != ' ' for c in rows[yy][max(0, x0 - 1):x1 + 2]):
+            return False
+    # And nothing directly beneath, so ledges do not stack into a wall.
+    if y + 1 < len(rows) and any(c == '#' for c in rows[y + 1][x0:x1 + 1]):
+        return False
+    return True
+
+def put(rows, y, x, text):
+    rows[y] = rows[y][:x] + text + rows[y][x + len(text):]
+
+def enrich(rows, n):
+    rows = list(rows)
+    # More ledges, staggered so they form a climbable rhythm rather than a wall.
+    for i, x in enumerate(range(5, 95, 5)):
+        y = LEDGE_ROWS[(i + n) % len(LEDGE_ROWS)]
+        if clear_for(rows, y, x, x + 3):
+            put(rows, y, x, '####')
+            put(rows, y - 1, x + 1, '33')
+
+    # Diamonds resting on every ledge that has not got any.
+    for y in range(1, 9):
+        for x in range(1, 99):
+            if rows[y][x] == '#' and rows[y - 1][x] == ' ' and (y + 1 > 9 or rows[y][x] == '#'):
+                if x % 3 == 1:
+                    put(rows, y - 1, x, '3')
+
+    # And a scatter high up, where the original hangs them in the air.
+    for x in range(7, 96, 6):
+        y = 1 + ((x + n) % 2)
+        if rows[y][x] == ' ' and rows[y + 1][x] == ' ':
+            put(rows, y, x, '3')
+    return rows
+
+# The flying levels keep their empty sky. Their route goes *through* the air --
+# across a field of fire or water with nothing underneath -- so furniture up
+# there is not decoration, it is an obstacle in the only corridor there is.
+# Adding it broke level ten, and the level checker said so.
+FLYING_LEVELS = {4, 8, 10}
+
+for n, lv in sorted(L.items()):
+    if n in FLYING_LEVELS:
+        continue
+    rows = [''.join(sc[r] for sc in lv['screens']) for r in range(10)]
+    rows = enrich(rows, n)
     lv['screens'] = [[rows[r][s * 20:(s + 1) * 20] for r in range(10)] for s in range(5)]
 
 # --- validate -------------------------------------------------------------

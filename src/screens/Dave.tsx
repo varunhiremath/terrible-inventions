@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import { LEVEL_TILES_X, VIEW_TILES_X, VIEW_TILES_Y } from '../dave/level'
-import { NO_INPUT, cameraFor, type Input } from '../dave/physics'
+import { JET_SECONDS, NO_INPUT, cameraFor, type Input } from '../dave/physics'
 import { newGame, respawn, shoot, step, type Game } from '../dave/game'
 import { levelFor } from '../dave/levels'
 import { combine, zoneFor, type Zones } from '../dave/controls'
-import { drawBullet, drawDave, drawLevel, drawMonster, drawSky, EGA, type View } from '../dave/draw'
+import {
+  drawBullet,
+  drawDave,
+  drawFrame,
+  drawLevel,
+  drawLifeIcon,
+  drawMonster,
+  drawSky,
+  EGA,
+  type View,
+} from '../dave/draw'
 import { fill } from '../config/profile'
 import { Btn } from '../ui/bits'
 import { say, silence } from '../voice'
@@ -116,6 +126,10 @@ export function Dave() {
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.fillStyle = EGA.black
         ctx.fillRect(0, 0, w, h)
+        // Saved, because the clip below has to be undone before the score bar
+        // is drawn — resetting the transform does not clear a clip, and the
+        // score was being quietly cut away at the top of the board.
+        ctx.save()
         ctx.translate(Math.round((w - boardW) / 2), Math.round((h - boardH) / 2))
         ctx.beginPath()
         ctx.rect(0, 0, boardW, boardH)
@@ -131,6 +145,45 @@ export function Dave() {
         for (const monster of next.monsters) drawMonster(ctx, monster, view)
         for (const bullet of next.bullets) drawBullet(ctx, bullet, view)
         if (next.dave.alive) drawDave(ctx, next.dave, view)
+        drawFrame(ctx, next.level, view, boardW, boardH)
+
+        // The score bar and the fuel gauge belong to the picture, not to the
+        // page around it: same pixels, same font, same colours as the game.
+        ctx.restore()
+        const bar = Math.max(14, size * 0.52)
+        ctx.font = `bold ${bar}px ui-monospace, Menlo, Consolas, monospace`
+        ctx.textBaseline = 'middle'
+        const midline = Math.max(bar, (h - boardH) / 4 + bar * 0.2)
+
+        ctx.fillStyle = EGA.brightGreen
+        ctx.textAlign = 'left'
+        const pad = size * 0.6
+        ctx.fillText(`SCORE: ${String(next.score).padStart(5, '0')}`, pad, midline)
+        ctx.textAlign = 'center'
+        ctx.fillText(`LEVEL ${String(next.number).padStart(2, '0')}`, w / 2, midline)
+
+        ctx.textAlign = 'right'
+        const livesLabel = 'DAVES:'
+        const icon = bar * 1.1
+        const livesRight = w - pad - Math.max(0, next.lives) * (icon + 4)
+        ctx.fillText(livesLabel, livesRight, midline)
+        for (let i = 0; i < Math.max(0, next.lives); i++) {
+          drawLifeIcon(ctx, livesRight + 6 + i * (icon + 4), midline - icon / 2, icon)
+        }
+
+        if (next.dave.hasJetpack && next.dave.fuel > 0) {
+          const gaugeY = h - bar * 1.6
+          ctx.fillStyle = EGA.brightGreen
+          ctx.textAlign = 'left'
+          ctx.fillText('JETPACK', pad, gaugeY + bar * 0.5)
+          const gx = pad + bar * 5.2
+          const gw = w - gx - pad
+          ctx.strokeStyle = EGA.yellow
+          ctx.lineWidth = Math.max(2, bar * 0.14)
+          ctx.strokeRect(gx, gaugeY, gw, bar)
+          ctx.fillStyle = EGA.red
+          ctx.fillRect(gx + 3, gaugeY + 3, (gw - 6) * (next.dave.fuel / JET_SECONDS), bar - 6)
+        }
       }
 
       frame = requestAnimationFrame(loop)
@@ -225,19 +278,16 @@ export function Dave() {
       onPointerUp={onUp}
       onPointerCancel={onUp}
     >
-      <header className="pointer-events-none relative z-10 flex items-start justify-between px-4 pt-2 font-mono text-sm uppercase tracking-widest text-chalk">
-        <div>
-          <p className="text-[0.65rem] text-dim">score</p>
-          <p className="text-base leading-none">{hud.score}</p>
-        </div>
-        <div className="text-center">
-          <p className="text-[0.65rem] text-dim">level</p>
-          <p className="text-base leading-none">{hud.level}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-[0.65rem] text-dim">daves</p>
-          <p className="text-base leading-none">{Math.max(0, hud.lives)}</p>
-        </div>
+      {/*
+        * The score is drawn in the picture, which leaves nothing for a screen
+        * reader — or for the smoke test — to read. This says the same thing in
+        * text, out of sight.
+        */}
+      <header className="sr-only" aria-live="polite">
+        SCORE: {String(hud.score).padStart(5, '0')} LEVEL {String(hud.level).padStart(2, '0')} DAVES: {Math.max(0, hud.lives)}
+        {hud.trophy ? ' TROPHY' : ''}
+        {hud.gun ? ' GUN' : ''}
+        {hud.fuel > 0 ? ` JETPACK ${Math.ceil(hud.fuel)}` : ''}
       </header>
 
       <div ref={wrapRef} className="relative min-h-0 flex-1">
@@ -249,32 +299,15 @@ export function Dave() {
         )}
       </div>
 
-      <footer className="pointer-events-none relative z-10 flex items-center justify-between gap-3 px-4 pb-2 font-mono text-[0.7rem] uppercase tracking-widest text-dim">
-        <div className="flex items-center gap-3">
-          {hud.trophy && <span className="text-yellow-300">trophy</span>}
-          {hud.gun && <span className="text-slate-300">gun</span>}
-          {hud.fuel > 0 && (
-            <span className="flex items-center gap-1 text-cyan-300">
-              jet
-              <span className="inline-block h-2 w-16 border border-cyan-400/60">
-                <span
-                  className="block h-full bg-cyan-400"
-                  style={{ width: `${Math.min(100, (hud.fuel / 12.8) * 100)}%` }}
-                />
-              </span>
-            </span>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => go('arcade')}
-          onPointerDown={(e) => e.stopPropagation()}
-          onPointerUp={(e) => e.stopPropagation()}
-          className="pointer-events-auto px-2 text-dim/60"
-        >
-          back
-        </button>
-      </footer>
+      <button
+        type="button"
+        onClick={() => go('arcade')}
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerUp={(e) => e.stopPropagation()}
+        className="absolute bottom-1 right-2 z-20 px-2 font-mono text-[0.7rem] uppercase tracking-widest text-dim/50"
+      >
+        back
+      </button>
 
       {overlay && (
         <div

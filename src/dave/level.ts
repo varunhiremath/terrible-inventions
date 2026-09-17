@@ -28,12 +28,20 @@ export const TILE = {
   DOOR: 'D',
   JETPACK: 'J',
   GUN: 'G',
-  /** The six pickups, cheapest first. */
-  GUMBALL: '1',
-  SHOE: '2',
-  COIN: '3',
+  /**
+   * The six pickups, cheapest first.
+   *
+   * Named for what they look like rather than for what the original called
+   * them. The values are the original's — fifteen up to five hundred — but a
+   * table of prices is not what anyone remembers about this game. What they
+   * remember is the cyan diamonds, which are everywhere, and the gold crown,
+   * which is not.
+   */
+  SPHERE: '1',
+  GEM: '2',
+  DIAMOND: '3',
   RING: '4',
-  WAND: '5',
+  RUBY: '5',
   CROWN: '6',
 } as const
 
@@ -47,11 +55,11 @@ export const LEVEL_TILES_Y = 10
 
 /** What each pickup is worth, as in the original. */
 export const WORTH: Record<string, number> = {
-  [TILE.GUMBALL]: 15,
-  [TILE.SHOE]: 50,
-  [TILE.COIN]: 100,
+  [TILE.SPHERE]: 15,
+  [TILE.GEM]: 50,
+  [TILE.DIAMOND]: 100,
   [TILE.RING]: 200,
-  [TILE.WAND]: 250,
+  [TILE.RUBY]: 250,
   [TILE.CROWN]: 500,
   [TILE.TROPHY]: 1000,
   [TILE.DOOR]: 2000,
@@ -60,11 +68,11 @@ export const WORTH: Record<string, number> = {
 const SOLID = new Set<string>([TILE.BRICK])
 const DEADLY = new Set<string>([TILE.FIRE, TILE.WATER, TILE.TENTACLE])
 const PICKUPS = new Set<string>([
-  TILE.GUMBALL,
-  TILE.SHOE,
-  TILE.COIN,
+  TILE.SPHERE,
+  TILE.GEM,
+  TILE.DIAMOND,
   TILE.RING,
-  TILE.WAND,
+  TILE.RUBY,
   TILE.CROWN,
 ])
 
@@ -105,8 +113,24 @@ export interface MonsterSpec {
   phase: number
 }
 
+/**
+ * What a level is built out of, which changes from one to the next.
+ *
+ * Half of what makes the original feel like ten places rather than one is that
+ * the brick changes colour: red for the first rooms, blue deeper in, purple
+ * further still. The frame around the room and the ledges inside it are
+ * usually different colours from each other, which is the other half.
+ */
+export interface Theme {
+  /** The border, and the floor the room stands on. */
+  frame: string
+  /** The ledges inside it. */
+  platform: string
+}
+
 export interface Level {
   name: string
+  theme?: Theme
   /** Where Dave comes in, in tiles. */
   start: { x: number; y: number }
   /**

@@ -36,7 +36,7 @@ function run(game: Game, input: Input, seconds: number): Game {
 
 describe('picking things up', () => {
   it('scores each pickup at its own worth, once', () => {
-    const lv = level({ 5: TILE.GUMBALL, 7: TILE.CROWN })
+    const lv = level({ 5: TILE.SPHERE, 7: TILE.CROWN })
     const after = run(newGame(lv), held({ right: true }), 1.5)
     expect(after.score).toBe(15 + 500)
     // Walking back over them is worth nothing.
