@@ -16,12 +16,34 @@
  */
 import { LEVEL_TILES_X, LEVEL_TILES_Y, TILE, isDeadly, isSolid, tileAt, type Level } from './level'
 
+/*
+ * The three numbers that decide everything about how this feels, and they only
+ * mean anything apart from each other by accident. What matters is the two
+ * figures they produce together, because those are what a level is drawn
+ * around:
+ *
+ *   air time = 2 * JUMP_SPEED / GRAVITY   = 0.80s
+ *   height   = JUMP_SPEED^2 / (2*GRAVITY) = 3.6 tiles
+ *   reach    = RUN_SPEED * air time       = 5.6 tiles
+ *
+ * Climbing to a ledge N tiles up needs more than N of height. Crossing a pit N
+ * tiles wide needs N+1 of reach, because he leaves from the middle of one tile
+ * and lands in the middle of another. So: three-tile climbs and four-tile pits,
+ * both with room to spare.
+ *
+ * Getting here took two goes with the level checker. The first numbers reached
+ * 4.1 tiles across and it called nine levels impossible. The second cleared the
+ * pits at 5.3 but only rose 2.96, and every ledge in the game is three tiles
+ * up — so Dave could walk the whole length of eight levels and not get on top
+ * of anything. Neither was visible by reading the numbers; both were obvious
+ * the moment something tried to play them.
+ */
 /** Tiles per second on the flat. */
-export const RUN_SPEED = 7.2
+export const RUN_SPEED = 7.0
 /** Tiles per second per second. */
-export const GRAVITY = 62
+export const GRAVITY = 45
 /** Upward tiles per second at the moment of the jump. */
-export const JUMP_SPEED = 17.5
+export const JUMP_SPEED = 18
 /** Nothing falls faster than this, so nothing tunnels through a floor. */
 export const TERMINAL_SPEED = 26
 

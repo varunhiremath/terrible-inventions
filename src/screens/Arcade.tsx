@@ -660,6 +660,7 @@ function PlayerIcon() {
               )}
 
               {hud.status !== 'gameOver' && <Btn onClick={openShop}>Shop</Btn>}
+              <Btn onClick={() => go('dave')}>Dangerous Dave</Btn>
             </div>
           </div>
         </div>

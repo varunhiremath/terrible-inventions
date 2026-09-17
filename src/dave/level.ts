@@ -80,6 +80,31 @@ export function isPickup(tile: string): boolean {
   return PICKUPS.has(tile)
 }
 
+/**
+ * A closed loop the creatures walk, as offsets in tiles from wherever each one
+ * started.
+ *
+ * One path per level and every creature on it, which is how the original does
+ * it: it stores a single list of relative moves, and each monster is just a
+ * different distance along the same loop. It sounds like a shortcut and it is
+ * the opposite — a roomful of things moving in the same shape at different
+ * phases reads as choreography, and a roomful of things each doing their own
+ * thing reads as noise.
+ */
+export interface Path {
+  points: readonly { x: number; y: number }[]
+  /** How fast a creature travels along it, in tiles per second. */
+  speed: number
+}
+
+export interface MonsterSpec {
+  at: { x: number; y: number }
+  /** Which drawing to use. They behave identically; only the look differs. */
+  kind: 'spider' | 'orb' | 'saucer'
+  /** How far round the loop this one starts, 0 to 1. */
+  phase: number
+}
+
 export interface Level {
   name: string
   /** Where Dave comes in, in tiles. */
@@ -89,6 +114,43 @@ export interface Level {
    * cannot read in the source is a level you cannot fix.
    */
   rows: readonly string[]
+  monsters?: readonly MonsterSpec[]
+  path?: Path
+}
+
+/**
+ * Where a creature is, `t` of the way round its loop.
+ *
+ * `t` runs 0 to 1 and wraps, so a creature never stops or reverses — it goes
+ * round for ever, which is what makes a level learnable.
+ */
+export function onPath(path: Path, t: number): { x: number; y: number } {
+  const points = path.points
+  if (points.length === 0) return { x: 0, y: 0 }
+  if (points.length === 1) return { ...points[0] }
+
+  const wrapped = ((t % 1) + 1) % 1
+  const scaled = wrapped * points.length
+  const i = Math.floor(scaled) % points.length
+  const j = (i + 1) % points.length
+  const f = scaled - Math.floor(scaled)
+
+  return {
+    x: points[i].x + (points[j].x - points[i].x) * f,
+    y: points[i].y + (points[j].y - points[i].y) * f,
+  }
+}
+
+/** How long the loop is, in tiles, so speed can mean tiles per second. */
+export function pathLength(path: Path): number {
+  const points = path.points
+  let total = 0
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i]
+    const b = points[(i + 1) % points.length]
+    total += Math.hypot(b.x - a.x, b.y - a.y)
+  }
+  return total
 }
 
 /** The tile at a position, treating everything off the map as solid wall. */

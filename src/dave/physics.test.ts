@@ -118,15 +118,45 @@ describe('jumping', () => {
       if (dave.onGround) break
     }
     const height = floor - highest
-    expect(height).toBeGreaterThan(2)
-    expect(height).toBeLessThan(3.2)
+    // Enough to get on top of a ledge three tiles up, which is what every
+    // level is built out of, with margin so it is not a frame-perfect thing.
+    expect(height).toBeGreaterThan(3.2)
+    expect(height).toBeLessThan(4.2)
     expect(dave.onGround).toBe(true)
   })
 
-  it('matches the height its numbers promise', () => {
-    // v squared over two g. If this drifts, one of the constants moved and
-    // the jump no longer means what the file says it means.
-    expect((JUMP_SPEED * JUMP_SPEED) / (2 * GRAVITY)).toBeCloseTo(2.47, 1)
+  it('matches the height and the reach its numbers promise', () => {
+    // If these drift, one of the constants moved and the jump no longer means
+    // what the file says it means — and the levels were drawn around the reach.
+    expect((JUMP_SPEED * JUMP_SPEED) / (2 * GRAVITY)).toBeCloseTo(3.6, 1)
+    const airTime = (2 * JUMP_SPEED) / GRAVITY
+    expect(RUN_SPEED * airTime).toBeGreaterThan(5.4)
+  })
+
+  it('gets on top of a ledge three tiles up', () => {
+    const ledge = flat({
+      6: ' '.repeat(10) + '#'.repeat(6) + ' '.repeat(LEVEL_TILES_X - 16),
+    })
+    let dave = run(ledge, newDave({ x: 6, y: 8 }), held({ right: true }), 0.1)
+    dave = step(ledge, dave, held({ jump: true, right: true }), FIXED)
+    let landed = false
+    for (let i = 0; i < 400; i++) {
+      dave = step(ledge, dave, held({ right: true }), FIXED)
+      if (dave.onGround && dave.y < 8) { landed = true; break }
+    }
+    expect(landed).toBe(true)
+  })
+
+  it('clears a four-tile pit, which is the widest the levels use', () => {
+    const pit = flat({ 9: '#'.repeat(10) + '^'.repeat(4) + '#'.repeat(LEVEL_TILES_X - 14) })
+    let dave = run(pit, newDave({ x: 8, y: 8 }), held({ right: true }), 0.18)
+    dave = step(pit, dave, held({ jump: true, right: true }), FIXED)
+    for (let i = 0; i < 300 && !dave.onGround; i++) {
+      dave = step(pit, dave, held({ right: true }), FIXED)
+      if (!dave.alive) break
+    }
+    expect(dave.alive).toBe(true)
+    expect(dave.x).toBeGreaterThan(14)
   })
 
   it('travels sideways while it is in the air', () => {

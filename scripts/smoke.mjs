@@ -166,6 +166,47 @@ await page.getByRole('button', { name: /nudge/i }).click()
 await page.waitForTimeout(300)
 if (!/Nudge 1/.test(await page.textContent('body'))) problems.push('hints are not available in the shop')
 
+// --- Dangerous Dave: the board is the controller here too -----------------
+// Reachable without having to lose a life first, which is how a grown-up
+// setting the thing up will look for it.
+await page.goto(URL, { waitUntil: 'networkidle' })
+await page.waitForTimeout(1200)
+await page.locator('button[aria-label="Settings"]').click()
+await page.waitForTimeout(500)
+
+const daveButton = page.getByRole('button', { name: 'Dangerous Dave' })
+if ((await daveButton.count()) === 0) {
+  problems.push('no way in to Dangerous Dave from the settings')
+} else {
+  await daveButton.first().click()
+  await page.waitForTimeout(1200)
+
+  const daveHud = async () => (await page.innerText('header')).replace(/\s+/g, ' ').trim()
+  const daveScore = async () => Number((await daveHud()).match(/score (\d+)/i)?.[1] ?? -1)
+  if (!/level 1/i.test(await daveHud())) problems.push('Dave did not open on level 1')
+  if (!/daves 3/i.test(await daveHud())) problems.push('Dave did not start with three lives')
+
+  // No buttons on the board: holding the right of the glass walks him right,
+  // and walking him right is what picks things up.
+  const board = await page.locator('canvas').boundingBox()
+  const before = await daveScore()
+  await page.mouse.move(board.x + board.width * 0.8, board.y + board.height * 0.75)
+  await page.mouse.down()
+  await page.waitForTimeout(2500)
+  await page.mouse.up()
+  if ((await daveScore()) <= before) problems.push('holding the right of the board did not move Dave')
+
+  // And the upper band jumps: from the floor he has to get on top of a ledge.
+  await page.mouse.move(board.x + board.width * 0.8, board.y + board.height * 0.2)
+  await page.mouse.down()
+  await page.waitForTimeout(1200)
+  await page.mouse.up()
+  await page.waitForTimeout(600)
+
+  const daveText = await page.innerText('body')
+  if (/\d+\s*%/.test(daveText)) problems.push('a percentage is being shown in Dave')
+}
+
 await browser.close()
 
 // No screen may grow a score for being right at maths.
@@ -176,4 +217,4 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: played the maze in 3D and bought from the shop')
+console.log('smoke test clean: played the maze, bought from the shop, and ran Dave through the hideout')

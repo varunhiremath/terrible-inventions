@@ -12,7 +12,7 @@ import { emptyPowerUps, type PowerUps } from './arcade/maze/game'
 import { CONTINUE_DELTA, SHOP, ratingFor, type ShopItem } from './arcade/shop'
 import type { Attempt, Problem } from './engine/types'
 
-export type Screen = 'arcade' | 'shop' | 'coop' | 'note' | 'settings' | 'studio'
+export type Screen = 'arcade' | 'dave' | 'shop' | 'coop' | 'note' | 'settings' | 'studio'
 
 /** How far above his solo level a two-player puzzle is pitched. */
 export const COOP_BONUS = 200

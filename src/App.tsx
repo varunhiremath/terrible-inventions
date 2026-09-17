@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Arcade } from './screens/Arcade'
+import { Dave } from './screens/Dave'
 import { Shop } from './screens/Shop'
 import { Note } from './screens/Note'
 import { Settings } from './screens/Settings'
@@ -44,7 +45,7 @@ export default function App() {
       stopMusic()
       return
     }
-    if (screen === 'arcade') startMusic('chase')
+    if (screen === 'arcade' || screen === 'dave') startMusic('chase')
     else if (screen === 'shop') startMusic('shop')
     else stopMusic()
     // `save.music` is in here so switching it back on in settings starts the
@@ -56,6 +57,8 @@ export default function App() {
   if (!ready) return null
 
   switch (screen) {
+    case 'dave':
+      return <Dave />
     case 'shop':
       return <Shop />
     case 'note':

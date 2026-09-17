@@ -147,6 +147,18 @@ export function Settings() {
       </Panel>
 
       <Panel className="flex flex-col gap-3">
+        <h2 className="font-bold">Games</h2>
+        <p className="text-sm leading-relaxed text-dim">
+          Both are here. Losing a life in either one offers the shop, which is where the
+          maths lives.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Btn onClick={() => go('arcade')} className="px-3 py-3 text-sm">Papa Panic</Btn>
+          <Btn onClick={() => go('dave')} className="px-3 py-3 text-sm">Dangerous Dave</Btn>
+        </div>
+      </Panel>
+
+      <Panel className="flex flex-col gap-3">
         <h2 className="font-bold">Music</h2>
         <p className="text-sm leading-relaxed text-dim">
           A tune plays under the maze and a slower one in the shop. It drops out of the way
