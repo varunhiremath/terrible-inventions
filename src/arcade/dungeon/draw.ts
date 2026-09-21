@@ -74,9 +74,9 @@ export const INK = {
  * bone-white, the shadow a hole in the wall, the vizier's man in blue.
  */
 export const ROBES: Record<string, { robe: string; legs: string; trim: string; skin: string }> = {
-  guard: { robe: '#8a5230', legs: '#3a2418', trim: '#d0a13c', skin: '#c99a6a' },
-  fat: { robe: '#7a3f9c', legs: '#301a3e', trim: '#d8a0ee', skin: '#c99a6a' },
-  skeleton: { robe: '#b9c0cc', legs: '#5d6673', trim: '#8a929f', skin: '#e4e7ea' },
+  guard: { robe: '#a83232', legs: '#6b3a86', trim: '#e0b13c', skin: '#c99a6a' },
+  fat: { robe: '#8a3f7c', legs: '#4a2050', trim: '#e0a0d8', skin: '#c99a6a' },
+  skeleton: { robe: '#aab2c0', legs: '#4e5766', trim: '#7d8694', skin: '#dfe3e8' },
   shadow: { robe: '#2a2a38', legs: '#14141c', trim: '#6a6a88', skin: '#3e3e4c' },
   vizier: { robe: '#2c5ea8', legs: '#16294a', trim: '#7ab6f0', skin: '#c99a6a' },
 }
@@ -795,21 +795,24 @@ const STYLE: Style = 'warrior'
 /**
  * The runner.
  *
- * A hooded fighter: dark cowl and mask, a pale gi, dark leggings, a crimson
- * belt and a scarf that trails when he moves. The first version put him in
- * slate from head to foot and he disappeared into the room — these rooms are
- * dark, so the thing that has to be light is him. The dark hood and leggings
- * frame the pale torso, and the crimson is the only saturated colour on the
- * screen, so the eye finds him before it finds anything else. That matters
- * more at phone size than any amount of detail does.
+ * Dressed off the original: a cream shirt and loose cream trousers with a
+ * crimson sash, and a deep blue head wrap whose tail streams behind him — the
+ * one thing on the box art that was already half a ninja. The wrap comes
+ * across the face, which is ours.
+ *
+ * Cream on purpose. These rooms are dark and every guard is darker than he is,
+ * so the lightest thing on the screen is always him and the eye finds him
+ * before it finds anything else. That matters more at phone size than any
+ * amount of detail does; an earlier version had him in slate head to foot and
+ * he disappeared into the masonry.
  */
 const PRINCE_LOOK: Look = {
-  body: '#e0d5be',
-  legs: '#515d70',
-  trim: '#c8452f',
-  skin: '#e8b98f',
-  hair: '#232a36',
-  mask: '#2f3846',
+  body: '#efe7d6',
+  legs: '#d9cfb8',
+  trim: '#c0392b',
+  skin: '#e3ab7a',
+  hair: '#2f4a6b',
+  mask: '#3a5a7e',
 }
 
 /** Where the prince's feet are, and how he is standing. */

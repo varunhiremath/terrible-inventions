@@ -318,12 +318,13 @@ describe('pressing up', () => {
   })
 
   it('does not climb into the ceiling', () => {
-    // Solid rock overhead. There is nothing to grab, so he hops and comes down.
+    // Solid rock overhead. There is nothing to grab, so he must stay on the
+    // floor he is on rather than starting a climb into the wall.
     const level = twoFloors('########', 'XXXXXXXX')
     const start = newPrince(level)
     const after = until(start, level, press({ up: true }), 20)
     expect(after.row).toBe(2)
-    expect(after.col).toBeCloseTo(start.col, 5)
+    expect(after.dead).toBe(false)
   })
 
   it('always starts a sequence you can see, whatever is overhead', () => {
@@ -332,31 +333,32 @@ describe('pressing up', () => {
       const start = newPrince(level)
       const moved = tick(start, level, press({ up: true }))
       expect(moved.action, `with "${upper}" overhead`).not.toBe('stand')
-      // Whatever it starts, the frames have to run: a sequence that is over
-      // in one tick is a button that flickers rather than one that does
-      // something. The old climb-into-the-ceiling passed this and still did
-      // nothing, which is why the floor check below is the real test.
       expect(SEQUENCES[moved.action].frames.length, upper).toBeGreaterThan(3)
       expect(SEQUENCES[moved.action].interruptible, upper).toBe(false)
     }
   })
 
   it('gets him onto the ledge whenever there is one to get onto', () => {
-    // The check that the shipped bug failed: six frames of climbing that put
-    // him back on the floor he started on.
+    // The check the shipped bug failed: six frames of climbing that put him
+    // back on the floor he started on.
     const level = twoFloors('########', '########')
     const start = newPrince(level)
     const after = until(start, level, press({ up: true }), 12)
     expect(after.row).toBe(start.row - 1)
   })
 
-  it('hops in place rather than leaping into whatever is in front', () => {
-    // No direction held means no opinion about forward, so he must not take
-    // two tiles of it on trust.
-    const level = twoFloors('###     ', 'XXXXXXXX')
-    const after = until(newPrince(level), level, press({ up: true }), 20)
-    expect(after.dead).toBe(false)
-    expect(after.row).toBe(2)
+  it('goes somewhere, rather than hopping on the spot', () => {
+    /**
+     * The second thing that was wrong with this button. Under a ceiling with
+     * no direction held he used to hop straight up, which moves him nowhere at
+     * all — so pressing the button looked exactly like pressing nothing, and
+     * was reported as the jump not working for the second time. A jump button
+     * has to jump.
+     */
+    const level = twoFloors('########', 'XXXXXXXX')
+    const start = newPrince(level)
+    const after = until(start, level, press({ up: true }), 12)
+    expect(after.col - start.col).toBeGreaterThan(1)
   })
 
   it('still jumps forward when a direction is held', () => {
@@ -368,13 +370,15 @@ describe('pressing up', () => {
 
   it('pulls up out of a hang without changing floors', () => {
     // Hanging holds the ledge he was standing on, so the climb puts him back
-    // on it. That is a different move from climbing the floor above.
+    // on it. That is a different move from climbing the floor above, and it
+    // must not gain him a floor.
     const level = twoFloors('###     ', 'XXXXXXXX')
     const hanging = until(newPrince(level), level, press({ right: true, shift: true }), 40)
-    if (hanging.action === 'hang') {
-      const up = until(hanging, level, press({ up: true }), 20)
-      expect(up.row).toBe(hanging.row)
-      expect(up.dead).toBe(false)
-    }
+    expect(hanging.action).toBe('hang')
+    // Exactly the length of the climb: hold up any longer and he sets off
+    // again, which is a different question from what the climb itself did.
+    const up = play(hanging, level, SEQUENCES.climbUp.frames.length, press({ up: true }))
+    expect(up.row).toBe(hanging.row)
+    expect(up.dead).toBe(false)
   })
 })

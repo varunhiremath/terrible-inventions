@@ -13,7 +13,16 @@
  * the player touches something, a tab in the background. Music that does not
  * play is a disappointment. Music that throws takes the game down with it.
  */
-import { TRACKS, eighthSeconds, loopLength, readPart, type Track, type TrackName } from './score'
+import {
+  CUES,
+  TRACKS,
+  eighthSeconds,
+  loopLength,
+  readPart,
+  type CueName,
+  type Track,
+  type TrackName,
+} from './score'
 
 /** How often the scheduler wakes up. */
 const TICK_MS = 25
@@ -185,6 +194,48 @@ export function startMusic(name: TrackName): void {
       stopMusic()
     }
   }, TICK_MS)
+}
+
+/**
+ * Plays a cue once, over the top of whatever else is happening.
+ *
+ * A cue is not the loop: it is scheduled in one go, right now, and then
+ * forgotten. The dungeon has no background music at all — the original had
+ * twenty-two of these and silence in between, and the silence is what makes
+ * them land — so there is no scheduler to keep running and nothing to stop.
+ */
+export function playCue(name: CueName): void {
+  if (!enabled) return
+  const cue = CUES[name]
+  const ctx = audio()
+  if (!ctx || !master) return
+  unlockAudio()
+
+  const step = eighthSeconds(cue)
+  const start = ctx.currentTime + 0.05
+  try {
+    for (const part of cue.parts) {
+      for (const note of readPart(part.pattern)) {
+        playNote(
+          ctx,
+          master,
+          part.wave,
+          note.frequency,
+          start + note.at * step,
+          note.length * step * (part.sustain ?? 0.9),
+          part.gain,
+        )
+      }
+    }
+  } catch {
+    // A refused context should not take the game with it.
+  }
+}
+
+/** How long a cue runs, so a caller can wait for it. */
+export function cueSeconds(name: CueName): number {
+  const cue = CUES[name]
+  return loopLength(cue) * eighthSeconds(cue)
 }
 
 export function stopMusic(): void {

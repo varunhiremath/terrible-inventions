@@ -192,6 +192,8 @@ interface Spec {
   scarf?: boolean
   /** A plate over the near shoulder. */
   pauldron?: boolean
+  /** How far to round every corner off, as a fraction of his height. */
+  round?: number
 }
 
 /** How each style is put together. Kept as data so they can be compared fairly. */
@@ -200,7 +202,7 @@ export const STYLES: Record<Style, Spec> = {
   // belt, bound forearms and shins, and a scarf that trails behind him.
   warrior: {
     build: WARRIOR, ink: '#14161c', inkWidth: 0.019, rim: null,
-    hood: true, wraps: true, scarf: true, pauldron: true,
+    hood: true, wraps: true, scarf: true, pauldron: true, round: 0.016,
   },
   // Flat colour with a heavy dark line round everything. An outline is what
   // makes flat shapes read as drawn rather than as shapes.
@@ -226,11 +228,33 @@ function along(a: Point, b: Point, t: number): Point {
  * Square-ended on purpose: a body has shoulders, and a shape that rounds off
  * at the top has none.
  */
+/**
+ * Rounds off every corner of a path, by stroking it with its own colour.
+ *
+ * A polygon filled on its own has mitred corners, and a body made of mitred
+ * corners reads as cut from card. Stroking the same path with a round join and
+ * then filling it grows the shape by the stroke's half-width and softens every
+ * corner by exactly that much, which costs one extra call and no geometry.
+ */
+function soften(ctx: Ctx, path: Path2D, fill: string, radius: number): void {
+  if (radius > 0) {
+    ctx.lineJoin = 'round'
+    ctx.lineCap = 'round'
+    ctx.strokeStyle = fill
+    ctx.lineWidth = radius * 2
+    ctx.stroke(path)
+  }
+  ctx.fillStyle = fill
+  ctx.fill(path)
+}
+
 function slab(
   ctx: Ctx, from: Point, to: Point, fromHalf: number, toHalf: number,
   fill: string, ink: string | null, inkWidth: number,
   /** Shifts the whole slab sideways, for a panel down one edge of a torso. */
   offset = 0,
+  /** How far to round the corners off. */
+  round = 0,
 ): void {
   const dx = to.x - from.x
   const dy = to.y - from.y
@@ -245,12 +269,12 @@ function slab(
   path.closePath()
   if (ink) {
     ctx.strokeStyle = ink
-    ctx.lineWidth = inkWidth * 2
     ctx.lineJoin = 'round'
+    ctx.lineCap = 'round'
+    ctx.lineWidth = inkWidth * 2 + round * 2
     ctx.stroke(path)
   }
-  ctx.fillStyle = fill
-  ctx.fill(path)
+  soften(ctx, path, fill, round)
 }
 
 function bone(ctx: Ctx, a: Point, b: Point, thick: number, fill: string, ink: string | null, inkWidth: number): void {
@@ -312,7 +336,7 @@ function limb(
  */
 function profile(
   ctx: Ctx, at: Point, lean: number, hh: number, look: Look,
-  ink: string | null, inkWidth: number, hood: boolean,
+  ink: string | null, inkWidth: number, hood: boolean, round = 0,
 ): void {
   const hw = hh * 0.62
   ctx.save()
@@ -340,12 +364,12 @@ function profile(
 
   if (ink) {
     ctx.strokeStyle = ink
-    ctx.lineWidth = inkWidth * 2
     ctx.lineJoin = 'round'
+    ctx.lineCap = 'round'
+    ctx.lineWidth = inkWidth * 2 + round * 2
     ctx.stroke(face)
   }
-  ctx.fillStyle = look.skin
-  ctx.fill(face)
+  soften(ctx, face, look.skin, round)
 
   if (hood) {
     /**
@@ -367,8 +391,7 @@ function profile(
     cowl.lineTo(back + hw * 0.3, y(1.14))
     cowl.closePath()
     if (ink) ctx.stroke(cowl)
-    ctx.fillStyle = look.hair
-    ctx.fill(cowl)
+    soften(ctx, cowl, look.hair, round)
 
     // The mask across the mouth and nose, a shade off the cowl so the face
     // opening is a slot rather than a hole.
@@ -381,8 +404,7 @@ function profile(
     mask.lineTo(back + hw * 0.08, y(0.82))
     mask.closePath()
     if (ink) ctx.stroke(mask)
-    ctx.fillStyle = look.mask ?? look.hair
-    ctx.fill(mask)
+    soften(ctx, mask, look.mask ?? look.hair, round)
   } else {
     const hair = new Path2D()
     hair.moveTo(back - hw * 0.07, y(1.0))
@@ -454,7 +476,7 @@ export function drawFigure(
     const head = { x: j.w * 1.1, y: -j.h * 0.06 }
     bone(ctx, { x: -j.w * 1.3, y: -j.h * 0.05 }, { x: j.w * 0.1, y: -j.h * 0.05 }, thick * 1.1, legs, ink, iw)
     bone(ctx, { x: -j.w * 0.1, y: -j.h * 0.07 }, head, thick * 1.5, body, ink, iw)
-    profile(ctx, { x: head.x + j.w * 0.2, y: -j.h * 0.09 }, -1.35, j.h * spec.build.head * 0.9, look, ink, iw, spec.hood ?? false)
+    profile(ctx, { x: head.x + j.w * 0.2, y: -j.h * 0.09 }, -1.35, j.h * spec.build.head * 0.9, look, ink, iw, spec.hood ?? false, j.h * (spec.round ?? 0))
     ctx.restore()
     return
   }
@@ -513,7 +535,8 @@ export function drawFigure(
   // stroke overshoots the shoulder by half its own width, which put a white
   // dome over the head and turned every one of these into an egg.
   bone(ctx, j.shoulder, j.neck, thick * 0.62, dim(look.skin, 0.88), ink, iw)
-  slab(ctx, j.hip, j.shoulder, j.w * 0.26, j.w * 0.32, body, ink, iw)
+  const round = j.h * (spec.round ?? 0)
+  slab(ctx, j.hip, j.shoulder, j.w * 0.24, j.w * 0.3, body, ink, iw, 0, round)
   /**
    * The back of him, in shadow.
    *
@@ -523,11 +546,11 @@ export function drawFigure(
    * their back turned and their neck wrenched round. The light has to come
    * from one side, and it has to be the side he is facing.
    */
-  slab(ctx, j.hip, j.shoulder, j.w * 0.09, j.w * 0.11, dim(body, 0.8), null, 0, -j.w * 0.17)
+  slab(ctx, j.hip, j.shoulder, j.w * 0.08, j.w * 0.1, dim(body, 0.8), null, 0, -j.w * 0.16, round * 0.7)
 
   // The belt: wide, with a knot at the front and a short tail below it.
   const waist = along(j.hip, j.shoulder, spec.hood ? 0.19 : 0.16)
-  slab(ctx, along(j.hip, j.shoulder, 0.02), waist, j.w * 0.33, j.w * 0.33, look.trim, ink, iw)
+  slab(ctx, along(j.hip, j.shoulder, 0.02), waist, j.w * 0.31, j.w * 0.31, look.trim, ink, iw, 0, round * 0.8)
   if (spec.hood) {
     const knot = along(j.hip, j.shoulder, 0.14)
     ctx.fillStyle = dim(look.trim, 0.78)
@@ -547,7 +570,7 @@ export function drawFigure(
     ctx.fill()
   }
 
-  profile(ctx, j.neck, j.lean, j.h * spec.build.head, look, ink, iw, spec.hood ?? false)
+  profile(ctx, j.neck, j.lean, j.h * spec.build.head, look, ink, iw, spec.hood ?? false, round)
 
   limb(ctx, j.near, thick, legs, legs, ink, iw, boot, spec.wraps ? dim(legs, 1.22) : null)
   arm(j.near, sleeve, look.skin, thick * 0.86)

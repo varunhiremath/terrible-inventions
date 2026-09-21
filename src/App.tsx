@@ -46,7 +46,13 @@ export default function App() {
       stopMusic()
       return
     }
-    if (screen === 'arcade' || screen === 'dave' || screen === 'prince') startMusic('chase')
+    // The dungeon is deliberately not in this list. It scores itself out of
+    // short cues fired by what happens — a level starting, a guard noticing
+    // you, a blade landing, the clock — and it is silent in between, which is
+    // how the original worked and most of why those cues land at all. A loop
+    // running underneath would take that away, and for a while one was: the
+    // chase tune from the maze was playing over the whole thing.
+    if (screen === 'arcade' || screen === 'dave') startMusic('chase')
     else if (screen === 'shop') startMusic('shop')
     else stopMusic()
     // `save.music` is in here so switching it back on in settings starts the

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NOTHING, combine, keyAt, keyRadius, padHeight, padLayout, type Key } from './controls'
+import { NOTHING, combine, createLatch, keyAt, keyRadius, padHeight, padLayout, type Key } from './controls'
 
 const W = 960
 const H = 560
@@ -83,5 +83,57 @@ describe('pressing them', () => {
   it('cannot reach a fighting button while walking', () => {
     const strike = find(fighting, 'strike')
     expect(keyAt(strike.cx, strike.cy, walking)).not.toBe('strike')
+  })
+})
+
+describe('the latch', () => {
+  it('holds a press that is over before the next step', () => {
+    // A tap: down and up between two steps. The simulation has to see it.
+    const latch = createLatch()
+    latch.press(1, 'up')
+    latch.release(1)
+    expect(latch.read().up).toBe(true)
+  })
+
+  it('keeps holding it across frames that do not step', () => {
+    // At sixty frames a second and fifteen steps a second, three frames out of
+    // four take no step at all. A press must survive all of them.
+    const latch = createLatch()
+    latch.press(1, 'up')
+    latch.release(1)
+    for (let frame = 0; frame < 5; frame++) expect(latch.read().up).toBe(true)
+    latch.consumed()
+    expect(latch.read().up).toBe(false)
+  })
+
+  it('forgets a finished press only once a step has read it', () => {
+    const latch = createLatch()
+    latch.press(1, 'strike')
+    latch.release(1)
+    expect(latch.read().strike).toBe(true)
+    latch.consumed()
+    expect(latch.read().strike).toBe(false)
+  })
+
+  it('keeps a held button down for as long as it is held', () => {
+    const latch = createLatch()
+    latch.press(1, 'right')
+    latch.consumed()
+    expect(latch.read().right).toBe(true)
+    latch.release(1)
+    expect(latch.read().right).toBe(false)
+  })
+
+  it('tracks two thumbs at once', () => {
+    const latch = createLatch()
+    latch.press(1, 'right')
+    latch.press(2, 'up')
+    const held = latch.read()
+    expect(held.right).toBe(true)
+    expect(held.up).toBe(true)
+    latch.release(2)
+    latch.consumed()
+    expect(latch.read().right).toBe(true)
+    expect(latch.read().up).toBe(false)
   })
 })

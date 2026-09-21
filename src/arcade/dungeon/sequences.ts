@@ -28,7 +28,6 @@ export type Action =
   | 'hang'
   | 'climbUp'
   | 'climbLedge'
-  | 'hop'
   | 'crouch'
   | 'drinking'
   | 'dead'
@@ -202,26 +201,6 @@ export const SEQUENCES: Record<Action, Sequence> = {
       f(0, 0, 'climb4'),
       f(0, 0, 'climb5'),
       f(0, -1, 'climb6'),
-    ],
-    then: 'stand',
-    interruptible: false,
-    airborne: true,
-  },
-
-  /**
-   * Straight up, and down again in the same place.
-   *
-   * What the jump button does when there is nothing above to climb and no
-   * direction held. The alternative was a standing jump, which throws him two
-   * tiles forward — a surprising way to find out where the next pit is.
-   */
-  hop: {
-    frames: [
-      f(0, 0, 'crouch'),
-      f(0, 0, 'jump1'),
-      f(0, 0, 'jump2'),
-      f(0, 0, 'jump3'),
-      f(0, 0, 'land1'),
     ],
     then: 'stand',
     interruptible: false,

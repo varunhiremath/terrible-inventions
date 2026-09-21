@@ -182,5 +182,113 @@ export const SHOP: Track = {
   ],
 }
 
+/*
+ * The dungeon, in cues.
+ *
+ * The original had twenty-two of these — Prologue, Princess, Jaffar,
+ * Heartbeat, Danger, Potion, Victory, Accident, Heroic Death, The Shadow,
+ * Float, Timer, Tragic End, Embrace, Epilogue — and no loop at all. That is
+ * the part worth copying and the part everyone forgets: the game is silent
+ * nearly all of the time, so when eight bars of anything arrive they land.
+ * Background music underneath the whole thing would take that away.
+ *
+ * The idiom is Phrygian dominant on D — D Eb F# G A Bb C — which is the mode
+ * with a flattened second and a major third, and so the step of three
+ * semitones between them that the ear reads immediately as Persian. Every cue
+ * below is built out of that one scale, which is what makes them sound like
+ * each other.
+ */
+
+/** A cue is a track that plays once and stops. */
+export const DUNGEON: Track = {
+  name: 'The Dungeon',
+  beatsPerMinute: 76,
+  parts: [
+    {
+      wave: 'triangle',
+      gain: 0.15,
+      sustain: 0.95,
+      pattern: [
+        'D5 .  .  -  C5 .  Bb4 . ',
+        'A4 .  .  -  G4 .  F#4 . ',
+        'Eb4 . D4 .  .  .  -  - ',
+      ].join(' '),
+    },
+    {
+      wave: 'sine',
+      gain: 0.1,
+      sustain: 1,
+      pattern: ['D3 .  .  .  .  .  .  . ', 'D3 .  .  .  .  .  .  . ', 'A2 .  .  .  .  .  .  . '].join(' '),
+    },
+  ],
+}
+
+/** A guard has seen him. Rising, and it does not resolve. */
+export const DANGER: Track = {
+  name: 'Danger',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'square', gain: 0.13, sustain: 0.6, pattern: 'A4 Bb4 A4 Eb4 - A4 Bb4 A4 Eb4 - D5 . . .' },
+    { wave: 'triangle', gain: 0.22, sustain: 0.5, pattern: 'D3 - D3 - - D3 - D3 - - Eb3 . . .' },
+  ],
+}
+
+/** Steel. Two hits, and the second one higher. */
+export const BLADE: Track = {
+  name: 'Blade',
+  beatsPerMinute: 160,
+  parts: [{ wave: 'square', gain: 0.12, sustain: 0.35, pattern: 'Bb5 - D6 - - -' }],
+}
+
+/** A potion: the only cue in the game that goes up and stays there. */
+export const POTION: Track = {
+  name: 'Potion',
+  beatsPerMinute: 132,
+  parts: [
+    { wave: 'sine', gain: 0.14, sustain: 0.8, pattern: 'D5 F#5 A5 D6 . . - -' },
+    { wave: 'triangle', gain: 0.1, sustain: 0.9, pattern: 'D4 .  .  A4 .  .  - -' },
+  ],
+}
+
+/** Death. Falls, and the last note is the flattened second. */
+export const TRAGIC: Track = {
+  name: 'Tragic End',
+  beatsPerMinute: 66,
+  parts: [
+    { wave: 'triangle', gain: 0.16, sustain: 0.95, pattern: 'A4 .  G4 .  F#4 . Eb4 .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.12, sustain: 1, pattern: 'D3 .  .  .  .  .  Bb2 .  .  .  .  . ' },
+  ],
+}
+
+/** A level done. The same phrase as the dungeon cue, climbing instead. */
+export const VICTORY: Track = {
+  name: 'Victory',
+  beatsPerMinute: 120,
+  parts: [
+    { wave: 'square', gain: 0.13, sustain: 0.7, pattern: 'D4 Eb4 F#4 G4 A4 .  D5 .  .  . ' },
+    { wave: 'triangle', gain: 0.2, sustain: 0.8, pattern: 'D3 .  .  .  A3 .  D4 .  .  . ' },
+  ],
+}
+
+/** The clock. One low toll, and a second under it. */
+export const TIMER: Track = {
+  name: 'Timer',
+  beatsPerMinute: 96,
+  parts: [
+    { wave: 'sine', gain: 0.18, sustain: 1, pattern: 'D3 .  .  Eb3 . . ' },
+  ],
+}
+
 export const TRACKS = { chase: CHASE, shop: SHOP } as const
 export type TrackName = keyof typeof TRACKS
+
+export const CUES = {
+  dungeon: DUNGEON,
+  danger: DANGER,
+  blade: BLADE,
+  potion: POTION,
+  tragic: TRAGIC,
+  victory: VICTORY,
+  timer: TIMER,
+} as const
+export type CueName = keyof typeof CUES

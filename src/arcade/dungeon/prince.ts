@@ -118,14 +118,19 @@ function command(prince: Prince, level: Level, input: Input): Prince {
   if (input.up) {
     if (running) return begin(prince, 'runJump')
     if (forward !== 0) return begin(prince, 'standJump')
-    // Straight up. A floor above him is a ledge to climb; a wall above him is
-    // the ceiling, and the first version of this started a climb into it that
-    // played six frames and put him back exactly where he stood — which is
-    // what "the jump button does nothing" looked like from the outside.
+    // A floor above him is a ledge to climb; a wall above him is the ceiling,
+    // and the first version started a climb into it that played six frames and
+    // put him back exactly where he stood.
     const ledge =
       climbable(level, Math.round(prince.col), prince.row - 1) &&
       !prince.collapsed.includes(cellKey(prince.col, prince.row - 1))
-    return begin(prince, ledge ? 'climbLedge' : 'hop')
+    if (ledge) return begin(prince, 'climbLedge')
+    // Otherwise he jumps, forwards, the way he is facing. The version before
+    // this hopped straight up instead, on the reasoning that leaping two tiles
+    // without being asked is a surprising way to find out where the next pit
+    // is — but a hop moves him nowhere at all, so pressing the button looked
+    // exactly like pressing nothing. A jump button has to jump.
+    return begin(prince, 'standJump')
   }
 
   if (input.down) {

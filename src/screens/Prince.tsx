@@ -13,7 +13,7 @@ import {
 import { LEVELS, levelFor } from '../arcade/dungeon/levels'
 import type { Move } from '../arcade/dungeon/combat'
 import {
-  combine,
+  createLatch,
   keyAt,
   padHeight,
   padLayout,
@@ -30,6 +30,7 @@ import {
   drawRoom,
   type View,
 } from '../arcade/dungeon/draw'
+import { playCue } from '../music/player'
 import { createPacer } from '../arcade/pacing'
 import { fill } from '../config/profile'
 import { Btn } from '../ui/bits'
@@ -55,7 +56,8 @@ export function Prince() {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const runRef = useRef<Run | null>(null)
-  const touches = useRef(new Map<number, Button | null>())
+  const buttons = useRef(createLatch())
+  const wasDuel = useRef(false)
   const padRef = useRef<Key[]>([])
   const clock = useRef(0)
   const wasStrike = useRef(false)
@@ -116,7 +118,7 @@ export function Prince() {
 
       const run = runRef.current
       if (run) {
-        const held = combine([...touches.current.values()])
+        const held = buttons.current.read()
         const duel = fightingGuard(run) !== null && run.hasSword
 
         const input: Input = {
@@ -142,11 +144,52 @@ export function Prince() {
         wasStrike.current = held.strike
         wasParry.current = held.parry
 
+        let stepped = false
         const { next } = pacer.advance(run, elapsed, (s) => {
           clock.current += FIXED
+          stepped = true
           return step(s, input, duel ? move : 'none', roll)
         })
+        // Only now is it safe to forget a tap: on a frame where the clock did
+        // not advance far enough to take a step, nothing has read it yet.
+        if (stepped) buttons.current.consumed()
         runRef.current = next
+        // A window on the run, for driving the game from a browser test. Dev
+        // only: the point of it is being able to read what the prince is
+        // actually doing while a button is held, rather than guessing from a
+        // screenshot.
+        if (import.meta.env.DEV) {
+          ;(window as unknown as { dungeon?: unknown }).dungeon = {
+            action: next.prince.action,
+            col: next.prince.col,
+            row: next.prince.row,
+            facing: next.prince.facing,
+            held,
+          }
+        }
+
+        /**
+         * The cues.
+         *
+         * Fired off changes in the run rather than from inside the simulation,
+         * which stays pure and testable and knows nothing about a speaker.
+         * Nothing loops: the dungeon is silent except for these, the way the
+         * original was, and the silence is most of why they land.
+         */
+        if (next.number !== shown.level && next.status === 'playing') playCue('dungeon')
+        if (next.status !== shown.status) {
+          if (next.status === 'dead' || next.status === 'outOfTime') playCue('tragic')
+          if (next.status === 'levelDone') playCue('victory')
+        }
+        if (duel && !wasDuel.current) playCue('danger')
+        wasDuel.current = duel
+        if (next.prince.health < shown.health && next.status === 'playing') playCue('blade')
+        if (next.prince.health > shown.health) playCue('potion')
+        // Only the minute warnings, which are the only messages that arrive
+        // without anything else on screen changing to explain them.
+        if (next.message !== shown.message && next.message && /MINUTE/i.test(next.message)) {
+          playCue('timer')
+        }
 
         if (
           next.number !== shown.level ||
@@ -267,13 +310,14 @@ export function Prince() {
     return keyAt((e.clientX - rect.left) * scale, (e.clientY - rect.top) * scale, padRef.current)
   }
   const onDown = (e: React.PointerEvent) => {
-    touches.current.set(e.pointerId, readTouch(e))
+    buttons.current.press(e.pointerId, readTouch(e))
     ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
   }
   const onMove = (e: React.PointerEvent) => {
-    if (touches.current.has(e.pointerId)) touches.current.set(e.pointerId, readTouch(e))
+    if (!buttons.current.has(e.pointerId)) return
+    buttons.current.press(e.pointerId, readTouch(e))
   }
-  const onUp = (e: React.PointerEvent) => touches.current.delete(e.pointerId)
+  const onUp = (e: React.PointerEvent) => buttons.current.release(e.pointerId)
 
   useEffect(() => {
     const keys: Record<string, Button> = {
@@ -286,11 +330,11 @@ export function Prince() {
       const which = keys[e.key]
       if (!which) return
       e.preventDefault()
-      touches.current.set(slot(e.key), which)
+      buttons.current.press(slot(e.key), which)
     }
     const onKeyUp = (e: KeyboardEvent) => {
       if (!keys[e.key]) return
-      touches.current.delete(slot(e.key))
+      buttons.current.release(slot(e.key))
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
