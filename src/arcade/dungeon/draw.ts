@@ -74,11 +74,11 @@ export const INK = {
  * bone-white, the shadow a hole in the wall, the vizier's man in blue.
  */
 export const ROBES: Record<string, { robe: string; legs: string; trim: string; skin: string }> = {
-  guard: { robe: '#8a5a2a', legs: '#6e4722', trim: '#c4392c', skin: '#c99a6a' },
-  fat: { robe: '#7a3f9c', legs: '#5f3079', trim: '#c78ae0', skin: '#c99a6a' },
-  skeleton: { robe: '#cdd3dc', legs: '#aeb5c0', trim: '#7c8492', skin: '#e4e7ea' },
-  shadow: { robe: '#24242e', legs: '#1a1a22', trim: '#5a5a72', skin: '#3e3e4c' },
-  vizier: { robe: '#28569c', legs: '#1d4075', trim: '#6aa8e8', skin: '#c99a6a' },
+  guard: { robe: '#8a5230', legs: '#3a2418', trim: '#d0a13c', skin: '#c99a6a' },
+  fat: { robe: '#7a3f9c', legs: '#301a3e', trim: '#d8a0ee', skin: '#c99a6a' },
+  skeleton: { robe: '#b9c0cc', legs: '#5d6673', trim: '#8a929f', skin: '#e4e7ea' },
+  shadow: { robe: '#2a2a38', legs: '#14141c', trim: '#6a6a88', skin: '#3e3e4c' },
+  vizier: { robe: '#2c5ea8', legs: '#16294a', trim: '#7ab6f0', skin: '#c99a6a' },
 }
 
 export interface View {
@@ -790,15 +790,26 @@ export function poseFor(action: string, frame: number, stance: string): Pose {
  * skeleton, and picking between them should cost one line rather than a
  * redraw.
  */
-const STYLE: Style = 'inked'
+const STYLE: Style = 'warrior'
 
-/** The prince: white shirt, red sash, and the only one here without a hat. */
+/**
+ * The runner.
+ *
+ * A hooded fighter: dark cowl and mask, a pale gi, dark leggings, a crimson
+ * belt and a scarf that trails when he moves. The first version put him in
+ * slate from head to foot and he disappeared into the room — these rooms are
+ * dark, so the thing that has to be light is him. The dark hood and leggings
+ * frame the pale torso, and the crimson is the only saturated colour on the
+ * screen, so the eye finds him before it finds anything else. That matters
+ * more at phone size than any amount of detail does.
+ */
 const PRINCE_LOOK: Look = {
-  body: INK.tunic,
-  legs: '#cdc3a9',
-  trim: INK.sash,
-  skin: INK.skin,
-  hair: INK.hair,
+  body: '#e0d5be',
+  legs: '#515d70',
+  trim: '#c8452f',
+  skin: '#e8b98f',
+  hair: '#232a36',
+  mask: '#2f3846',
 }
 
 /** Where the prince's feet are, and how he is standing. */
@@ -827,7 +838,7 @@ export function drawGuard(ctx: Ctx, guard: Guard, view: View): void {
     guard.facing,
     // A guard always has his sword out. That is the whole of what a guard is.
     poseFor('stand', guard.frame, guard.health <= 0 ? 'dead' : guard.stance),
-    { body: robe.robe, legs: robe.legs, trim: robe.trim, skin: robe.skin, hair: '#241c18', hat: robe.trim },
+    { body: robe.robe, legs: robe.legs, trim: robe.trim, skin: robe.skin, hair: robe.legs, mask: robe.legs },
     STYLE,
     true,
   )

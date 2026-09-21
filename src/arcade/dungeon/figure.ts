@@ -67,6 +67,17 @@ export const STOCKY: Build = { height: 1.34, width: 0.19, head: 0.155, hip: 0.48
  */
 export const LEAN: Build = { height: 1.38, width: 0.15, head: 0.118, hip: 0.52, limb: 0.055 }
 
+/**
+ * A fighter: heavy through the chest and shoulders, thick in the limb.
+ *
+ * The lean build reads as an acrobat and, at the size this is played at, as a
+ * stick. Mass is what separates a warrior from a diagram, and nearly all of it
+ * is two numbers — how wide he is across the shoulders and how thick an arm
+ * is. The head comes down a little, which is what lets the shoulders look
+ * broad rather than merely wide.
+ */
+export const WARRIOR: Build = { height: 1.36, width: 0.225, head: 0.132, hip: 0.47, limb: 0.088 }
+
 interface Pose {
   lean: number
   twist: number
@@ -159,14 +170,38 @@ export interface Look {
   legs: string
   trim: string
   skin: string
+  /** Hair, or the cowl, depending on the style. */
   hair: string
+  /** The face covering, if the style has one. */
+  mask?: string
   hat?: string
 }
 
-export type Style = 'outline' | 'acrobat' | 'silhouette' | 'inked'
+export type Style = 'warrior' | 'outline' | 'acrobat' | 'silhouette' | 'inked'
+
+interface Spec {
+  build: Build
+  ink: string | null
+  inkWidth: number
+  rim: string | null
+  /** A cowl over the head and a mask across the face, instead of hair. */
+  hood?: boolean
+  /** Bindings down the forearms and the shins. */
+  wraps?: boolean
+  /** Cloth off the back of the neck that trails when he moves. */
+  scarf?: boolean
+  /** A plate over the near shoulder. */
+  pauldron?: boolean
+}
 
 /** How each style is put together. Kept as data so they can be compared fairly. */
-export const STYLES: Record<Style, { build: Build; ink: string | null; inkWidth: number; rim: string | null }> = {
+export const STYLES: Record<Style, Spec> = {
+  // The one the game uses: a hooded fighter on the heavy build, with a wide
+  // belt, bound forearms and shins, and a scarf that trails behind him.
+  warrior: {
+    build: WARRIOR, ink: '#14161c', inkWidth: 0.019, rim: null,
+    hood: true, wraps: true, scarf: true, pauldron: true,
+  },
   // Flat colour with a heavy dark line round everything. An outline is what
   // makes flat shapes read as drawn rather than as shapes.
   outline: { build: STOCKY, ink: '#171a1f', inkWidth: 0.026, rim: null },
@@ -194,6 +229,8 @@ function along(a: Point, b: Point, t: number): Point {
 function slab(
   ctx: Ctx, from: Point, to: Point, fromHalf: number, toHalf: number,
   fill: string, ink: string | null, inkWidth: number,
+  /** Shifts the whole slab sideways, for a panel down one edge of a torso. */
+  offset = 0,
 ): void {
   const dx = to.x - from.x
   const dy = to.y - from.y
@@ -201,10 +238,10 @@ function slab(
   const px = -dy / len
   const py = dx / len
   const path = new Path2D()
-  path.moveTo(from.x + px * fromHalf, from.y + py * fromHalf)
-  path.lineTo(to.x + px * toHalf, to.y + py * toHalf)
-  path.lineTo(to.x - px * toHalf, to.y - py * toHalf)
-  path.lineTo(from.x - px * fromHalf, from.y - py * fromHalf)
+  path.moveTo(from.x + px * (fromHalf + offset), from.y + py * (fromHalf + offset))
+  path.lineTo(to.x + px * (toHalf + offset), to.y + py * (toHalf + offset))
+  path.lineTo(to.x - px * (toHalf - offset), to.y - py * (toHalf - offset))
+  path.lineTo(from.x - px * (fromHalf - offset), from.y - py * (fromHalf - offset))
   path.closePath()
   if (ink) {
     ctx.strokeStyle = ink
@@ -239,6 +276,7 @@ function bone(ctx: Ctx, a: Point, b: Point, thick: number, fill: string, ink: st
 function limb(
   ctx: Ctx, l: Limbs, thick: number, upper: string, lower: string,
   ink: string | null, inkWidth: number, boot: { size: number; colour: string } | null,
+  wraps?: string | null,
 ): void {
   bone(ctx, l.hip, l.knee, thick, upper, ink, inkWidth)
   bone(ctx, l.knee, l.ankle, thick * 0.88, lower, ink, inkWidth)
@@ -255,6 +293,13 @@ function limb(
     }
     bone(ctx, l.ankle, toe, thick * 1.05, boot.colour, ink, inkWidth)
   }
+  if (wraps) {
+    for (const at of [0.3, 0.55, 0.8]) {
+      const a = along(l.knee, l.ankle, at)
+      const b = along(l.knee, l.ankle, at + 0.1)
+      bone(ctx, a, b, thick * 1.02, wraps, null, 0)
+    }
+  }
 }
 
 /**
@@ -265,7 +310,10 @@ function limb(
  * hair stops where hair stops, which is most of what tells you which way
  * somebody is facing.
  */
-function profile(ctx: Ctx, at: Point, lean: number, hh: number, look: Look, ink: string | null, inkWidth: number): void {
+function profile(
+  ctx: Ctx, at: Point, lean: number, hh: number, look: Look,
+  ink: string | null, inkWidth: number, hood: boolean,
+): void {
   const hw = hh * 0.62
   ctx.save()
   ctx.translate(at.x, at.y)
@@ -299,19 +347,57 @@ function profile(ctx: Ctx, at: Point, lean: number, hh: number, look: Look, ink:
   ctx.fillStyle = look.skin
   ctx.fill(face)
 
-  const hair = new Path2D()
-  hair.moveTo(back - hw * 0.07, y(1.0))
-  hair.lineTo(back - hw * 0.07, y(0.2))
-  hair.lineTo(back + hw * 0.22, y(-0.04))
-  hair.lineTo(front - hw * 0.14, y(-0.04))
-  hair.lineTo(front - hw * 0.01, y(0.32))
-  hair.lineTo(front - hw * 0.3, y(0.28))
-  hair.lineTo(back + hw * 0.26, y(0.34))
-  hair.lineTo(back + hw * 0.24, y(1.0))
-  hair.closePath()
-  if (ink) ctx.stroke(hair)
-  ctx.fillStyle = look.hair
-  ctx.fill(hair)
+  if (hood) {
+    /**
+     * A cowl, drawn as one shape that wraps the skull and comes down the neck,
+     * with the face left open from the brow to the cheekbone. What makes a
+     * hood read as a hood rather than as a hat is that it is *bigger* than the
+     * head — it stands off the crown and hangs past the jaw.
+     */
+    const cowl = new Path2D()
+    cowl.moveTo(back - hw * 0.22, y(1.16))
+    cowl.lineTo(back - hw * 0.22, y(0.2))
+    cowl.lineTo(back + hw * 0.16, y(-0.16))
+    cowl.lineTo(front - hw * 0.06, y(-0.14))
+    cowl.lineTo(front + hw * 0.06, y(0.3))
+    cowl.lineTo(front - hw * 0.26, y(0.28))
+    cowl.lineTo(front - hw * 0.3, y(0.44))
+    cowl.lineTo(front + hw * 0.06, y(0.56))
+    cowl.lineTo(front + hw * 0.04, y(0.86))
+    cowl.lineTo(back + hw * 0.3, y(1.14))
+    cowl.closePath()
+    if (ink) ctx.stroke(cowl)
+    ctx.fillStyle = look.hair
+    ctx.fill(cowl)
+
+    // The mask across the mouth and nose, a shade off the cowl so the face
+    // opening is a slot rather than a hole.
+    const mask = new Path2D()
+    mask.moveTo(back + hw * 0.1, y(0.5))
+    mask.lineTo(front - hw * 0.28, y(0.46))
+    mask.lineTo(front + hw * 0.08, y(0.56))
+    mask.lineTo(front + hw * 0.04, y(0.84))
+    mask.lineTo(back + hw * 0.24, y(0.96))
+    mask.lineTo(back + hw * 0.08, y(0.82))
+    mask.closePath()
+    if (ink) ctx.stroke(mask)
+    ctx.fillStyle = look.mask ?? look.hair
+    ctx.fill(mask)
+  } else {
+    const hair = new Path2D()
+    hair.moveTo(back - hw * 0.07, y(1.0))
+    hair.lineTo(back - hw * 0.07, y(0.2))
+    hair.lineTo(back + hw * 0.22, y(-0.04))
+    hair.lineTo(front - hw * 0.14, y(-0.04))
+    hair.lineTo(front - hw * 0.01, y(0.32))
+    hair.lineTo(front - hw * 0.3, y(0.28))
+    hair.lineTo(back + hw * 0.26, y(0.34))
+    hair.lineTo(back + hw * 0.24, y(1.0))
+    hair.closePath()
+    if (ink) ctx.stroke(hair)
+    ctx.fillStyle = look.hair
+    ctx.fill(hair)
+  }
 
   if (look.hat) {
     const hat = new Path2D()
@@ -325,8 +411,9 @@ function profile(ctx: Ctx, at: Point, lean: number, hh: number, look: Look, ink:
     ctx.fill(hat)
   }
 
+  // One eye, under the brow, because a profile has one.
   ctx.fillStyle = ink ?? '#1a140d'
-  ctx.fillRect(front - hw * 0.26, y(0.4), hw * 0.15, Math.max(1.5, hh * 0.08))
+  ctx.fillRect(front - hw * 0.26, y(0.4), hw * 0.16, Math.max(1.5, hh * 0.085))
   ctx.restore()
 }
 
@@ -367,7 +454,7 @@ export function drawFigure(
     const head = { x: j.w * 1.1, y: -j.h * 0.06 }
     bone(ctx, { x: -j.w * 1.3, y: -j.h * 0.05 }, { x: j.w * 0.1, y: -j.h * 0.05 }, thick * 1.1, legs, ink, iw)
     bone(ctx, { x: -j.w * 0.1, y: -j.h * 0.07 }, head, thick * 1.5, body, ink, iw)
-    profile(ctx, { x: head.x + j.w * 0.2, y: -j.h * 0.09 }, -1.35, j.h * spec.build.head * 0.9, look, ink, iw)
+    profile(ctx, { x: head.x + j.w * 0.2, y: -j.h * 0.09 }, -1.35, j.h * spec.build.head * 0.9, look, ink, iw, spec.hood ?? false)
     ctx.restore()
     return
   }
@@ -387,29 +474,82 @@ export function drawFigure(
   const arm = (l: Limbs, cloth: string, hand: string, t: number) => {
     bone(ctx, l.shoulder, l.elbow, t, cloth, ink, iw)
     const wrist = along(l.elbow, l.hand, 0.72)
-    bone(ctx, l.elbow, wrist, t * 0.88, cloth, ink, iw)
+    bone(ctx, l.elbow, wrist, t * 0.88, spec.wraps ? dim(cloth, 0.74) : cloth, ink, iw)
+    if (spec.wraps) {
+      // Three bindings, which is enough to say bound without drawing rope.
+      for (const at of [0.25, 0.5, 0.75]) {
+        const a = along(l.elbow, wrist, at)
+        const b = along(l.elbow, wrist, at + 0.1)
+        bone(ctx, a, b, t * 0.94, dim(cloth, 0.92), null, 0)
+      }
+    }
     bone(ctx, wrist, l.hand, t * 0.8, hand, ink, iw)
   }
 
-  limb(ctx, j.far, thick, farLegs, farLegs, ink, iw, boot)
+  limb(ctx, j.far, thick, farLegs, farLegs, ink, iw, boot, spec.wraps ? dim(farLegs, 1.22) : null)
   arm(j.far, dim(sleeve, 0.74), dim(look.skin, 0.68), thick * 0.82)
+
+  // The scarf goes on before he does, so it hangs behind him. How far it
+  // streams out comes from how far his legs are apart and how hard he is
+  // leaning — no clock needed, and it lands differently on every frame of a
+  // run for free.
+  if (spec.scarf) {
+    const drive = Math.min(1, Math.abs(pose.legFront - pose.legBack) * 0.7 + Math.abs(pose.lean) * 1.1)
+    const root = along(j.shoulder, j.neck, 0.12)
+    const tip = { x: root.x - j.w * (0.34 + drive * 0.62), y: root.y + j.h * (0.14 - drive * 0.13) }
+    ctx.lineCap = 'round'
+    for (const [colour, width] of [[ink, thick * 0.3 + iw * 2], [look.trim, thick * 0.3]] as const) {
+      if (!colour) continue
+      ctx.strokeStyle = colour
+      ctx.lineWidth = width
+      ctx.beginPath()
+      ctx.moveTo(root.x, root.y)
+      ctx.quadraticCurveTo(root.x - j.w * 0.24, root.y + j.h * 0.03, tip.x, tip.y)
+      ctx.stroke()
+    }
+  }
 
   // Neck, then the torso as a shape rather than a fat stroke. A round-capped
   // stroke overshoots the shoulder by half its own width, which put a white
   // dome over the head and turned every one of these into an egg.
   bone(ctx, j.shoulder, j.neck, thick * 0.62, dim(look.skin, 0.88), ink, iw)
-  slab(ctx, j.hip, j.shoulder, j.w * 0.24, j.w * 0.29, body, ink, iw)
-  // The back of him, in shadow. A flat panel of one colour reads as a card.
-  slab(ctx, along(j.hip, j.shoulder, 0), along(j.hip, j.shoulder, 1),
-    j.w * 0.24, j.w * 0.29, dim(body, 0.9), null, 0)
-  slab(ctx, along(j.hip, j.shoulder, 0), along(j.hip, j.shoulder, 1),
-    j.w * 0.14, j.w * 0.18, body, null, 0)
-  const waist = along(j.hip, j.shoulder, 0.16)
-  slab(ctx, along(j.hip, j.shoulder, 0.02), waist, j.w * 0.3, j.w * 0.3, look.trim, ink, iw)
+  slab(ctx, j.hip, j.shoulder, j.w * 0.26, j.w * 0.32, body, ink, iw)
+  /**
+   * The back of him, in shadow.
+   *
+   * Only the back. The first version shaded both edges and left a light stripe
+   * down the middle, which is how you light a body that is facing you — with a
+   * profile head above it the whole figure read as somebody standing with
+   * their back turned and their neck wrenched round. The light has to come
+   * from one side, and it has to be the side he is facing.
+   */
+  slab(ctx, j.hip, j.shoulder, j.w * 0.09, j.w * 0.11, dim(body, 0.8), null, 0, -j.w * 0.17)
 
-  profile(ctx, j.neck, j.lean, j.h * spec.build.head, look, ink, iw)
+  // The belt: wide, with a knot at the front and a short tail below it.
+  const waist = along(j.hip, j.shoulder, spec.hood ? 0.19 : 0.16)
+  slab(ctx, along(j.hip, j.shoulder, 0.02), waist, j.w * 0.33, j.w * 0.33, look.trim, ink, iw)
+  if (spec.hood) {
+    const knot = along(j.hip, j.shoulder, 0.14)
+    ctx.fillStyle = dim(look.trim, 0.78)
+    ctx.beginPath()
+    ctx.ellipse(knot.x + j.w * 0.2, knot.y, j.w * 0.1, j.w * 0.13, 0, 0, Math.PI * 2)
+    ctx.fill()
+    bone(ctx, { x: knot.x + j.w * 0.2, y: knot.y }, { x: knot.x + j.w * 0.16, y: knot.y + j.h * 0.12 },
+      thick * 0.45, look.trim, ink, iw)
+  }
 
-  limb(ctx, j.near, thick, legs, legs, ink, iw, boot)
+  // A plate over the near shoulder, which is most of what says "fighter".
+  if (spec.pauldron) {
+    ctx.fillStyle = dim(body, 0.74)
+    ctx.beginPath()
+    ctx.ellipse(j.shoulder.x + j.w * 0.12, j.shoulder.y + j.h * 0.028, j.w * 0.24, j.w * 0.17, -j.lean, 0, Math.PI * 2)
+    if (ink) { ctx.strokeStyle = ink; ctx.lineWidth = iw * 2; ctx.stroke() }
+    ctx.fill()
+  }
+
+  profile(ctx, j.neck, j.lean, j.h * spec.build.head, look, ink, iw, spec.hood ?? false)
+
+  limb(ctx, j.near, thick, legs, legs, ink, iw, boot, spec.wraps ? dim(legs, 1.22) : null)
   arm(j.near, sleeve, look.skin, thick * 0.86)
 
   // A light down the leading edge, which is the whole of why a silhouette
