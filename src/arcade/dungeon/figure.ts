@@ -57,7 +57,15 @@ export interface Build {
 /** The build the game has shipped with so far, for comparison. */
 export const STOCKY: Build = { height: 1.34, width: 0.19, head: 0.155, hip: 0.48, limb: 0.072 }
 /** Long legs, narrow shoulders, a small head: the shape of an acrobat. */
-export const LEAN: Build = { height: 1.5, width: 0.15, head: 0.118, hip: 0.52, limb: 0.055 }
+/**
+ * Long legs, narrow shoulders, a small head: the shape of an acrobat.
+ *
+ * The height is the same as the stocky build's on purpose — a figure much
+ * taller than this is drawn through the floor above him, because a room is
+ * only three floors and he has to fit inside one. What makes this build read
+ * as long is where the hips are and how small the head is, not how tall he is.
+ */
+export const LEAN: Build = { height: 1.38, width: 0.15, head: 0.118, hip: 0.52, limb: 0.055 }
 
 interface Pose {
   lean: number
@@ -107,6 +115,9 @@ export function skeleton(pose: Pose, size: number, build: Build): Joints {
     y: shoulder.y - Math.cos(pose.lean) * h * 0.03,
   }
 
+  // A knee folds the shin backwards; an elbow folds the forearm forwards. They
+  // are opposite joints and the first version bent them the same way, which
+  // gave everybody a second pair of knees where their elbows should be.
   const leg = (swing: number, bend: number, lift: number, side: number): Limbs => {
     const root = { x: hip.x + side * w * 0.09, y: hip.y - lift * h }
     const knee = reach(root, swing, thigh)
@@ -121,11 +132,11 @@ export function skeleton(pose: Pose, size: number, build: Build): Joints {
   }
   const arm = (swing: number, bend: number, side: number, legs: Limbs): Limbs => {
     const root = {
-      x: shoulder.x + side * w * 0.14 + Math.sin(pose.lean) * 0,
+      x: shoulder.x + side * w * 0.14,
       y: shoulder.y + h * 0.025,
     }
     const elbow = reach(root, swing + pose.lean, upper)
-    return { ...legs, shoulder: root, elbow, hand: reach(elbow, swing + bend + pose.lean, fore) }
+    return { ...legs, shoulder: root, elbow, hand: reach(elbow, swing - bend + pose.lean, fore) }
   }
 
   const nearLeg = leg(pose.legFront, pose.kneeFront, pose.liftFront, 1)
@@ -232,8 +243,16 @@ function limb(
   bone(ctx, l.hip, l.knee, thick, upper, ink, inkWidth)
   bone(ctx, l.knee, l.ankle, thick * 0.88, lower, ink, inkWidth)
   if (boot) {
-    // The foot points forward from the ankle, which is +x in this frame.
-    const toe = { x: l.ankle.x + boot.size, y: l.ankle.y }
+    // The foot points forward from the ankle and stays near level, whatever
+    // the shin is doing. Drawn in the shin's own frame it swings round with
+    // the leg, and a foot that points backwards on the back half of a stride
+    // is the single loudest thing wrong with a walk.
+    const shin = Math.atan2(l.ankle.x - l.knee.x, l.ankle.y - l.knee.y)
+    const tilt = Math.max(-0.5, Math.min(0.5, -shin * 0.35))
+    const toe = {
+      x: l.ankle.x + Math.cos(tilt) * boot.size,
+      y: l.ankle.y + Math.sin(tilt) * boot.size,
+    }
     bone(ctx, l.ankle, toe, thick * 1.05, boot.colour, ink, inkWidth)
   }
 }
@@ -353,28 +372,45 @@ export function drawFigure(
     return
   }
 
-  // An upper arm in the tunic's own colour disappears into the tunic. With a
-  // line round it you can still see where it is; without one the sleeve has to
-  // carry its own shade or the figure comes out armless.
-  const sleeve = ink ? body : dim(body, 0.84)
+  // An upper arm in the tunic's own colour disappears into the tunic. A line
+  // round it is not enough either — an outlined white shape on a white chest
+  // is still a puzzle — so the sleeve always carries its own shade.
+  const sleeve = dim(body, 0.86)
+
+  /**
+   * An arm: sleeve to the wrist, then a hand.
+   *
+   * Drawing the whole forearm in skin put a bare peach stripe down the middle
+   * of a white tunic in every standing pose — he wears sleeves, so only the
+   * hand is skin, and the hand is short.
+   */
+  const arm = (l: Limbs, cloth: string, hand: string, t: number) => {
+    bone(ctx, l.shoulder, l.elbow, t, cloth, ink, iw)
+    const wrist = along(l.elbow, l.hand, 0.72)
+    bone(ctx, l.elbow, wrist, t * 0.88, cloth, ink, iw)
+    bone(ctx, wrist, l.hand, t * 0.8, hand, ink, iw)
+  }
 
   limb(ctx, j.far, thick, farLegs, farLegs, ink, iw, boot)
-  bone(ctx, j.far.shoulder, j.far.elbow, thick * 0.82, dim(sleeve, 0.72), ink, iw)
-  bone(ctx, j.far.elbow, j.far.hand, thick * 0.72, dim(look.skin, 0.66), ink, iw)
+  arm(j.far, dim(sleeve, 0.74), dim(look.skin, 0.68), thick * 0.82)
 
   // Neck, then the torso as a shape rather than a fat stroke. A round-capped
   // stroke overshoots the shoulder by half its own width, which put a white
   // dome over the head and turned every one of these into an egg.
   bone(ctx, j.shoulder, j.neck, thick * 0.62, dim(look.skin, 0.88), ink, iw)
   slab(ctx, j.hip, j.shoulder, j.w * 0.24, j.w * 0.29, body, ink, iw)
+  // The back of him, in shadow. A flat panel of one colour reads as a card.
+  slab(ctx, along(j.hip, j.shoulder, 0), along(j.hip, j.shoulder, 1),
+    j.w * 0.24, j.w * 0.29, dim(body, 0.9), null, 0)
+  slab(ctx, along(j.hip, j.shoulder, 0), along(j.hip, j.shoulder, 1),
+    j.w * 0.14, j.w * 0.18, body, null, 0)
   const waist = along(j.hip, j.shoulder, 0.16)
   slab(ctx, along(j.hip, j.shoulder, 0.02), waist, j.w * 0.3, j.w * 0.3, look.trim, ink, iw)
 
   profile(ctx, j.neck, j.lean, j.h * spec.build.head, look, ink, iw)
 
   limb(ctx, j.near, thick, legs, legs, ink, iw, boot)
-  bone(ctx, j.near.shoulder, j.near.elbow, thick * 0.86, sleeve, ink, iw)
-  bone(ctx, j.near.elbow, j.near.hand, thick * 0.76, look.skin, ink, iw)
+  arm(j.near, sleeve, look.skin, thick * 0.86)
 
   // A light down the leading edge, which is the whole of why a silhouette
   // reads as a body rather than as a hole in the wall.

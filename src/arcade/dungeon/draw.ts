@@ -13,6 +13,7 @@
 import { ROOM_COLS, ROOM_ROWS, TILE, tileAt, type Level } from './level'
 import type { Prince } from './prince'
 import type { Guard } from './run'
+import { drawFigure, type Look, type Style } from './figure'
 
 export interface Stone {
   face: string
@@ -612,10 +613,10 @@ export function poseFor(action: string, frame: number, stance: string): Pose {
       pose.kneeBack = air < 0.25 ? 1.5 : 0.7
       pose.liftFront = 0.04
       pose.liftBack = 0.04
-      pose.armSword = -1.35
-      pose.armFree = -0.95
-      pose.elbowSword = 0.4
-      pose.elbowFree = 0.7
+      pose.armSword = -0.9
+      pose.armFree = -0.5
+      pose.elbowSword = 1.1
+      pose.elbowFree = 1.3
       break
     }
     case 'fall':
@@ -636,10 +637,10 @@ export function poseFor(action: string, frame: number, stance: string): Pose {
       pose.legBack = -0.34
       pose.kneeFront = 0.5
       pose.kneeBack = 0.5
-      pose.armFree = -0.8
-      pose.armSword = -0.6
-      pose.elbowFree = 0.8
-      pose.elbowSword = 0.8
+      pose.armFree = 0.45
+      pose.armSword = 0.3
+      pose.elbowFree = 1.0
+      pose.elbowSword = 0.9
       break
     case 'hardLand':
       // Down on one knee, and slow about getting up.
@@ -782,343 +783,53 @@ export function poseFor(action: string, frame: number, stance: string): Pose {
 }
 
 /**
- * The same colour, darker.
+ * The style every character in the dungeon is drawn in.
  *
- * Arms drawn in the tunic colour vanish into the tunic, which cost the first
- * version of this figure both its sleeves. One multiplier keeps every look's
- * sleeves and folds in step with its own colour rather than needing a second
- * hand-picked shade per character.
+ * One word, because it is meant to be changed: 'outline', 'acrobat',
+ * 'silhouette' and 'inked' are four different-looking people over the same
+ * skeleton, and picking between them should cost one line rather than a
+ * redraw.
  */
-function darker(hex: string, by: number): string {
-  const n = parseInt(hex.slice(1), 16)
-  const c = (shift: number) => Math.round(((n >> shift) & 255) * by)
-  return `rgb(${c(16)},${c(8)},${c(0)})`
-}
+const STYLE: Style = 'inked'
 
-interface Look {
-  /** Tunic, shirt, robe: whatever is on the top half. */
-  body: string
-  /** Trousers. Usually a shade off the tunic, so the legs read separately. */
-  legs: string
-  /** Sash and cuffs. */
-  trim: string
-  skin: string
-  hair: string
-  /** Something on the head, for the guards. */
-  hat?: string
-  /** Is this one holding a sword at all? */
-  armed: boolean
-}
-
-const BOOT = '#3a2c22'
-
-/**
- * A limb in two segments, with a joint that bends.
- *
- * One straight rectangle per arm was the first attempt and it made everybody
- * look like a deckchair. An elbow and a knee are most of what separates a
- * person from a diagram, and they cost one extra transform each.
- */
-function jointed(
-  ctx: Ctx,
-  ox: number, oy: number,
-  angle: number, bend: number,
-  upper: number, lower: number, thick: number,
-  upperColour: string, lowerColour: string,
-  foot: { w: number; h: number; colour: string } | null,
-  edge?: string,
-): void {
-  ctx.save()
-  ctx.translate(ox, oy)
-  ctx.rotate(angle)
-  ctx.fillStyle = upperColour
-  ctx.fillRect(-thick / 2, -thick * 0.3, thick, upper + thick * 0.5)
-  if (edge) {
-    ctx.fillStyle = edge
-    ctx.fillRect(-thick / 2, -thick * 0.3, Math.max(1.5, thick * 0.2), upper + thick * 0.5)
-  }
-  ctx.translate(0, upper)
-  ctx.rotate(bend)
-  ctx.fillStyle = lowerColour
-  ctx.fillRect(-thick * 0.44, 0, thick * 0.88, lower)
-  if (foot) {
-    ctx.translate(0, lower)
-    ctx.fillStyle = foot.colour
-    // The foot points forward, which is +x now that the whole figure is
-    // mirrored by its facing rather than every limb being mirrored by hand.
-    ctx.fillRect(-foot.w * 0.3, -foot.h * 0.2, foot.w, foot.h)
-  }
-  ctx.restore()
-}
-
-/**
- * A head, in profile.
- *
- * The first version was a rectangle with a triangle stuck on the front, and it
- * read as a face looking straight at you with its neck wrenched round. A
- * profile is a silhouette, not a decorated box: what says which way somebody
- * is facing is the *outline* — a flat back to the skull, a brow, a nose that
- * juts, a notch for the mouth and a chin that falls away behind it. Straight
- * segments rather than curves, to sit with the rest of the art and stay crisp
- * when a whole figure is forty pixels tall.
- */
-function head(ctx: Ctx, shoulderY: number, w: number, h: number, look: Look): void {
-  const hh = h * 0.155
-  const hw = w * 0.42
-  // Placed so the chin sits just clear of the shoulders, with the neck making
-  // up the difference. Sunk any lower and the head reads as bolted on.
-  const top = shoulderY - h * 0.032 - hh * 0.88
-  const back = -hw * 0.5
-  const front = hw * 0.34
-  const at = (fraction: number) => top + hh * fraction
-
-  // Neck, down into the collar of the tunic.
-  ctx.fillStyle = darker(look.skin, 0.84)
-  ctx.fillRect(back + hw * 0.14, at(0.72), hw * 0.5, shoulderY + h * 0.025 - at(0.72))
-
-  ctx.fillStyle = look.skin
-  ctx.beginPath()
-  ctx.moveTo(back, at(0.84))
-  ctx.lineTo(back, at(0.22))
-  ctx.lineTo(back + hw * 0.24, at(0.02))
-  ctx.lineTo(front - hw * 0.16, top)
-  ctx.lineTo(front, at(0.3))
-  ctx.lineTo(front - hw * 0.05, at(0.42))
-  ctx.lineTo(front + hw * 0.12, at(0.55))
-  ctx.lineTo(front - hw * 0.04, at(0.61))
-  ctx.lineTo(front + hw * 0.02, at(0.7))
-  ctx.lineTo(front - hw * 0.07, at(0.76))
-  ctx.lineTo(front - hw * 0.02, at(0.88))
-  ctx.lineTo(back + hw * 0.36, at(0.95))
-  ctx.closePath()
-  ctx.fill()
-
-  // Hair over the crown and down the back, stopping at the brow. Drawn as its
-  // own shape rather than a cap on a box: what tells you which way somebody is
-  // facing is where the hair *stops*.
-  ctx.fillStyle = look.hair
-  ctx.beginPath()
-  ctx.moveTo(back - hw * 0.07, at(1.0))
-  ctx.lineTo(back - hw * 0.07, at(0.2))
-  ctx.lineTo(back + hw * 0.22, at(-0.04))
-  ctx.lineTo(front - hw * 0.14, at(-0.04))
-  ctx.lineTo(front - hw * 0.01, at(0.32))
-  ctx.lineTo(front - hw * 0.3, at(0.28))
-  ctx.lineTo(back + hw * 0.26, at(0.34))
-  ctx.lineTo(back + hw * 0.24, at(1.0))
-  ctx.closePath()
-  ctx.fill()
-
-  if (look.hat) {
-    ctx.fillStyle = look.hat
-    ctx.beginPath()
-    ctx.moveTo(back - hw * 0.14, at(0.34))
-    ctx.lineTo(back - hw * 0.05, at(-0.16))
-    ctx.lineTo(front - hw * 0.05, at(-0.16))
-    ctx.lineTo(front + hw * 0.03, at(0.3))
-    ctx.closePath()
-    ctx.fill()
-    ctx.fillStyle = darker(look.hat, 0.68)
-    ctx.fillRect(back - hw * 0.12, at(0.22), hw * 1.0, hh * 0.13)
-  }
-
-  // One eye, under the brow, because a profile has one.
-  ctx.fillStyle = '#1a140d'
-  ctx.fillRect(front - hw * 0.26, at(0.4), hw * 0.15, Math.max(2, hh * 0.13))
-  // The mouth, which is what stops the lower face reading blank.
-  ctx.fillStyle = darker(look.skin, 0.62)
-  ctx.fillRect(front - hw * 0.17, at(0.71), hw * 0.17, Math.max(1.5, hh * 0.06))
-}
-
-/**
- * A person.
- *
- * Ours: a slim figure in a white tunic and a red sash, guards in coloured
- * robes with a headdress. Everything is drawn in a frame that has already been
- * mirrored to face the right way, so forward is always +x and there is no
- * `* facing` sprinkled through the geometry to get wrong.
- */
-function figure(
-  ctx: Ctx,
-  x: number,
-  footY: number,
-  s: number,
-  facing: 1 | -1,
-  look: Look,
-  pose: Pose,
-): void {
-  const h = s * 1.34
-  const w = s * 0.5
-
-  ctx.save()
-  ctx.translate(x, footY)
-  // A turn is drawn by squeezing the whole figure towards its own centre line,
-  // which is as much foreshortening as a flat figure needs to sell one.
-  ctx.scale(facing * (1 - pose.twist * 0.62), 1)
-
-  // The shadow he stands in. Without it a figure floats a little above the
-  // floor no matter how carefully the feet are placed.
-  ctx.fillStyle = 'rgba(0,0,0,0.42)'
-  ctx.beginPath()
-  ctx.ellipse(0, 0, w * 0.52, h * 0.03, 0, 0, Math.PI * 2)
-  ctx.fill()
-
-  if (pose.flat > 0) {
-    // Face down, and not getting up. Laid out along the floor at full length,
-    // so it is legible as a body rather than as a smudge on the tile.
-    const armOut = darker(look.body, 0.78)
-    ctx.fillStyle = look.legs
-    ctx.fillRect(-w * 1.5, -h * 0.13, w * 1.45, h * 0.13)
-    ctx.fillStyle = BOOT
-    ctx.fillRect(-w * 1.78, -h * 0.11, w * 0.32, h * 0.11)
-    ctx.fillStyle = look.body
-    ctx.fillRect(-w * 0.1, -h * 0.18, w * 1.2, h * 0.18)
-    ctx.fillStyle = look.trim
-    ctx.fillRect(-w * 0.14, -h * 0.18, w * 0.13, h * 0.18)
-    ctx.fillStyle = armOut
-    ctx.fillRect(w * 0.18, -h * 0.26, w * 0.16, h * 0.1)
-    ctx.fillStyle = look.skin
-    ctx.fillRect(w * 1.05, -h * 0.2, w * 0.38, h * 0.2)
-    ctx.fillStyle = look.hair
-    ctx.fillRect(w * 1.14, -h * 0.24, w * 0.34, h * 0.1)
-    ctx.restore()
-    return
-  }
-
-  const fold = pose.crouch * h * 0.2
-  const hipY = -h * 0.48 + fold
-  const torso = h * 0.36 - fold * 0.5
-  const thigh = (h * 0.24 - fold * 0.35)
-  const shin = (h * 0.24 - fold * 0.35)
-  const upperArm = h * 0.17
-  const foreArm = h * 0.16
-  const legThick = w * 0.17
-  const armThick = w * 0.135
-  const foot = { w: w * 0.38, h: h * 0.045, colour: BOOT }
-
-  // Legs, from the hips, far one first so the near leg reads in front. The
-  // hips sit close together: seen from the side, a person's legs are one in
-  // front of the other, and it is the angle and the shade that separate them,
-  // not a gap. Setting them a body's width apart was drawing him front-on
-  // from the waist down while his head was in profile.
-  jointed(ctx, -w * 0.09, hipY - pose.liftBack * h, pose.legBack, pose.kneeBack,
-    thigh, shin, legThick, darker(look.legs, 0.8), darker(look.legs, 0.8), { ...foot, colour: darker(BOOT, 0.74) })
-  jointed(ctx, w * 0.09, hipY - pose.liftFront * h, pose.legFront, pose.kneeFront,
-    thigh, shin, legThick, look.legs, look.legs, foot)
-
-  // Everything above the hips pivots with the lean. Doing it as a real pivot
-  // rather than a shear is what stops a leaning figure looking sheared.
-  ctx.save()
-  ctx.translate(0, hipY)
-  ctx.rotate(-pose.lean)
-
-  const torsoTop = -torso
-  const shoulderY = torsoTop + h * 0.025
-  const sleeve = darker(look.body, 0.88)
-
-  // The far arm goes on before the torso does, because in profile it is
-  // behind him. Painted afterwards it came out as a dark stripe laid down the
-  // front of the tunic, which was most of what made the figure look wrong.
-  jointed(ctx, -w * 0.06, shoulderY, pose.armFree, pose.elbowFree,
-    upperArm, foreArm, armThick, darker(look.body, 0.62), darker(look.skin, 0.62), null)
-
-  // Torso: narrow at the waist, wider at the shoulders.
-  ctx.fillStyle = look.body
-  ctx.beginPath()
-  ctx.moveTo(-w * 0.17, 0)
-  ctx.lineTo(w * 0.17, 0)
-  ctx.lineTo(w * 0.22, torsoTop)
-  ctx.lineTo(-w * 0.21, torsoTop)
-  ctx.closePath()
-  ctx.fill()
-  // The back of him, in shadow, so the torso is a body rather than a cut-out.
-  ctx.fillStyle = darker(look.body, 0.86)
-  ctx.beginPath()
-  ctx.moveTo(-w * 0.17, 0)
-  ctx.lineTo(-w * 0.07, 0)
-  ctx.lineTo(-w * 0.11, torsoTop)
-  ctx.lineTo(-w * 0.21, torsoTop)
-  ctx.closePath()
-  ctx.fill()
-
-  // The sash, which is the one splash of colour on him and how you pick him
-  // out of a room at a glance.
-  ctx.fillStyle = look.trim
-  ctx.fillRect(-w * 0.2, -h * 0.05, w * 0.42, h * 0.055)
-  ctx.fillStyle = darker(look.trim, 0.8)
-  ctx.fillRect(w * 0.1, -h * 0.05, w * 0.12, h * 0.14)
-
-  head(ctx, shoulderY, w, h, look)
-
-  // The near arm, in front of the body. Almost the tunic's own colour, with a
-  // dark edge down its back: a sleeve two shades off reads as a stripe painted
-  // on him, where an edge reads as an arm in front of a chest.
-  jointed(ctx, w * 0.14, shoulderY, pose.armSword, pose.elbowSword,
-    upperArm, foreArm, armThick * 1.08, sleeve, look.skin, null, darker(look.body, 0.6))
-
-  if (look.armed && pose.blade > 0) {
-    ctx.save()
-    ctx.translate(w * 0.14, shoulderY)
-    ctx.rotate(pose.armSword)
-    ctx.translate(0, upperArm)
-    ctx.rotate(pose.elbowSword)
-    ctx.translate(0, foreArm)
-    // Undo the arm, so the blade points where the pose says rather than
-    // wherever the elbow happens to have left the hand.
-    ctx.rotate(-(pose.armSword + pose.elbowSword))
-    ctx.rotate(pose.bladeTilt)
-    ctx.fillStyle = '#c8a24a'
-    ctx.fillRect(-w * 0.1, -w * 0.13, w * 0.22, w * 0.26)
-    ctx.fillRect(w * 0.02, -w * 0.05, w * 0.12, w * 0.1)
-    const len = s * (0.3 + pose.blade * 0.36)
-    const thick = Math.max(2.5, w * 0.075)
-    ctx.fillStyle = INK.blade
-    ctx.beginPath()
-    ctx.moveTo(w * 0.14, -thick / 2)
-    ctx.lineTo(w * 0.14 + len, -thick * 0.15)
-    ctx.lineTo(w * 0.14 + len, thick * 0.15)
-    ctx.lineTo(w * 0.14, thick / 2)
-    ctx.closePath()
-    ctx.fill()
-    ctx.fillStyle = INK.bladeDark
-    ctx.fillRect(w * 0.14, 0, len, Math.max(1, thick * 0.25))
-    ctx.restore()
-  }
-
-  ctx.restore()
-  ctx.restore()
-}
-
-/** The prince: white tunic, red sash, and the only one in the room without a hat. */
-const PRINCE_LOOK = (armed: boolean): Look => ({
+/** The prince: white shirt, red sash, and the only one here without a hat. */
+const PRINCE_LOOK: Look = {
   body: INK.tunic,
   legs: '#cdc3a9',
   trim: INK.sash,
   skin: INK.skin,
   hair: INK.hair,
-  armed,
-})
+}
 
 /** Where the prince's feet are, and how he is standing. */
 export function drawPrince(ctx: Ctx, prince: Prince, view: View, fighting: boolean): void {
-  const x = px(view, prince.col) + view.size / 2
-  const footY = py(view, prince.row)
-  const stance = fighting ? (prince.stance ?? 'ready') : 'none'
-  figure(ctx, x, footY, view.size, prince.facing, PRINCE_LOOK(fighting), poseFor(prince.action, prince.frame, stance))
+  drawFigure(
+    ctx,
+    px(view, prince.col) + view.size / 2,
+    py(view, prince.row),
+    view.size,
+    prince.facing,
+    poseFor(prince.action, prince.frame, fighting ? (prince.stance ?? 'ready') : 'none'),
+    PRINCE_LOOK,
+    STYLE,
+    fighting,
+  )
 }
 
 export function drawGuard(ctx: Ctx, guard: Guard, view: View): void {
   if (guard.health <= 0 && guard.stance !== 'dead') return
-  const look = ROBES[guard.colour] ?? ROBES.guard
-  figure(
+  const robe = ROBES[guard.colour] ?? ROBES.guard
+  drawFigure(
     ctx,
     px(view, guard.col) + view.size / 2,
     py(view, guard.row),
     view.size,
     guard.facing,
-    { body: look.robe, legs: look.legs, trim: look.trim, skin: look.skin, hair: '#241c18', hat: look.trim, armed: true },
     // A guard always has his sword out. That is the whole of what a guard is.
     poseFor('stand', guard.frame, guard.health <= 0 ? 'dead' : guard.stance),
+    { body: robe.robe, legs: robe.legs, trim: robe.trim, skin: robe.skin, hair: '#241c18', hat: robe.trim },
+    STYLE,
+    true,
   )
 }
 
