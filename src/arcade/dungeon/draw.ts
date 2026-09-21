@@ -477,7 +477,14 @@ interface Pose {
   twist: number
   /** How far down the body is folded, 0 to 1. */
   crouch: number
-  /** Front and back thigh, in radians from straight down. Forward is positive. */
+  /**
+   * Near and far thigh, in radians from straight down.
+   *
+   * Canvas rotation is clockwise and its y axis points down, so a limb at a
+   * positive angle swings *backwards*. `lean` is the other way round, because
+   * the torso is rotated by its negative. Worth writing down: the sign of
+   * these is the easiest thing in the file to get wrong.
+   */
   legFront: number
   legBack: number
   /** How far each knee is bent on top of what the swing gives it. */
@@ -486,7 +493,7 @@ interface Pose {
   /** How far off the ground each foot is, as a fraction of height. */
   liftFront: number
   liftBack: number
-  /** The sword arm and the free arm, in radians from straight down. */
+  /** The sword arm and the free arm, in radians from straight down, backwards positive. */
   armSword: number
   armFree: number
   /** Bend at each elbow. */
@@ -502,13 +509,56 @@ interface Pose {
 
 const REST: Pose = {
   lean: 0, twist: 0, crouch: 0,
-  legFront: 0.1, legBack: -0.1, kneeFront: 0.05, kneeBack: 0.05,
+  // Standing at ease: weight on the back foot, the front one a little ahead.
+  // Both legs at the same angle puts one exactly behind the other and the
+  // figure becomes a column.
+  legFront: -0.17, legBack: 0.1, kneeFront: 0.06, kneeBack: 0.14,
   liftFront: 0, liftBack: 0,
-  armSword: 0.12, armFree: -0.12, elbowSword: 0.18, elbowFree: 0.18,
+  armSword: 0.05, armFree: 0.12, elbowSword: 0.16, elbowFree: 0.2,
   blade: 0, bladeTilt: -0.2, flat: 0,
 }
 
-const wave = (frame: number, period: number) => Math.sin((frame / period) * Math.PI * 2)
+/**
+ * One leg of a walk or a run, at a phase of the stride.
+ *
+ * The first version swung both legs as mirror images of a single hip angle, so
+ * at two frames out of every four they were straight down and exactly on top
+ * of one another, and the run read as a hop. A leg is doing two things at
+ * once: the thigh swings, and the knee folds up behind it on the way through.
+ * Driving each leg from its own phase, half a cycle apart, is what turns four
+ * frames into a stride rather than a bounce — the two passing frames are no
+ * longer the same drawing, because on each of them a different knee is folded.
+ *
+ * Angles come out in the convention `Pose` uses: positive swings backwards.
+ */
+function gait(phase: number, reach: number): { thigh: number; knee: number; lift: number } {
+  const swing = Math.sin(phase)
+  // The knee folds hardest just after the foot has left the ground behind him.
+  const fold = Math.max(0, -Math.sin(phase + 0.8))
+  return {
+    thigh: -reach * swing,
+    knee: 0.08 + fold * (0.9 + reach * 1.2),
+    lift: Math.max(0, -swing) * reach * 0.05,
+  }
+}
+
+/** Both legs and both arms, for anything with a stride in it. */
+function stride(pose: Pose, phase: number, reach: number): void {
+  const near = gait(phase, reach)
+  const far = gait(phase + Math.PI, reach)
+  pose.legFront = near.thigh
+  pose.kneeFront = near.knee
+  pose.liftFront = near.lift
+  pose.legBack = far.thigh
+  pose.kneeBack = far.knee
+  pose.liftBack = far.lift
+  // Arms counter the leg on their own side, which is the other half of what
+  // makes a run look like one.
+  pose.armSword = far.thigh * 1.3
+  pose.armFree = near.thigh * 1.3
+  pose.elbowSword = 0.35 + Math.max(0, -far.thigh) * 1.1
+  pose.elbowFree = 0.35 + Math.max(0, -near.thigh) * 1.1
+}
 
 /**
  * The pose for an action, at a frame.
@@ -522,21 +572,15 @@ export function poseFor(action: string, frame: number, stance: string): Pose {
   const pose = { ...REST }
 
   switch (action) {
-    case 'run':
-    case 'startRun': {
-      const t = wave(frame, 4)
-      pose.lean = 0.2
-      pose.legFront = 0.55 * t
-      pose.legBack = -0.55 * t
-      // The trailing leg folds up behind; the leading one reaches out straight.
-      pose.kneeFront = Math.max(0, -t) * 0.2 + 0.08
-      pose.kneeBack = Math.max(0, t) * 1.1 + 0.08
-      pose.liftFront = Math.max(0, t) * 0.03
-      pose.liftBack = Math.max(0, -t) * 0.03
-      pose.armSword = -0.7 * t
-      pose.armFree = 0.7 * t
-      pose.elbowSword = 0.6
-      pose.elbowFree = 0.6
+    case 'startRun':
+    case 'run': {
+      // A run winds up over its first four frames, so the stride grows with
+      // them rather than arriving at full length on frame one.
+      const reach = action === 'startRun' ? 0.26 + frame * 0.09 : 0.62
+      stride(pose, (frame / 4) * Math.PI * 2, reach)
+      pose.lean = 0.1 + reach * 0.22
+      // The body rides lowest as he passes over the planted foot.
+      pose.crouch = 0.07 * (1 - Math.abs(Math.sin((frame / 4) * Math.PI * 2)))
       break
     }
     case 'stopRun':
@@ -551,11 +595,10 @@ export function poseFor(action: string, frame: number, stance: string): Pose {
       pose.elbowFree = 0.5
       break
     case 'step':
+      // One careful tile: the same stride, a quarter of the size, and taken
+      // across the four frames instead of cycling.
+      stride(pose, ((frame + 0.5) / 4) * Math.PI, 0.26)
       pose.lean = 0.05
-      pose.legFront = 0.12 + frame * 0.1
-      pose.legBack = -0.16
-      pose.kneeBack = 0.2
-      pose.armFree = -0.22
       break
     case 'standJump':
     case 'runJump': {
@@ -783,12 +826,17 @@ function jointed(
   upper: number, lower: number, thick: number,
   upperColour: string, lowerColour: string,
   foot: { w: number; h: number; colour: string } | null,
+  edge?: string,
 ): void {
   ctx.save()
   ctx.translate(ox, oy)
   ctx.rotate(angle)
   ctx.fillStyle = upperColour
   ctx.fillRect(-thick / 2, -thick * 0.3, thick, upper + thick * 0.5)
+  if (edge) {
+    ctx.fillStyle = edge
+    ctx.fillRect(-thick / 2, -thick * 0.3, Math.max(1.5, thick * 0.2), upper + thick * 0.5)
+  }
   ctx.translate(0, upper)
   ctx.rotate(bend)
   ctx.fillStyle = lowerColour
@@ -801,6 +849,85 @@ function jointed(
     ctx.fillRect(-foot.w * 0.3, -foot.h * 0.2, foot.w, foot.h)
   }
   ctx.restore()
+}
+
+/**
+ * A head, in profile.
+ *
+ * The first version was a rectangle with a triangle stuck on the front, and it
+ * read as a face looking straight at you with its neck wrenched round. A
+ * profile is a silhouette, not a decorated box: what says which way somebody
+ * is facing is the *outline* — a flat back to the skull, a brow, a nose that
+ * juts, a notch for the mouth and a chin that falls away behind it. Straight
+ * segments rather than curves, to sit with the rest of the art and stay crisp
+ * when a whole figure is forty pixels tall.
+ */
+function head(ctx: Ctx, shoulderY: number, w: number, h: number, look: Look): void {
+  const hh = h * 0.155
+  const hw = w * 0.42
+  // Placed so the chin sits just clear of the shoulders, with the neck making
+  // up the difference. Sunk any lower and the head reads as bolted on.
+  const top = shoulderY - h * 0.032 - hh * 0.88
+  const back = -hw * 0.5
+  const front = hw * 0.34
+  const at = (fraction: number) => top + hh * fraction
+
+  // Neck, down into the collar of the tunic.
+  ctx.fillStyle = darker(look.skin, 0.84)
+  ctx.fillRect(back + hw * 0.14, at(0.72), hw * 0.5, shoulderY + h * 0.025 - at(0.72))
+
+  ctx.fillStyle = look.skin
+  ctx.beginPath()
+  ctx.moveTo(back, at(0.84))
+  ctx.lineTo(back, at(0.22))
+  ctx.lineTo(back + hw * 0.24, at(0.02))
+  ctx.lineTo(front - hw * 0.16, top)
+  ctx.lineTo(front, at(0.3))
+  ctx.lineTo(front - hw * 0.05, at(0.42))
+  ctx.lineTo(front + hw * 0.12, at(0.55))
+  ctx.lineTo(front - hw * 0.04, at(0.61))
+  ctx.lineTo(front + hw * 0.02, at(0.7))
+  ctx.lineTo(front - hw * 0.07, at(0.76))
+  ctx.lineTo(front - hw * 0.02, at(0.88))
+  ctx.lineTo(back + hw * 0.36, at(0.95))
+  ctx.closePath()
+  ctx.fill()
+
+  // Hair over the crown and down the back, stopping at the brow. Drawn as its
+  // own shape rather than a cap on a box: what tells you which way somebody is
+  // facing is where the hair *stops*.
+  ctx.fillStyle = look.hair
+  ctx.beginPath()
+  ctx.moveTo(back - hw * 0.07, at(1.0))
+  ctx.lineTo(back - hw * 0.07, at(0.2))
+  ctx.lineTo(back + hw * 0.22, at(-0.04))
+  ctx.lineTo(front - hw * 0.14, at(-0.04))
+  ctx.lineTo(front - hw * 0.01, at(0.32))
+  ctx.lineTo(front - hw * 0.3, at(0.28))
+  ctx.lineTo(back + hw * 0.26, at(0.34))
+  ctx.lineTo(back + hw * 0.24, at(1.0))
+  ctx.closePath()
+  ctx.fill()
+
+  if (look.hat) {
+    ctx.fillStyle = look.hat
+    ctx.beginPath()
+    ctx.moveTo(back - hw * 0.14, at(0.34))
+    ctx.lineTo(back - hw * 0.05, at(-0.16))
+    ctx.lineTo(front - hw * 0.05, at(-0.16))
+    ctx.lineTo(front + hw * 0.03, at(0.3))
+    ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = darker(look.hat, 0.68)
+    ctx.fillRect(back - hw * 0.12, at(0.22), hw * 1.0, hh * 0.13)
+  }
+
+  // One eye, under the brow, because a profile has one.
+  ctx.fillStyle = '#1a140d'
+  ctx.fillRect(front - hw * 0.26, at(0.4), hw * 0.15, Math.max(2, hh * 0.13))
+  // The mouth, which is what stops the lower face reading blank.
+  ctx.fillStyle = darker(look.skin, 0.62)
+  ctx.fillRect(front - hw * 0.17, at(0.71), hw * 0.17, Math.max(1.5, hh * 0.06))
 }
 
 /**
@@ -833,7 +960,7 @@ function figure(
   // floor no matter how carefully the feet are placed.
   ctx.fillStyle = 'rgba(0,0,0,0.42)'
   ctx.beginPath()
-  ctx.ellipse(0, 0, w * 0.6, h * 0.032, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, 0, w * 0.52, h * 0.03, 0, 0, Math.PI * 2)
   ctx.fill()
 
   if (pose.flat > 0) {
@@ -865,16 +992,18 @@ function figure(
   const shin = (h * 0.24 - fold * 0.35)
   const upperArm = h * 0.17
   const foreArm = h * 0.16
-  const legThick = w * 0.19
-  const armThick = w * 0.145
-  const foot = { w: w * 0.4, h: h * 0.045, colour: BOOT }
+  const legThick = w * 0.17
+  const armThick = w * 0.135
+  const foot = { w: w * 0.38, h: h * 0.045, colour: BOOT }
 
-  // Legs, from the hips, back one first so the front leg reads in front. The
-  // hips have to be wider apart than the legs are thick or a standing figure
-  // is one white column with a head on it.
-  jointed(ctx, -w * 0.17, hipY - pose.liftBack * h, pose.legBack, pose.kneeBack,
-    thigh, shin, legThick, darker(look.legs, 0.84), darker(look.legs, 0.84), { ...foot, colour: darker(BOOT, 0.8) })
-  jointed(ctx, w * 0.17, hipY - pose.liftFront * h, pose.legFront, pose.kneeFront,
+  // Legs, from the hips, far one first so the near leg reads in front. The
+  // hips sit close together: seen from the side, a person's legs are one in
+  // front of the other, and it is the angle and the shade that separate them,
+  // not a gap. Setting them a body's width apart was drawing him front-on
+  // from the waist down while his head was in profile.
+  jointed(ctx, -w * 0.09, hipY - pose.liftBack * h, pose.legBack, pose.kneeBack,
+    thigh, shin, legThick, darker(look.legs, 0.8), darker(look.legs, 0.8), { ...foot, colour: darker(BOOT, 0.74) })
+  jointed(ctx, w * 0.09, hipY - pose.liftFront * h, pose.legFront, pose.kneeFront,
     thigh, shin, legThick, look.legs, look.legs, foot)
 
   // Everything above the hips pivots with the lean. Doing it as a real pivot
@@ -883,75 +1012,53 @@ function figure(
   ctx.translate(0, hipY)
   ctx.rotate(-pose.lean)
 
+  const torsoTop = -torso
+  const shoulderY = torsoTop + h * 0.025
+  const sleeve = darker(look.body, 0.88)
+
+  // The far arm goes on before the torso does, because in profile it is
+  // behind him. Painted afterwards it came out as a dark stripe laid down the
+  // front of the tunic, which was most of what made the figure look wrong.
+  jointed(ctx, -w * 0.06, shoulderY, pose.armFree, pose.elbowFree,
+    upperArm, foreArm, armThick, darker(look.body, 0.62), darker(look.skin, 0.62), null)
+
   // Torso: narrow at the waist, wider at the shoulders.
   ctx.fillStyle = look.body
   ctx.beginPath()
-  ctx.moveTo(-w * 0.22, 0)
-  ctx.lineTo(w * 0.22, 0)
-  ctx.lineTo(w * 0.3, -torso)
-  ctx.lineTo(-w * 0.3, -torso)
+  ctx.moveTo(-w * 0.17, 0)
+  ctx.lineTo(w * 0.17, 0)
+  ctx.lineTo(w * 0.22, torsoTop)
+  ctx.lineTo(-w * 0.21, torsoTop)
   ctx.closePath()
   ctx.fill()
-  // A shaded side, so the torso is a body rather than a cut-out.
-  ctx.fillStyle = darker(look.body, 0.88)
+  // The back of him, in shadow, so the torso is a body rather than a cut-out.
+  ctx.fillStyle = darker(look.body, 0.86)
   ctx.beginPath()
-  ctx.moveTo(-w * 0.22, 0)
-  ctx.lineTo(-w * 0.1, 0)
-  ctx.lineTo(-w * 0.16, -torso)
-  ctx.lineTo(-w * 0.3, -torso)
+  ctx.moveTo(-w * 0.17, 0)
+  ctx.lineTo(-w * 0.07, 0)
+  ctx.lineTo(-w * 0.11, torsoTop)
+  ctx.lineTo(-w * 0.21, torsoTop)
   ctx.closePath()
   ctx.fill()
 
   // The sash, which is the one splash of colour on him and how you pick him
   // out of a room at a glance.
   ctx.fillStyle = look.trim
-  ctx.fillRect(-w * 0.26, -h * 0.05, w * 0.54, h * 0.055)
+  ctx.fillRect(-w * 0.2, -h * 0.05, w * 0.42, h * 0.055)
   ctx.fillStyle = darker(look.trim, 0.8)
-  ctx.fillRect(w * 0.14, -h * 0.05, w * 0.14, h * 0.13)
+  ctx.fillRect(w * 0.1, -h * 0.05, w * 0.12, h * 0.14)
 
-  const shoulderY = -torso + h * 0.025
+  head(ctx, shoulderY, w, h, look)
 
-  const sleeve = darker(look.body, 0.78)
-
-  // The far arm, behind the body and a shade darker again for it. Set well
-  // back from the middle: drawn any closer it stops reading as an arm and
-  // starts reading as a stripe down the tunic.
-  jointed(ctx, -w * 0.31, shoulderY, pose.armFree, pose.elbowFree,
-    upperArm, foreArm, armThick, darker(look.body, 0.6), darker(look.skin, 0.74), null)
-
-  // Head: a neck, a face with a nose, and hair down the back of it.
-  const headH = h * 0.15
-  const headW = w * 0.44
-  const headY = shoulderY - headH
-  ctx.fillStyle = look.skin
-  ctx.fillRect(-w * 0.09, headY + headH - h * 0.01, w * 0.18, h * 0.04)
-  ctx.fillStyle = look.skin
-  ctx.fillRect(-headW * 0.5, headY, headW, headH)
-  ctx.beginPath()
-  ctx.moveTo(headW * 0.5, headY + headH * 0.38)
-  ctx.lineTo(headW * 0.72, headY + headH * 0.55)
-  ctx.lineTo(headW * 0.5, headY + headH * 0.68)
-  ctx.closePath()
-  ctx.fill()
-  ctx.fillStyle = look.hair
-  ctx.fillRect(-headW * 0.56, headY - headH * 0.1, headW * 1.12, headH * 0.38)
-  ctx.fillRect(-headW * 0.62, headY - headH * 0.1, headW * 0.34, headH * 1.15)
-  if (look.hat) {
-    ctx.fillStyle = look.hat
-    ctx.fillRect(-headW * 0.64, headY - headH * 0.34, headW * 1.28, headH * 0.46)
-    ctx.fillStyle = darker(look.hat, 0.72)
-    ctx.fillRect(-headW * 0.64, headY + headH * 0.06, headW * 1.28, headH * 0.1)
-  }
-  ctx.fillStyle = '#1a140d'
-  ctx.fillRect(headW * 0.12, headY + headH * 0.34, headW * 0.2, Math.max(2, headH * 0.16))
-
-  // The near arm, in front of the body, and the blade if there is one.
-  jointed(ctx, w * 0.3, shoulderY, pose.armSword, pose.elbowSword,
-    upperArm, foreArm, armThick * 1.08, sleeve, look.skin, null)
+  // The near arm, in front of the body. Almost the tunic's own colour, with a
+  // dark edge down its back: a sleeve two shades off reads as a stripe painted
+  // on him, where an edge reads as an arm in front of a chest.
+  jointed(ctx, w * 0.14, shoulderY, pose.armSword, pose.elbowSword,
+    upperArm, foreArm, armThick * 1.08, sleeve, look.skin, null, darker(look.body, 0.6))
 
   if (look.armed && pose.blade > 0) {
     ctx.save()
-    ctx.translate(w * 0.3, shoulderY)
+    ctx.translate(w * 0.14, shoulderY)
     ctx.rotate(pose.armSword)
     ctx.translate(0, upperArm)
     ctx.rotate(pose.elbowSword)

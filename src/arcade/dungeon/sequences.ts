@@ -27,6 +27,8 @@ export type Action =
   | 'hardLand'
   | 'hang'
   | 'climbUp'
+  | 'climbLedge'
+  | 'hop'
   | 'crouch'
   | 'drinking'
   | 'dead'
@@ -184,6 +186,46 @@ export const SEQUENCES: Record<Action, Sequence> = {
     ],
     then: 'stand',
     interruptible: false,
+  },
+
+  /**
+   * Climbing the ledge above from standing, which is a different move from
+   * pulling up out of a hang: this one ends a floor higher than it began.
+   * The floor change is on the last frame, so the hands are over the lip
+   * before the feet arrive.
+   */
+  climbLedge: {
+    frames: [
+      f(0, 0, 'climb1'),
+      f(0, 0, 'climb2'),
+      f(0, 0, 'climb3'),
+      f(0, 0, 'climb4'),
+      f(0, 0, 'climb5'),
+      f(0, -1, 'climb6'),
+    ],
+    then: 'stand',
+    interruptible: false,
+    airborne: true,
+  },
+
+  /**
+   * Straight up, and down again in the same place.
+   *
+   * What the jump button does when there is nothing above to climb and no
+   * direction held. The alternative was a standing jump, which throws him two
+   * tiles forward — a surprising way to find out where the next pit is.
+   */
+  hop: {
+    frames: [
+      f(0, 0, 'crouch'),
+      f(0, 0, 'jump1'),
+      f(0, 0, 'jump2'),
+      f(0, 0, 'jump3'),
+      f(0, 0, 'land1'),
+    ],
+    then: 'stand',
+    interruptible: false,
+    airborne: true,
   },
 
   crouch: {

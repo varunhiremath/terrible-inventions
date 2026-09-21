@@ -1,5 +1,5 @@
 import { SEQUENCES, type Action } from './sequences'
-import { TILE, blocksMovement, standable, tileAt, type Level } from './level'
+import { TILE, blocksMovement, climbable, standable, tileAt, type Level } from './level'
 import type { Stance } from './combat'
 
 /**
@@ -118,9 +118,14 @@ function command(prince: Prince, level: Level, input: Input): Prince {
   if (input.up) {
     if (running) return begin(prince, 'runJump')
     if (forward !== 0) return begin(prince, 'standJump')
-    // Straight up, to reach a ledge above.
-    const above = hasGround(prince, level, prince.col, prince.row - 1)
-    return above ? begin(prince, 'climbUp') : begin(prince, 'standJump')
+    // Straight up. A floor above him is a ledge to climb; a wall above him is
+    // the ceiling, and the first version of this started a climb into it that
+    // played six frames and put him back exactly where he stood — which is
+    // what "the jump button does nothing" looked like from the outside.
+    const ledge =
+      climbable(level, Math.round(prince.col), prince.row - 1) &&
+      !prince.collapsed.includes(cellKey(prince.col, prince.row - 1))
+    return begin(prince, ledge ? 'climbLedge' : 'hop')
   }
 
   if (input.down) {
@@ -161,6 +166,8 @@ export function tick(prince: Prince, level: Level, input: Input, gateOpen = fals
   // Horizontal movement, stopped dead by anything solid in the way.
   const wanted = next.col + frame.dx * next.facing
   if (canEnter(next, level, wanted, gateOpen)) next.col = wanted
+  // And vertical, which only a climb ever asks for.
+  next.row += frame.dy
 
   next.frame += 1
 
@@ -174,7 +181,12 @@ export function tick(prince: Prince, level: Level, input: Input, gateOpen = fals
 
   if (next.action === 'fall') {
     next = applyFall(next, level, input)
-  } else if (!nowSequence.airborne && next.action !== 'hang' && next.action !== 'climbUp') {
+  } else if (
+    !nowSequence.airborne &&
+    next.action !== 'hang' &&
+    next.action !== 'climbUp' &&
+    next.action !== 'climbLedge'
+  ) {
     // Nothing underfoot and not mid-jump: he goes down.
     if (!hasGround(next, level)) {
       next = { ...begin(next, 'fall'), fellFrom: next.row, framesFalling: 0 }

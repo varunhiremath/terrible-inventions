@@ -103,6 +103,18 @@ export function standable(level: Level, col: number, row: number): boolean {
   return isSolid(floorUnder(level, col, row))
 }
 
+/**
+ * Whether a floor is one you could climb onto and then stand on.
+ *
+ * Not the same question as `standable`. A wall is solid, so it is standable in
+ * the sense that it holds you up — but a wall over your head is the ceiling,
+ * and the first version of the climb happily started one into solid rock.
+ */
+export function climbable(level: Level, col: number, row: number): boolean {
+  const tile = floorUnder(level, col, row)
+  return isSolid(tile) && !BLOCKING.has(tile)
+}
+
 export function levelCols(level: Level): number {
   return Math.max(...level.rows.map((r) => r.length))
 }

@@ -288,3 +288,93 @@ describe('safety', () => {
     }
   })
 })
+
+/**
+ * The jump button.
+ *
+ * This is the one control a player presses before they have learned anything
+ * else about the game, so it is the one that has to do something visible every
+ * single time. It shipped doing nothing at all: standing under a ceiling, the
+ * wall overhead counted as a ledge, and the climb played six frames and put him
+ * back exactly where he started. Nothing in the old tests noticed, because
+ * every one of them checked where he ended up rather than whether pressing the
+ * button had changed anything.
+ */
+describe('pressing up', () => {
+  /** Two floors: a lower one to stand on, and whatever is written above it. */
+  function twoFloors(lower: string, upper: string): Level {
+    return {
+      name: 'test',
+      rows: ['X'.repeat(lower.length + 2), `X${upper}X`, `X${lower}X`, 'X'.repeat(lower.length + 2)],
+      start: { col: 2, row: 2, facing: 1 as const },
+    }
+  }
+
+  it('climbs onto a floor overhead, and ends a whole floor higher', () => {
+    const level = twoFloors('########', '########')
+    const after = until(newPrince(level), level, press({ up: true }), 20)
+    expect(after.row).toBe(1)
+    expect(after.dead).toBe(false)
+  })
+
+  it('does not climb into the ceiling', () => {
+    // Solid rock overhead. There is nothing to grab, so he hops and comes down.
+    const level = twoFloors('########', 'XXXXXXXX')
+    const start = newPrince(level)
+    const after = until(start, level, press({ up: true }), 20)
+    expect(after.row).toBe(2)
+    expect(after.col).toBeCloseTo(start.col, 5)
+  })
+
+  it('always starts a sequence you can see, whatever is overhead', () => {
+    for (const upper of ['########', 'XXXXXXXX', '        ']) {
+      const level = twoFloors('########', upper)
+      const start = newPrince(level)
+      const moved = tick(start, level, press({ up: true }))
+      expect(moved.action, `with "${upper}" overhead`).not.toBe('stand')
+      // Whatever it starts, the frames have to run: a sequence that is over
+      // in one tick is a button that flickers rather than one that does
+      // something. The old climb-into-the-ceiling passed this and still did
+      // nothing, which is why the floor check below is the real test.
+      expect(SEQUENCES[moved.action].frames.length, upper).toBeGreaterThan(3)
+      expect(SEQUENCES[moved.action].interruptible, upper).toBe(false)
+    }
+  })
+
+  it('gets him onto the ledge whenever there is one to get onto', () => {
+    // The check that the shipped bug failed: six frames of climbing that put
+    // him back on the floor he started on.
+    const level = twoFloors('########', '########')
+    const start = newPrince(level)
+    const after = until(start, level, press({ up: true }), 12)
+    expect(after.row).toBe(start.row - 1)
+  })
+
+  it('hops in place rather than leaping into whatever is in front', () => {
+    // No direction held means no opinion about forward, so he must not take
+    // two tiles of it on trust.
+    const level = twoFloors('###     ', 'XXXXXXXX')
+    const after = until(newPrince(level), level, press({ up: true }), 20)
+    expect(after.dead).toBe(false)
+    expect(after.row).toBe(2)
+  })
+
+  it('still jumps forward when a direction is held', () => {
+    const level = twoFloors('########', 'XXXXXXXX')
+    const start = newPrince(level)
+    const after = until(start, level, press({ up: true, right: true }), 20)
+    expect(after.col).toBeGreaterThan(start.col + 1)
+  })
+
+  it('pulls up out of a hang without changing floors', () => {
+    // Hanging holds the ledge he was standing on, so the climb puts him back
+    // on it. That is a different move from climbing the floor above.
+    const level = twoFloors('###     ', 'XXXXXXXX')
+    const hanging = until(newPrince(level), level, press({ right: true, shift: true }), 40)
+    if (hanging.action === 'hang') {
+      const up = until(hanging, level, press({ up: true }), 20)
+      expect(up.row).toBe(hanging.row)
+      expect(up.dead).toBe(false)
+    }
+  })
+})
