@@ -20,22 +20,32 @@ export interface Stone {
   lit: string
   shade: string
   floor: string
+  /** The room behind everything, and the brickwork drawn on it. */
+  back: string
+  backFace: string
+  backLit: string
 }
 
 export const STONE: Record<string, Stone> = {
   dungeon: {
     face: '#5c6672',
-    joint: '#2b323b',
+    joint: '#262c34',
     lit: '#8994a2',
     shade: '#3a424d',
-    floor: '#6d7885',
+    floor: '#79838f',
+    back: '#12151a',
+    backFace: '#232a33',
+    backLit: '#2f3842',
   },
   palace: {
     face: '#8f8065',
-    joint: '#4a4234',
+    joint: '#3f3a2e',
     lit: '#c4b088',
     shade: '#635941',
-    floor: '#a08e6e',
+    floor: '#ab9873',
+    back: '#191510',
+    backFace: '#2e281e',
+    backLit: '#3e3627',
   },
 }
 
@@ -55,12 +65,19 @@ export const INK = {
   hair: '#3a2a20',
 } as const
 
-export const ROBES: Record<string, { robe: string; trim: string; skin: string }> = {
-  guard: { robe: '#c96a1e', trim: '#f0a13c', skin: '#d8a978' },
-  fat: { robe: '#8c4bb0', trim: '#bb86d6', skin: '#d8a978' },
-  skeleton: { robe: '#d8dee8', trim: '#9aa3b0', skin: '#e8e8e8' },
-  shadow: { robe: '#2b2b38', trim: '#5a5a72', skin: '#4a4a5c' },
-  vizier: { robe: '#1f5fb0', trim: '#5fa0e8', skin: '#d8a978' },
+/**
+ * The guards.
+ *
+ * Each one is a silhouette you can name across a dark room: the dungeon guard
+ * in dull brown under a red headdress, the fat one in purple, the skeleton
+ * bone-white, the shadow a hole in the wall, the vizier's man in blue.
+ */
+export const ROBES: Record<string, { robe: string; legs: string; trim: string; skin: string }> = {
+  guard: { robe: '#8a5a2a', legs: '#6e4722', trim: '#c4392c', skin: '#c99a6a' },
+  fat: { robe: '#7a3f9c', legs: '#5f3079', trim: '#c78ae0', skin: '#c99a6a' },
+  skeleton: { robe: '#cdd3dc', legs: '#aeb5c0', trim: '#7c8492', skin: '#e4e7ea' },
+  shadow: { robe: '#24242e', legs: '#1a1a22', trim: '#5a5a72', skin: '#3e3e4c' },
+  vizier: { robe: '#28569c', legs: '#1d4075', trim: '#6aa8e8', skin: '#c99a6a' },
 }
 
 export interface View {
@@ -77,6 +94,16 @@ export interface View {
 
 type Ctx = CanvasRenderingContext2D
 
+/**
+ * How far a floor slab hangs below the surface you walk on, as a fraction of
+ * a floor's height.
+ *
+ * The room needs this much room underneath its lowest floor or that floor is
+ * drawn off the bottom of the board and whoever is standing on it appears to
+ * be standing on nothing.
+ */
+export const FLOOR_DEPTH = 0.42
+
 const px = (view: View, col: number) => (col - view.col) * view.size
 /** The top surface of a floor, which is what everything stands on. */
 const py = (view: View, row: number) => (row - view.row + 1) * view.floorHeight
@@ -84,100 +111,232 @@ const py = (view: View, row: number) => (row - view.row + 1) * view.floorHeight
 /**
  * A course of cut stone.
  *
- * Two rows of blocks, offset, with a lit top edge on each and a few chipped
- * marks. The marks are what the eye reads as stone rather than as paint.
+ * Big blocks, two to a tile across, with mortar you can see. The first version
+ * drew thin courses and the wall came out looking like bathroom tiling; what
+ * makes cut stone read as cut stone is each block being large enough to carry
+ * a lit top, a shaded bottom and some wear across the middle.
  */
 function stoneBlock(ctx: Ctx, x: number, y: number, w: number, h: number, stone: Stone, seed: number): void {
   ctx.fillStyle = stone.joint
   ctx.fillRect(x, y, w, h)
 
-  // Courses about as tall as half a block is wide. Fixing the count at two
-  // made every wall a column of tall lockers rather than masonry.
-  const courses = Math.max(2, Math.round(h / (w * 0.42)))
+  const courses = Math.max(1, Math.round(h / (w * 0.52)))
   const ch = h / courses
-  const line = Math.max(1, Math.round(h / 22))
+  const mortar = Math.max(1.5, w * 0.045)
+
   for (let c = 0; c < courses; c++) {
     const offset = c % 2 === 0 ? 0 : w / 4
     for (let b = -1; b < 3; b++) {
       const bx = x + offset + (b * w) / 2
-      const bw = w / 2 - line
-      const left = Math.max(x + line, bx)
-      const right = Math.min(x + w - line, bx + bw)
+      const left = Math.max(x, bx) + mortar / 2
+      const right = Math.min(x + w, bx + w / 2) - mortar / 2
       if (right <= left) continue
+      const top = y + c * ch + mortar / 2
+      const bh = ch - mortar
+
       ctx.fillStyle = stone.face
-      ctx.fillRect(left, y + c * ch + line, right - left, ch - line * 2)
+      ctx.fillRect(left, top, right - left, bh)
       ctx.fillStyle = stone.lit
-      ctx.fillRect(left, y + c * ch + line, right - left, line)
+      ctx.fillRect(left, top, right - left, Math.max(1, bh * 0.16))
+      ctx.fillStyle = stone.shade
+      ctx.fillRect(left, top + bh - Math.max(1, bh * 0.16), right - left, Math.max(1, bh * 0.16))
+
+      // Wear: the same scuffs in the same places every time, out of arithmetic.
+      const n = (Math.round(left) * 31 + Math.round(top) * 17 + seed) % 89
+      ctx.globalAlpha = 0.55
+      ctx.fillStyle = stone.shade
+      ctx.fillRect(left + ((n % 5) / 5) * (right - left) * 0.7, top + bh * 0.42, (right - left) * 0.2, Math.max(1, bh * 0.1))
+      ctx.globalAlpha = 0.35
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(left + (((n * 3) % 7) / 7) * (right - left) * 0.8, top + bh * 0.64, mortar, mortar)
+      ctx.globalAlpha = 1
+    }
+  }
+}
+
+/**
+ * The wall at the back of the room.
+ *
+ * Not black. A room whose background is nothing reads as a cut-out floating in
+ * space; the same room with a wall behind it reads as somewhere you are
+ * standing in. The first attempt drew it at a fifth opacity and it may as well
+ * not have been there — so it is brickwork you can plainly see, just far
+ * enough down in tone that there is never a question about which stone is
+ * floor and which is scenery.
+ */
+function backWall(ctx: Ctx, width: number, height: number, stone: Stone, size: number): void {
+  ctx.fillStyle = stone.back
+  ctx.fillRect(0, 0, width, height)
+
+  const bh = size * 0.52
+  const bw = size * 0.86
+  for (let y = -bh; y < height + bh; y += bh) {
+    const course = Math.round(y / bh)
+    const offset = course % 2 === 0 ? 0 : bw * 0.5
+    for (let x = -bw; x < width + bw; x += bw) {
+      const left = x + offset + 1.5
+      const top = y + 1.5
+      ctx.fillStyle = stone.backFace
+      ctx.fillRect(left, top, bw - 3, bh - 3)
+      ctx.fillStyle = stone.backLit
+      ctx.fillRect(left, top, bw - 3, Math.max(1, bh * 0.12))
     }
   }
 
-  ctx.fillStyle = '#ffffff'
-  ctx.globalAlpha = 0.5
-  for (let i = 0; i < 2; i++) {
-    const n = (seed * 37 + i * 91) % 97
-    ctx.fillRect(x + ((n % 8) / 8) * w * 0.8 + w * 0.1, y + (((n * 5) % 8) / 8) * h * 0.8 + h * 0.1, line, line)
-  }
-  ctx.globalAlpha = 1
+  // The corners of a room are always darker than the middle of it. Without
+  // this the back wall is an even field and the eye has nothing to settle on.
+  const dark = ctx.createRadialGradient(
+    width / 2, height * 0.45, size * 0.5,
+    width / 2, height * 0.45, Math.max(width, height) * 0.72,
+  )
+  dark.addColorStop(0, 'rgba(0,0,0,0)')
+  dark.addColorStop(1, 'rgba(0,0,0,0.6)')
+  ctx.fillStyle = dark
+  ctx.fillRect(0, 0, width, height)
 }
 
-/** A floor slab: a lit walking surface, a block face, and a shadow beneath. */
+/**
+ * A floor slab.
+ *
+ * The lip along the top is what you actually walk on, and it is the brightest
+ * thing in the room — so the eye finds the ledges before it finds anything
+ * else, which is the whole of reading one of these rooms at a glance. The
+ * notches cut into it are what stop a long run of floor reading as one
+ * extruded bar; they give the eye something to count along.
+ * Underneath, the face falls away into shadow and a hard dark line closes it.
+ */
 function slab(ctx: Ctx, x: number, y: number, w: number, h: number, stone: Stone, seed: number): void {
-  const lip = Math.max(2, h * 0.14)
+  const lip = Math.max(4, h * 0.26)
   ctx.fillStyle = stone.floor
   ctx.fillRect(x, y, w, lip)
   ctx.fillStyle = stone.lit
-  ctx.fillRect(x, y, w, Math.max(1, lip * 0.35))
+  ctx.fillRect(x, y, w, Math.max(1, lip * 0.3))
+
+  // Notches along the walking surface, four to a tile.
+  ctx.fillStyle = stone.shade
+  for (let i = 0; i < 4; i++) {
+    ctx.fillRect(x + ((i + 0.5) * w) / 4 - Math.max(1, w * 0.012), y + lip * 0.34, Math.max(1.5, w * 0.025), lip * 0.4)
+  }
+  ctx.fillStyle = stone.shade
+  ctx.fillRect(x, y + lip - Math.max(1, lip * 0.2), w, Math.max(1, lip * 0.2))
+
   stoneBlock(ctx, x, y + lip, w, h - lip, stone, seed)
-  ctx.fillStyle = 'rgba(0,0,0,0.45)'
-  ctx.fillRect(x, y + h - Math.max(1, h * 0.06), w, Math.max(1, h * 0.06))
+
+  // The underside. A ledge you can hang from has to look like it has an edge.
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'
+  ctx.fillRect(x, y + h - Math.max(2, h * 0.12), w, Math.max(2, h * 0.12))
 }
 
 function torch(ctx: Ctx, x: number, y: number, s: number, clock: number, seed: number): void {
-  ctx.fillStyle = '#4a3a2a'
-  ctx.fillRect(x + s * 0.44, y - s * 0.28, s * 0.12, s * 0.3)
   const flick = Math.sin(clock * 11 + seed) * 0.5 + 0.5
-  const h = s * (0.34 + flick * 0.2)
+  const baseY = y - s * 0.5
+
+  // The pool of light it throws, which is most of what a torch is for.
+  const glow = ctx.createRadialGradient(x + s * 0.5, baseY, s * 0.05, x + s * 0.5, baseY, s * (1.6 + flick * 0.25))
+  glow.addColorStop(0, 'rgba(255,170,60,0.34)')
+  glow.addColorStop(0.5, 'rgba(255,140,40,0.11)')
+  glow.addColorStop(1, 'rgba(255,140,40,0)')
+  ctx.fillStyle = glow
+  ctx.fillRect(x - s * 1.6, baseY - s * 1.8, s * 4.2, s * 3.6)
+
+  ctx.fillStyle = '#6b5236'
+  ctx.fillRect(x + s * 0.44, baseY, s * 0.12, s * 0.5)
+  ctx.fillStyle = '#8d6f49'
+  ctx.fillRect(x + s * 0.34, baseY - s * 0.05, s * 0.32, s * 0.1)
+  ctx.fillStyle = '#4a3a26'
+  ctx.fillRect(x + s * 0.34, baseY + s * 0.05, s * 0.32, s * 0.03)
+
+  const h = s * (0.42 + flick * 0.22)
   ctx.fillStyle = INK.flame
   ctx.beginPath()
-  ctx.moveTo(x + s * 0.5, y - s * 0.28 - h)
-  ctx.lineTo(x + s * 0.62, y - s * 0.24)
-  ctx.lineTo(x + s * 0.38, y - s * 0.24)
-  ctx.closePath()
+  ctx.moveTo(x + s * 0.5, baseY - h)
+  ctx.quadraticCurveTo(x + s * 0.8, baseY - h * 0.3, x + s * 0.63, baseY)
+  ctx.lineTo(x + s * 0.37, baseY)
+  ctx.quadraticCurveTo(x + s * 0.2, baseY - h * 0.3, x + s * 0.5, baseY - h)
   ctx.fill()
   ctx.fillStyle = INK.flameHot
   ctx.beginPath()
-  ctx.moveTo(x + s * 0.5, y - s * 0.3 - h * 0.6)
-  ctx.lineTo(x + s * 0.57, y - s * 0.25)
-  ctx.lineTo(x + s * 0.43, y - s * 0.25)
-  ctx.closePath()
+  ctx.moveTo(x + s * 0.5, baseY - h * 0.6)
+  ctx.quadraticCurveTo(x + s * 0.65, baseY - h * 0.2, x + s * 0.57, baseY)
+  ctx.lineTo(x + s * 0.43, baseY)
+  ctx.quadraticCurveTo(x + s * 0.35, baseY - h * 0.2, x + s * 0.5, baseY - h * 0.6)
   ctx.fill()
 }
 
+/**
+ * Spikes. Out, or barely showing.
+ *
+ * They sit in a dark slot in the floor, so a retracted set still warns you
+ * that the tile is not one to stand about on.
+ */
 function spikes(ctx: Ctx, x: number, y: number, w: number, h: number, out: boolean): void {
-  const tips = 3
-  const height = h * (out ? 0.75 : 0.12)
+  ctx.fillStyle = 'rgba(0,0,0,0.65)'
+  ctx.fillRect(x + w * 0.08, y - Math.max(2, h * 0.07), w * 0.84, Math.max(3, h * 0.1))
+
+  const tips = 4
+  const height = h * (out ? 0.8 : 0.1)
   for (let i = 0; i < tips; i++) {
-    const cx = x + ((i + 0.5) * w) / tips
+    const cx = x + w * 0.1 + ((i + 0.5) * w * 0.8) / tips
+    const half = (w * 0.8) / (tips * 2.6)
     ctx.fillStyle = INK.blade
     ctx.beginPath()
     ctx.moveTo(cx, y - height)
-    ctx.lineTo(cx + w / (tips * 2.4), y)
-    ctx.lineTo(cx - w / (tips * 2.4), y)
+    ctx.lineTo(cx + half, y)
+    ctx.lineTo(cx - half, y)
     ctx.closePath()
     ctx.fill()
     ctx.fillStyle = INK.bladeDark
-    ctx.fillRect(cx - w / (tips * 8), y - height * 0.5, w / (tips * 8), height * 0.5)
+    ctx.beginPath()
+    ctx.moveTo(cx, y - height)
+    ctx.lineTo(cx, y)
+    ctx.lineTo(cx - half, y)
+    ctx.closePath()
+    ctx.fill()
   }
 }
 
 function chomper(ctx: Ctx, x: number, y: number, w: number, h: number, shut: number): void {
-  // Two blades that come together. `shut` runs 0 to 1.
+  const inset = w * 0.16
+  const left = x + inset
+  const width = w - inset * 2
+
+  // The recess it lives in, so it is part of the wall rather than on top of it.
+  ctx.fillStyle = 'rgba(0,0,0,0.72)'
+  ctx.fillRect(left, y - h, width, h)
   ctx.fillStyle = INK.bladeDark
-  ctx.fillRect(x + w * 0.42, y - h, w * 0.16, h)
-  const bite = h * 0.45 * shut
-  ctx.fillStyle = INK.blade
-  ctx.fillRect(x + w * 0.2, y - h + bite * 0.2, w * 0.6, Math.max(2, h * 0.1))
-  ctx.fillRect(x + w * 0.2, y - bite * 0.4 - h * 0.1, w * 0.6, Math.max(2, h * 0.1))
+  ctx.fillRect(left, y - h, Math.max(2, w * 0.05), h)
+  ctx.fillRect(left + width - Math.max(2, w * 0.05), y - h, Math.max(2, w * 0.05), h)
+
+  const teeth = 4
+  const bite = h * 0.34 * shut
+  const toothH = h * 0.2
+
+  const jaw = (topY: number, down: boolean) => {
+    // The backing plate goes behind the teeth, which is above them on the top
+    // jaw and below them on the bottom one.
+    ctx.fillStyle = INK.bladeDark
+    ctx.fillRect(left, down ? topY - h * 0.06 : topY, width, h * 0.06)
+    ctx.fillStyle = INK.blade
+    for (let i = 0; i < teeth; i++) {
+      const cx = left + ((i + 0.5) * width) / teeth
+      const half = width / (teeth * 2.3)
+      ctx.beginPath()
+      ctx.moveTo(cx, topY + (down ? toothH : -toothH))
+      ctx.lineTo(cx + half, topY)
+      ctx.lineTo(cx - half, topY)
+      ctx.closePath()
+      ctx.fill()
+    }
+  }
+
+  jaw(y - h + h * 0.06 + bite, true)
+  jaw(y - bite, false)
+
+  // A wink of red when it is shut on something.
+  if (shut > 0.92) {
+    ctx.fillStyle = 'rgba(200,50,40,0.6)'
+    ctx.fillRect(left, y - h * 0.5 - h * 0.03, width, h * 0.06)
+  }
 }
 
 function gate(ctx: Ctx, x: number, y: number, w: number, h: number, open: boolean): void {
@@ -239,8 +398,7 @@ export function drawRoom(
   collapsed: string[],
 ): void {
   const stone = STONE[level.palette ?? 'dungeon']
-  ctx.fillStyle = INK.black
-  ctx.fillRect(0, 0, width, height)
+  backWall(ctx, width, height, stone, view.size)
 
   for (let row = view.row; row < view.row + ROOM_ROWS; row++) {
     for (let col = view.col; col < view.col + ROOM_COLS; col++) {
@@ -259,7 +417,7 @@ export function drawRoom(
       if (tile === TILE.SPACE) continue
 
       // Everything else stands on a slab of floor.
-      if (!gone) slab(ctx, x, y, s, fh * 0.42, stone, seed)
+      if (!gone) slab(ctx, x, y, s, fh * FLOOR_DEPTH, stone, seed)
 
       switch (tile) {
         case TILE.SPIKES:
@@ -304,83 +462,546 @@ export function drawRoom(
   }
 }
 
-/** A person: head, tunic, sash, arms and legs. Ours, not anybody else's. */
+/**
+ * What a body is doing, in the few numbers it takes to draw it.
+ *
+ * Every value is a fraction of the figure's own height or width, so the same
+ * pose works at any size. `lean` is the giveaway: a run leans into itself and
+ * a skid leans away, and without that a running figure is just a standing one
+ * with its legs apart.
+ */
+interface Pose {
+  /** Forward tilt of everything above the hips, in radians. */
+  lean: number
+  /** Shoulders coming round to face you, 0 to 1. Narrows the whole body. */
+  twist: number
+  /** How far down the body is folded, 0 to 1. */
+  crouch: number
+  /** Front and back thigh, in radians from straight down. Forward is positive. */
+  legFront: number
+  legBack: number
+  /** How far each knee is bent on top of what the swing gives it. */
+  kneeFront: number
+  kneeBack: number
+  /** How far off the ground each foot is, as a fraction of height. */
+  liftFront: number
+  liftBack: number
+  /** The sword arm and the free arm, in radians from straight down. */
+  armSword: number
+  armFree: number
+  /** Bend at each elbow. */
+  elbowSword: number
+  elbowFree: number
+  /** How much blade is showing, 0 to 1. */
+  blade: number
+  /** Where the blade points, in radians from level. Up is negative. */
+  bladeTilt: number
+  /** Face down on the floor. */
+  flat: number
+}
+
+const REST: Pose = {
+  lean: 0, twist: 0, crouch: 0,
+  legFront: 0.1, legBack: -0.1, kneeFront: 0.05, kneeBack: 0.05,
+  liftFront: 0, liftBack: 0,
+  armSword: 0.12, armFree: -0.12, elbowSword: 0.18, elbowFree: 0.18,
+  blade: 0, bladeTilt: -0.2, flat: 0,
+}
+
+const wave = (frame: number, period: number) => Math.sin((frame / period) * Math.PI * 2)
+
+/**
+ * The pose for an action, at a frame.
+ *
+ * Fifteen frames a second means every one of these is on screen long enough to
+ * be read, so they are worth getting right — a run that does not lean, or a
+ * landing that does not fold, reads as a sprite sliding about rather than as
+ * somebody moving.
+ */
+export function poseFor(action: string, frame: number, stance: string): Pose {
+  const pose = { ...REST }
+
+  switch (action) {
+    case 'run':
+    case 'startRun': {
+      const t = wave(frame, 4)
+      pose.lean = 0.2
+      pose.legFront = 0.55 * t
+      pose.legBack = -0.55 * t
+      // The trailing leg folds up behind; the leading one reaches out straight.
+      pose.kneeFront = Math.max(0, -t) * 0.2 + 0.08
+      pose.kneeBack = Math.max(0, t) * 1.1 + 0.08
+      pose.liftFront = Math.max(0, t) * 0.03
+      pose.liftBack = Math.max(0, -t) * 0.03
+      pose.armSword = -0.7 * t
+      pose.armFree = 0.7 * t
+      pose.elbowSword = 0.6
+      pose.elbowFree = 0.6
+      break
+    }
+    case 'stopRun':
+      // Heels dug in, weight back, arms thrown out for balance.
+      pose.lean = -0.34
+      pose.legFront = 0.62
+      pose.legBack = -0.3
+      pose.kneeFront = 0.1
+      pose.kneeBack = 0.5
+      pose.armFree = -1.0
+      pose.armSword = 0.5
+      pose.elbowFree = 0.5
+      break
+    case 'step':
+      pose.lean = 0.05
+      pose.legFront = 0.12 + frame * 0.1
+      pose.legBack = -0.16
+      pose.kneeBack = 0.2
+      pose.armFree = -0.22
+      break
+    case 'standJump':
+    case 'runJump': {
+      const air = frame / 8
+      pose.lean = 0.26
+      // Tucked at the top of the arc, reaching for the landing on the way down.
+      pose.crouch = air < 0.25 ? 0.5 : 0.12
+      pose.legFront = air < 0.25 ? 0.7 : 0.5
+      pose.legBack = air < 0.25 ? -0.2 : -0.62
+      pose.kneeFront = air < 0.25 ? 1.3 : 0.25
+      pose.kneeBack = air < 0.25 ? 1.5 : 0.7
+      pose.liftFront = 0.04
+      pose.liftBack = 0.04
+      pose.armSword = -1.35
+      pose.armFree = -0.95
+      pose.elbowSword = 0.4
+      pose.elbowFree = 0.7
+      break
+    }
+    case 'fall':
+      // Arms up, legs trailing: the shape of somebody who has run out of floor.
+      pose.lean = 0.1
+      pose.legFront = 0.38
+      pose.legBack = -0.42
+      pose.kneeBack = 0.45
+      pose.armSword = -2.75
+      pose.armFree = -2.1
+      pose.elbowSword = 0.3
+      pose.elbowFree = -0.35
+      break
+    case 'land':
+      pose.crouch = 0.5
+      pose.lean = 0.24
+      pose.legFront = 0.34
+      pose.legBack = -0.34
+      pose.kneeFront = 0.5
+      pose.kneeBack = 0.5
+      pose.armFree = -0.8
+      pose.armSword = -0.6
+      pose.elbowFree = 0.8
+      pose.elbowSword = 0.8
+      break
+    case 'hardLand':
+      // Down on one knee, and slow about getting up.
+      pose.crouch = 0.9 - frame * 0.11
+      pose.lean = 0.42
+      pose.legFront = 0.5
+      pose.legBack = -0.7
+      pose.kneeFront = 0.9
+      pose.kneeBack = 1.5
+      pose.armFree = -0.2
+      pose.armSword = 0.1
+      pose.elbowFree = 1.0
+      break
+    case 'hang':
+      // Hanging off a ledge by the fingers: arms straight up, body dead weight.
+      pose.crouch = 0.05
+      pose.legFront = 0.16
+      pose.legBack = -0.2
+      pose.kneeBack = 0.45
+      pose.kneeFront = 0.12
+      pose.armSword = -3.08
+      pose.armFree = -2.85
+      pose.elbowSword = 0.06
+      pose.elbowFree = -0.16
+      break
+    case 'climbUp': {
+      // Pulling up: the elbows fold, the knee comes over the lip.
+      const t = Math.min(1, frame / 6)
+      pose.crouch = 0.65 - t * 0.6
+      pose.armSword = -3.0 + t * 1.6
+      pose.armFree = -2.95 + t * 1.6
+      pose.elbowSword = 1.5 - t * 1.3
+      pose.elbowFree = 1.5 - t * 1.3
+      pose.legFront = 0.5 - t * 0.35
+      pose.legBack = -0.3
+      pose.kneeFront = 1.4 - t * 1.2
+      pose.kneeBack = 0.4
+      pose.lean = 0.3 - t * 0.25
+      break
+    }
+    case 'crouch':
+      pose.crouch = 0.85
+      pose.lean = 0.26
+      pose.legFront = 0.55
+      pose.legBack = -0.35
+      pose.kneeFront = 1.5
+      pose.kneeBack = 1.3
+      pose.armFree = 0.3
+      pose.armSword = 0.2
+      pose.elbowFree = 0.9
+      break
+    case 'turn':
+      // Mid-turn: feet together, shoulders already coming round, so he is a
+      // narrower figure for the moment it takes.
+      pose.twist = 0.75
+      pose.legFront = 0.04
+      pose.legBack = -0.04
+      pose.armFree = -0.3
+      pose.elbowFree = 0.7
+      pose.lean = -0.06
+      break
+    case 'drinking':
+      pose.armSword = -2.5
+      pose.elbowSword = 1.5
+      pose.lean = -0.15
+      pose.crouch = 0.1
+      break
+    case 'dead':
+      pose.flat = 1
+      break
+  }
+
+  // A drawn sword overrides the arms: it is the loudest thing about a pose.
+  switch (stance) {
+    case 'strike':
+      // The whole body behind the point, front foot a long way forward.
+      pose.blade = 1
+      pose.bladeTilt = -0.05
+      pose.armSword = -1.5
+      pose.elbowSword = 0
+      pose.armFree = 0.9
+      pose.elbowFree = 0.5
+      pose.lean = 0.3
+      pose.legFront = 0.75
+      pose.legBack = -0.45
+      pose.kneeFront = 0.35
+      pose.kneeBack = 0.05
+      break
+    case 'parry':
+      // Blade up and across, body turned away behind it.
+      pose.blade = 0.85
+      pose.bladeTilt = -1.25
+      pose.armSword = -1.05
+      pose.elbowSword = 0.8
+      pose.armFree = -0.3
+      pose.elbowFree = 1.1
+      pose.lean = -0.14
+      pose.legFront = 0.3
+      pose.legBack = -0.3
+      pose.kneeFront = 0.3
+      pose.kneeBack = 0.3
+      break
+    case 'hurt':
+      // Knocked back off the front foot, blade dropping.
+      pose.blade = 0.6
+      pose.bladeTilt = 0.5
+      pose.lean = -0.42
+      pose.armSword = -0.3
+      pose.elbowSword = 0.5
+      pose.armFree = -1.3
+      pose.elbowFree = 0.6
+      pose.legFront = 0.2
+      pose.legBack = -0.6
+      pose.kneeBack = 0.5
+      break
+    case 'advance':
+    case 'ready':
+    case 'retreat': {
+      // On guard: blade level and forward, free arm out behind for balance.
+      const forward = stance === 'advance' ? 1 : stance === 'retreat' ? -1 : 0
+      pose.blade = 0.8
+      pose.bladeTilt = -0.28
+      pose.armSword = -0.95
+      pose.elbowSword = 0.55
+      pose.armFree = 0.75
+      pose.elbowFree = 0.7
+      pose.lean = 0.12 * forward
+      pose.legFront = 0.34 + 0.18 * forward
+      pose.legBack = -0.34 - 0.18 * Math.max(0, -forward)
+      pose.kneeFront = 0.35
+      pose.kneeBack = 0.2
+      break
+    }
+    case 'dead':
+      pose.flat = 1
+      break
+  }
+
+  return pose
+}
+
+/**
+ * The same colour, darker.
+ *
+ * Arms drawn in the tunic colour vanish into the tunic, which cost the first
+ * version of this figure both its sleeves. One multiplier keeps every look's
+ * sleeves and folds in step with its own colour rather than needing a second
+ * hand-picked shade per character.
+ */
+function darker(hex: string, by: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  const c = (shift: number) => Math.round(((n >> shift) & 255) * by)
+  return `rgb(${c(16)},${c(8)},${c(0)})`
+}
+
+interface Look {
+  /** Tunic, shirt, robe: whatever is on the top half. */
+  body: string
+  /** Trousers. Usually a shade off the tunic, so the legs read separately. */
+  legs: string
+  /** Sash and cuffs. */
+  trim: string
+  skin: string
+  hair: string
+  /** Something on the head, for the guards. */
+  hat?: string
+  /** Is this one holding a sword at all? */
+  armed: boolean
+}
+
+const BOOT = '#3a2c22'
+
+/**
+ * A limb in two segments, with a joint that bends.
+ *
+ * One straight rectangle per arm was the first attempt and it made everybody
+ * look like a deckchair. An elbow and a knee are most of what separates a
+ * person from a diagram, and they cost one extra transform each.
+ */
+function jointed(
+  ctx: Ctx,
+  ox: number, oy: number,
+  angle: number, bend: number,
+  upper: number, lower: number, thick: number,
+  upperColour: string, lowerColour: string,
+  foot: { w: number; h: number; colour: string } | null,
+): void {
+  ctx.save()
+  ctx.translate(ox, oy)
+  ctx.rotate(angle)
+  ctx.fillStyle = upperColour
+  ctx.fillRect(-thick / 2, -thick * 0.3, thick, upper + thick * 0.5)
+  ctx.translate(0, upper)
+  ctx.rotate(bend)
+  ctx.fillStyle = lowerColour
+  ctx.fillRect(-thick * 0.44, 0, thick * 0.88, lower)
+  if (foot) {
+    ctx.translate(0, lower)
+    ctx.fillStyle = foot.colour
+    // The foot points forward, which is +x now that the whole figure is
+    // mirrored by its facing rather than every limb being mirrored by hand.
+    ctx.fillRect(-foot.w * 0.3, -foot.h * 0.2, foot.w, foot.h)
+  }
+  ctx.restore()
+}
+
+/**
+ * A person.
+ *
+ * Ours: a slim figure in a white tunic and a red sash, guards in coloured
+ * robes with a headdress. Everything is drawn in a frame that has already been
+ * mirrored to face the right way, so forward is always +x and there is no
+ * `* facing` sprinkled through the geometry to get wrong.
+ */
 function figure(
   ctx: Ctx,
   x: number,
   footY: number,
   s: number,
   facing: 1 | -1,
-  look: { body: string; trim: string; skin: string; hair: string },
-  pose: { stride: number; crouch: number; arm: number; sword: number },
+  look: Look,
+  pose: Pose,
 ): void {
-  const h = s * 1.3
-  const w = s * 0.78
-  const top = footY - h * (1 - pose.crouch * 0.28)
-  const cx = x
+  const h = s * 1.34
+  const w = s * 0.5
 
-  // Legs
-  ctx.fillStyle = look.body
-  const swing = pose.stride * w * 0.42
-  ctx.fillRect(cx - w * 0.36 + swing, footY - h * 0.38, w * 0.3, h * 0.38)
-  ctx.fillRect(cx + w * 0.06 - swing, footY - h * 0.38, w * 0.3, h * 0.38)
-  ctx.fillStyle = look.trim
-  ctx.fillRect(cx - w * 0.4 + swing, footY - h * 0.05, w * 0.38, h * 0.05)
-  ctx.fillRect(cx + w * 0.02 - swing, footY - h * 0.05, w * 0.38, h * 0.05)
+  ctx.save()
+  ctx.translate(x, footY)
+  // A turn is drawn by squeezing the whole figure towards its own centre line,
+  // which is as much foreshortening as a flat figure needs to sell one.
+  ctx.scale(facing * (1 - pose.twist * 0.62), 1)
 
-  // Tunic
-  ctx.fillStyle = look.body
-  ctx.fillRect(cx - w * 0.45, top + h * 0.26, w * 0.9, h * 0.4)
-  ctx.fillStyle = look.trim
-  ctx.fillRect(cx - w * 0.45, top + h * 0.52, w * 0.9, h * 0.07)
+  // The shadow he stands in. Without it a figure floats a little above the
+  // floor no matter how carefully the feet are placed.
+  ctx.fillStyle = 'rgba(0,0,0,0.42)'
+  ctx.beginPath()
+  ctx.ellipse(0, 0, w * 0.6, h * 0.032, 0, 0, Math.PI * 2)
+  ctx.fill()
 
-  // Head and hair
-  ctx.fillStyle = look.skin
-  ctx.fillRect(cx - w * 0.26, top + h * 0.05, w * 0.52, h * 0.21)
-  ctx.fillStyle = look.hair
-  ctx.fillRect(cx - w * 0.3, top, w * 0.6, h * 0.09)
-  ctx.fillRect(cx - w * 0.3 - facing * w * 0.04, top + h * 0.05, w * 0.16, h * 0.14)
-
-  // Sword arm
-  ctx.fillStyle = look.skin
-  const armY = top + h * (0.3 + pose.arm * 0.06)
-  ctx.fillRect(cx + facing * w * 0.3, armY, w * 0.5 * facing, h * 0.1)
-  if (pose.sword > 0) {
-    ctx.fillStyle = INK.blade
-    const reach = s * (0.5 + pose.sword * 0.75)
-    ctx.fillRect(
-      facing > 0 ? cx + w * 0.7 : cx - w * 0.7 - reach,
-      armY + h * 0.02,
-      reach,
-      Math.max(2, h * 0.045),
-    )
+  if (pose.flat > 0) {
+    // Face down, and not getting up. Laid out along the floor at full length,
+    // so it is legible as a body rather than as a smudge on the tile.
+    const armOut = darker(look.body, 0.78)
+    ctx.fillStyle = look.legs
+    ctx.fillRect(-w * 1.5, -h * 0.13, w * 1.45, h * 0.13)
+    ctx.fillStyle = BOOT
+    ctx.fillRect(-w * 1.78, -h * 0.11, w * 0.32, h * 0.11)
+    ctx.fillStyle = look.body
+    ctx.fillRect(-w * 0.1, -h * 0.18, w * 1.2, h * 0.18)
+    ctx.fillStyle = look.trim
+    ctx.fillRect(-w * 0.14, -h * 0.18, w * 0.13, h * 0.18)
+    ctx.fillStyle = armOut
+    ctx.fillRect(w * 0.18, -h * 0.26, w * 0.16, h * 0.1)
+    ctx.fillStyle = look.skin
+    ctx.fillRect(w * 1.05, -h * 0.2, w * 0.38, h * 0.2)
+    ctx.fillStyle = look.hair
+    ctx.fillRect(w * 1.14, -h * 0.24, w * 0.34, h * 0.1)
+    ctx.restore()
+    return
   }
+
+  const fold = pose.crouch * h * 0.2
+  const hipY = -h * 0.48 + fold
+  const torso = h * 0.36 - fold * 0.5
+  const thigh = (h * 0.24 - fold * 0.35)
+  const shin = (h * 0.24 - fold * 0.35)
+  const upperArm = h * 0.17
+  const foreArm = h * 0.16
+  const legThick = w * 0.19
+  const armThick = w * 0.145
+  const foot = { w: w * 0.4, h: h * 0.045, colour: BOOT }
+
+  // Legs, from the hips, back one first so the front leg reads in front. The
+  // hips have to be wider apart than the legs are thick or a standing figure
+  // is one white column with a head on it.
+  jointed(ctx, -w * 0.17, hipY - pose.liftBack * h, pose.legBack, pose.kneeBack,
+    thigh, shin, legThick, darker(look.legs, 0.84), darker(look.legs, 0.84), { ...foot, colour: darker(BOOT, 0.8) })
+  jointed(ctx, w * 0.17, hipY - pose.liftFront * h, pose.legFront, pose.kneeFront,
+    thigh, shin, legThick, look.legs, look.legs, foot)
+
+  // Everything above the hips pivots with the lean. Doing it as a real pivot
+  // rather than a shear is what stops a leaning figure looking sheared.
+  ctx.save()
+  ctx.translate(0, hipY)
+  ctx.rotate(-pose.lean)
+
+  // Torso: narrow at the waist, wider at the shoulders.
+  ctx.fillStyle = look.body
+  ctx.beginPath()
+  ctx.moveTo(-w * 0.22, 0)
+  ctx.lineTo(w * 0.22, 0)
+  ctx.lineTo(w * 0.3, -torso)
+  ctx.lineTo(-w * 0.3, -torso)
+  ctx.closePath()
+  ctx.fill()
+  // A shaded side, so the torso is a body rather than a cut-out.
+  ctx.fillStyle = darker(look.body, 0.88)
+  ctx.beginPath()
+  ctx.moveTo(-w * 0.22, 0)
+  ctx.lineTo(-w * 0.1, 0)
+  ctx.lineTo(-w * 0.16, -torso)
+  ctx.lineTo(-w * 0.3, -torso)
+  ctx.closePath()
+  ctx.fill()
+
+  // The sash, which is the one splash of colour on him and how you pick him
+  // out of a room at a glance.
+  ctx.fillStyle = look.trim
+  ctx.fillRect(-w * 0.26, -h * 0.05, w * 0.54, h * 0.055)
+  ctx.fillStyle = darker(look.trim, 0.8)
+  ctx.fillRect(w * 0.14, -h * 0.05, w * 0.14, h * 0.13)
+
+  const shoulderY = -torso + h * 0.025
+
+  const sleeve = darker(look.body, 0.78)
+
+  // The far arm, behind the body and a shade darker again for it. Set well
+  // back from the middle: drawn any closer it stops reading as an arm and
+  // starts reading as a stripe down the tunic.
+  jointed(ctx, -w * 0.31, shoulderY, pose.armFree, pose.elbowFree,
+    upperArm, foreArm, armThick, darker(look.body, 0.6), darker(look.skin, 0.74), null)
+
+  // Head: a neck, a face with a nose, and hair down the back of it.
+  const headH = h * 0.15
+  const headW = w * 0.44
+  const headY = shoulderY - headH
+  ctx.fillStyle = look.skin
+  ctx.fillRect(-w * 0.09, headY + headH - h * 0.01, w * 0.18, h * 0.04)
+  ctx.fillStyle = look.skin
+  ctx.fillRect(-headW * 0.5, headY, headW, headH)
+  ctx.beginPath()
+  ctx.moveTo(headW * 0.5, headY + headH * 0.38)
+  ctx.lineTo(headW * 0.72, headY + headH * 0.55)
+  ctx.lineTo(headW * 0.5, headY + headH * 0.68)
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillStyle = look.hair
+  ctx.fillRect(-headW * 0.56, headY - headH * 0.1, headW * 1.12, headH * 0.38)
+  ctx.fillRect(-headW * 0.62, headY - headH * 0.1, headW * 0.34, headH * 1.15)
+  if (look.hat) {
+    ctx.fillStyle = look.hat
+    ctx.fillRect(-headW * 0.64, headY - headH * 0.34, headW * 1.28, headH * 0.46)
+    ctx.fillStyle = darker(look.hat, 0.72)
+    ctx.fillRect(-headW * 0.64, headY + headH * 0.06, headW * 1.28, headH * 0.1)
+  }
+  ctx.fillStyle = '#1a140d'
+  ctx.fillRect(headW * 0.12, headY + headH * 0.34, headW * 0.2, Math.max(2, headH * 0.16))
+
+  // The near arm, in front of the body, and the blade if there is one.
+  jointed(ctx, w * 0.3, shoulderY, pose.armSword, pose.elbowSword,
+    upperArm, foreArm, armThick * 1.08, sleeve, look.skin, null)
+
+  if (look.armed && pose.blade > 0) {
+    ctx.save()
+    ctx.translate(w * 0.3, shoulderY)
+    ctx.rotate(pose.armSword)
+    ctx.translate(0, upperArm)
+    ctx.rotate(pose.elbowSword)
+    ctx.translate(0, foreArm)
+    // Undo the arm, so the blade points where the pose says rather than
+    // wherever the elbow happens to have left the hand.
+    ctx.rotate(-(pose.armSword + pose.elbowSword))
+    ctx.rotate(pose.bladeTilt)
+    ctx.fillStyle = '#c8a24a'
+    ctx.fillRect(-w * 0.1, -w * 0.13, w * 0.22, w * 0.26)
+    ctx.fillRect(w * 0.02, -w * 0.05, w * 0.12, w * 0.1)
+    const len = s * (0.3 + pose.blade * 0.36)
+    const thick = Math.max(2.5, w * 0.075)
+    ctx.fillStyle = INK.blade
+    ctx.beginPath()
+    ctx.moveTo(w * 0.14, -thick / 2)
+    ctx.lineTo(w * 0.14 + len, -thick * 0.15)
+    ctx.lineTo(w * 0.14 + len, thick * 0.15)
+    ctx.lineTo(w * 0.14, thick / 2)
+    ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = INK.bladeDark
+    ctx.fillRect(w * 0.14, 0, len, Math.max(1, thick * 0.25))
+    ctx.restore()
+  }
+
+  ctx.restore()
+  ctx.restore()
 }
+
+/** The prince: white tunic, red sash, and the only one in the room without a hat. */
+const PRINCE_LOOK = (armed: boolean): Look => ({
+  body: INK.tunic,
+  legs: '#cdc3a9',
+  trim: INK.sash,
+  skin: INK.skin,
+  hair: INK.hair,
+  armed,
+})
 
 /** Where the prince's feet are, and how he is standing. */
 export function drawPrince(ctx: Ctx, prince: Prince, view: View, fighting: boolean): void {
   const x = px(view, prince.col) + view.size / 2
   const footY = py(view, prince.row)
-  const running = prince.action === 'run' || prince.action === 'startRun'
-  const stance = prince.stance ?? 'ready'
-  figure(
-    ctx,
-    x,
-    footY,
-    view.size,
-    prince.facing,
-    { body: INK.tunic, trim: INK.sash, skin: INK.skin, hair: INK.hair },
-    {
-      stride: running ? Math.sin(view.clock * 14) : 0,
-      crouch: prince.action === 'crouch' || prince.action === 'hang' ? 1 : 0,
-      arm: stance === 'strike' ? 1 : 0,
-      sword: fighting ? (stance === 'strike' ? 1 : stance === 'parry' ? 0.3 : 0.5) : 0,
-    },
-  )
+  const stance = fighting ? (prince.stance ?? 'ready') : 'none'
+  figure(ctx, x, footY, view.size, prince.facing, PRINCE_LOOK(fighting), poseFor(prince.action, prince.frame, stance))
 }
 
 export function drawGuard(ctx: Ctx, guard: Guard, view: View): void {
-  if (guard.health <= 0) return
+  if (guard.health <= 0 && guard.stance !== 'dead') return
   const look = ROBES[guard.colour] ?? ROBES.guard
   figure(
     ctx,
@@ -388,13 +1009,9 @@ export function drawGuard(ctx: Ctx, guard: Guard, view: View): void {
     py(view, guard.row),
     view.size,
     guard.facing,
-    { body: look.robe, trim: look.trim, skin: look.skin, hair: '#241c18' },
-    {
-      stride: 0,
-      crouch: 0,
-      arm: guard.stance === 'strike' ? 1 : 0,
-      sword: guard.stance === 'strike' ? 1 : guard.stance === 'parry' ? 0.3 : 0.5,
-    },
+    { body: look.robe, legs: look.legs, trim: look.trim, skin: look.skin, hair: '#241c18', hat: look.trim, armed: true },
+    // A guard always has his sword out. That is the whole of what a guard is.
+    poseFor('stand', guard.frame, guard.health <= 0 ? 'dead' : guard.stance),
   )
 }
 

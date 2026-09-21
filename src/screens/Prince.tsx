@@ -24,6 +24,7 @@ import {
   INK,
   drawChevrons,
   drawPad,
+  FLOOR_DEPTH,
   drawGuard,
   drawPrince,
   drawRoom,
@@ -176,11 +177,15 @@ export function Prince() {
         const statusH = Math.max(h * 0.055, 20)
         const middle = Math.max(60, h - padH - capH - statusH)
 
-        // A room is ten tiles by three floors, letterboxed into what is left.
-        const size = Math.min(w / ROOM_COLS, (middle / ROOM_ROWS) * 0.78)
-        const floorHeight = middle / ROOM_ROWS
+        // A room is ten tiles by three floors, letterboxed into what is left,
+        // plus the depth of the floor hanging below the lowest one — without
+        // that the bottom slab is drawn past the edge of the board and anyone
+        // standing on it floats over nothing.
+        const rows = ROOM_ROWS + FLOOR_DEPTH
+        const floorHeight = middle / rows
+        const size = Math.min(w / ROOM_COLS, floorHeight * 0.78)
         const boardW = size * ROOM_COLS
-        const boardH = floorHeight * ROOM_ROWS
+        const boardH = floorHeight * rows
 
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.fillStyle = INK.black
@@ -228,9 +233,16 @@ export function Prince() {
         }
 
         if (next.message) {
+          // On a plate of its own. Laid straight over the room it collided
+          // with whatever happened to be standing in the middle of it.
           ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          const my = capH + boardH - text * 1.2
+          const mw = ctx.measureText(next.message).width + text * 1.6
+          ctx.fillStyle = 'rgba(8,10,14,0.82)'
+          ctx.fillRect(w / 2 - mw / 2, my - text * 0.95, mw, text * 1.9)
           ctx.fillStyle = INK.caption
-          ctx.fillText(next.message, w / 2, capH + boardH - text)
+          ctx.fillText(next.message, w / 2, my)
         }
 
         padRef.current = padLayout(w, h, duel)
