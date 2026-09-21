@@ -128,30 +128,17 @@ if ((await scoreNow()) <= afterOpening) problems.push('steering did not move the
 
 // --- the shop: maths buys power, and never merely permission ---------------
 /*
- * The only way to the shop is to lose a life, which is the whole design: the
- * maths is what you do when the game beats you, not a button that interrupts
- * it. So the way in has to be earned here too — drive at the chasers in the
- * middle until one of them catches him.
- *
- * This used to be a click on a Shop button sitting over the board. That button
- * is gone, and for a while this test only passed because the player happened
- * to die on his own before it got here.
+ * Reached from the settings rather than by dying, which it used to do. That
+ * worked only while the player was easy to catch: once the controls were
+ * fixed he survived a full minute of being driven at the chasers and the test
+ * simply timed out. A parent wants a way in that does not involve losing, too.
  */
-const shopButton = page.getByRole('button', { name: 'Shop', exact: true })
-const middle = [board.x + board.width / 2, board.y + board.height / 2]
-const deadline = Date.now() + 60000
-while ((await shopButton.count()) === 0 && Date.now() < deadline) {
-  await page.mouse.click(middle[0], middle[1] - 120)
-  await page.waitForTimeout(400)
-  await page.mouse.click(middle[0], middle[1] + 120)
-  await page.waitForTimeout(400)
-}
-if ((await shopButton.count()) === 0) {
-  problems.push('never reached the shop: nothing caught the player in a minute of trying')
-} else {
-  await shopButton.first().click()
-  await page.waitForTimeout(700)
-}
+await page.goto(URL, { waitUntil: 'networkidle' })
+await page.waitForTimeout(1200)
+await page.locator('button[aria-label="Settings"]').click()
+await page.waitForTimeout(400)
+await page.getByRole('button', { name: /Open the maths shop/ }).click()
+await page.waitForTimeout(800)
 
 const shopText = await page.textContent('body')
 if (!/Harder problem, better prize/.test(shopText)) problems.push('the shop is not framed as a shop')
@@ -224,6 +211,38 @@ if ((await daveButton.count()) === 0) {
   if (/\d+\s*%/.test(daveText)) problems.push('a percentage is being shown in Dave')
 }
 
+// --- the dungeon: an hour on the clock, and it never goes back -------------
+await page.goto(URL, { waitUntil: 'networkidle' })
+await page.waitForTimeout(1200)
+await page.locator('button[aria-label="Settings"]').click()
+await page.waitForTimeout(500)
+
+const dungeonButton = page.getByRole('button', { name: 'The Dungeon' })
+if ((await dungeonButton.count()) === 0) {
+  problems.push('no way in to the dungeon from the settings')
+} else {
+  await dungeonButton.first().click()
+  await page.waitForTimeout(1500)
+
+  const dungeonHud = async () => (await page.textContent('header')).replace(/\s+/g, ' ').trim()
+  if (!/level 1\b/i.test(await dungeonHud())) problems.push('the dungeon did not open on level 1')
+  if (!/minutes 60\b/i.test(await dungeonHud())) problems.push('the dungeon did not start with the full hour')
+
+  // Walking: the buttons are laid out the same way Dave's are.
+  const room = await page.locator('canvas').boundingBox()
+  const r = Math.max(24, Math.min(54, Math.min(room.width, room.height) * 0.082))
+  const buttonY = room.y + room.height - r * 0.85 - r
+  await page.mouse.move(room.x + r * 4.1, buttonY)
+  await page.mouse.down()
+  await page.waitForTimeout(1800)
+  await page.mouse.up()
+  await page.waitForTimeout(400)
+
+  // The clock is the whole game: it has to be running down.
+  const minutes = Number((await dungeonHud()).match(/minutes (\d+)/i)?.[1] ?? -1)
+  if (minutes < 0 || minutes > 60) problems.push(`the dungeon clock reads ${minutes}`)
+}
+
 await browser.close()
 
 // No screen may grow a score for being right at maths.
@@ -234,4 +253,4 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: played the maze, bought from the shop, and ran Dave through the hideout')
+console.log('smoke test clean: played the maze, bought from the shop, ran Dave through the hideout, and went down into the dungeon')

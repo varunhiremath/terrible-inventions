@@ -8,7 +8,7 @@ function strip(row: string, startCol = 1): Level {
   return {
     name: 'test',
     rows: ['X'.repeat(row.length + 2), `X${row}X`, 'X'.repeat(row.length + 2)],
-    start: { col: startCol, row: 1 },
+    start: { col: startCol, row: 1, facing: 1 as const },
   }
 }
 
@@ -136,7 +136,7 @@ describe('jumping', () => {
     const level: Level = {
       name: 'test',
       rows: ['XXXXXXXXXX', 'X##   ###X', 'X########X', 'XXXXXXXXXX'],
-      start: { col: 2, row: 1 },
+      start: { col: 2, row: 1, facing: 1 },
     }
     const prince = until(newPrince(level), level, press({ right: true, up: true }), 40)
     expect(prince.row).toBeGreaterThan(1) // fell to the floor below
@@ -146,7 +146,7 @@ describe('jumping', () => {
     const level: Level = {
       name: 'test',
       rows: ['XXXXXXXXXXXXXX', 'X#####   ####X', 'X############X', 'XXXXXXXXXXXXXX'],
-      start: { col: 2, row: 1 },
+      start: { col: 2, row: 1, facing: 1 },
     }
     // Run first, then jump — which is the whole point of the distinction.
     let prince = until(newPrince(level), level, press({ right: true }), 12)
@@ -175,7 +175,7 @@ describe('falling', () => {
   const twoFloors: Level = {
     name: 'test',
     rows: ['XXXXXXXX', 'X##   #X', 'X      X', 'X######X', 'XXXXXXXX'],
-    start: { col: 2, row: 1 },
+    start: { col: 2, row: 1, facing: 1 },
   }
 
   it('drops off the edge of a floor', () => {
@@ -187,7 +187,7 @@ describe('falling', () => {
     const level: Level = {
       name: 'test',
       rows: ['XXXXXXXX', 'X##    X', 'X######X', 'XXXXXXXX'],
-      start: { col: 2, row: 1 },
+      start: { col: 2, row: 1, facing: 1 },
     }
     const prince = until(newPrince(level), level, press({ right: true }), 40)
     expect(prince.dead).toBe(false)
@@ -199,7 +199,7 @@ describe('falling', () => {
     const level: Level = {
       name: 'test',
       rows: ['XXXXXXXX', 'X##    X', 'X      X', 'X######X', 'XXXXXXXX'],
-      start: { col: 2, row: 1 },
+      start: { col: 2, row: 1, facing: 1 },
     }
     const prince = until(newPrince(level), level, press({ right: true }), 60)
     expect(prince.dead).toBe(false)
@@ -210,7 +210,7 @@ describe('falling', () => {
     const level: Level = {
       name: 'test',
       rows: ['XXXXXXXX', 'X##    X', 'X      X', 'X      X', 'X######X', 'XXXXXXXX'],
-      start: { col: 2, row: 1 },
+      start: { col: 2, row: 1, facing: 1 },
     }
     const prince = until(newPrince(level), level, press({ right: true }), 80)
     expect(prince.dead).toBe(true)
@@ -236,7 +236,7 @@ describe('the dungeon', () => {
     const level: Level = {
       name: 'test',
       rows: ['XXXXXXXX', 'X#~   #X', 'X######X', 'XXXXXXXX'],
-      start: { col: 2, row: 1 },
+      start: { col: 2, row: 1, facing: 1 },
     }
     let prince = newPrince(level)
     prince = tick(prince, level, NO_INPUT)
@@ -273,7 +273,7 @@ describe('safety', () => {
     const level: Level = {
       name: 'test',
       rows: ['XXXXXXXXXX', 'X#X# ~^##X', 'X########X', 'XXXXXXXXXX'],
-      start: { col: 1, row: 1 },
+      start: { col: 1, row: 1, facing: 1 },
     }
     let prince = newPrince(level)
     const inputs = [

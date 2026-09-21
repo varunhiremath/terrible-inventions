@@ -1,5 +1,6 @@
 import { SEQUENCES, type Action } from './sequences'
 import { TILE, blocksMovement, standable, tileAt, type Level } from './level'
+import type { Stance } from './combat'
 
 /**
  * The prince.
@@ -40,6 +41,12 @@ export interface Prince {
   wobbling: { key: string; frames: number } | null
   potionsDrunk: number
   atExit: boolean
+  /**
+   * What he is doing with the sword, while a guard is in front of him.
+   * 'ready' whenever there is no fight on.
+   */
+  stance?: Stance
+  stanceFrame?: number
 }
 
 export const MAX_HEALTH = 3
@@ -63,6 +70,8 @@ export function newPrince(level: Level): Prince {
     wobbling: null,
     potionsDrunk: 0,
     atExit: false,
+    stance: 'ready',
+    stanceFrame: 0,
   }
 }
 

@@ -9,7 +9,7 @@ import { useStore } from '../store'
  * looking in here finds his own name and a text box, which is not a catastrophe.
  */
 export function Settings() {
-  const { save, saveNames, saveNote, replaceSave, setRewards, setVoice, setMusic, go } = useStore()
+  const { save, saveNames, saveNote, replaceSave, setRewards, setVoice, setMusic, openShop, go } = useStore()
   const profile = getProfile()
 
   const [kidName, setKidName] = useState(save.names.kidName ?? '')
@@ -155,7 +155,9 @@ export function Settings() {
         <div className="grid grid-cols-2 gap-2">
           <Btn onClick={() => go('arcade')} className="px-3 py-3 text-sm">Papa Panic</Btn>
           <Btn onClick={() => go('dave')} className="px-3 py-3 text-sm">Dangerous Dave</Btn>
+          <Btn onClick={() => go('prince')} className="col-span-2 px-3 py-3 text-sm">The Dungeon</Btn>
         </div>
+        <Btn onClick={openShop} className="px-3 py-3 text-sm">Open the maths shop</Btn>
       </Panel>
 
       <Panel className="flex flex-col gap-3">
