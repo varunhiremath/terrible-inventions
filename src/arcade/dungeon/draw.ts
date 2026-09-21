@@ -228,40 +228,66 @@ function slab(ctx: Ctx, x: number, y: number, w: number, h: number, stone: Stone
   ctx.fillRect(x, y + h - Math.max(2, h * 0.12), w, Math.max(2, h * 0.12))
 }
 
+/**
+ * A fire lamp on the wall.
+ *
+ * Not a light: a bowl of burning oil on an iron bracket, which is a different
+ * thing to draw. The first version was a soft circular pool of orange, and a
+ * soft circular pool of orange is a spotlight — it reads as electric, because
+ * a flame does not light a wall evenly in all directions. So the glow is an
+ * oval, taller than it is wide and brighter above the bowl than below it, the
+ * flame is the brightest thing in the room by a distance, and there is a
+ * bracket you can see holding it up.
+ */
 function torch(ctx: Ctx, x: number, y: number, s: number, clock: number, seed: number): void {
-  const flick = Math.sin(clock * 11 + seed) * 0.5 + 0.5
-  const baseY = y - s * 0.5
+  // Two flickers at different rates, so it never settles into a pulse.
+  const flick = (Math.sin(clock * 11 + seed) + Math.sin(clock * 17.3 + seed * 2)) * 0.25 + 0.5
+  const bowlY = y - s * 0.42
+  const cx = x + s * 0.5
 
-  // The pool of light it throws, which is most of what a torch is for.
-  const glow = ctx.createRadialGradient(x + s * 0.5, baseY, s * 0.05, x + s * 0.5, baseY, s * (1.6 + flick * 0.25))
-  glow.addColorStop(0, 'rgba(255,170,60,0.34)')
-  glow.addColorStop(0.5, 'rgba(255,140,40,0.11)')
+  ctx.save()
+  const glow = ctx.createRadialGradient(cx, bowlY, s * 0.04, cx, bowlY, s * (1.5 + flick * 0.2))
+  glow.addColorStop(0, 'rgba(255,196,96,0.4)')
+  glow.addColorStop(0.35, 'rgba(255,150,48,0.16)')
   glow.addColorStop(1, 'rgba(255,140,40,0)')
   ctx.fillStyle = glow
-  ctx.fillRect(x - s * 1.6, baseY - s * 1.8, s * 4.2, s * 3.6)
+  // Squashed sideways and lifted, because the heat and the light both go up.
+  ctx.translate(cx, bowlY - s * 0.25)
+  ctx.scale(1, 1.35)
+  ctx.translate(-cx, -(bowlY - s * 0.25))
+  ctx.fillRect(x - s * 1.6, bowlY - s * 2.2, s * 4.2, s * 3.6)
+  ctx.restore()
 
-  ctx.fillStyle = '#6b5236'
-  ctx.fillRect(x + s * 0.44, baseY, s * 0.12, s * 0.5)
-  ctx.fillStyle = '#8d6f49'
-  ctx.fillRect(x + s * 0.34, baseY - s * 0.05, s * 0.32, s * 0.1)
-  ctx.fillStyle = '#4a3a26'
-  ctx.fillRect(x + s * 0.34, baseY + s * 0.05, s * 0.32, s * 0.03)
+  // The bracket: an arm out of the wall, and the bowl sitting in it.
+  ctx.fillStyle = '#3d3226'
+  ctx.fillRect(x + s * 0.46, bowlY + s * 0.06, s * 0.08, s * 0.46)
+  ctx.fillStyle = '#584734'
+  ctx.beginPath()
+  ctx.moveTo(x + s * 0.3, bowlY - s * 0.02)
+  ctx.lineTo(x + s * 0.7, bowlY - s * 0.02)
+  ctx.lineTo(x + s * 0.62, bowlY + s * 0.14)
+  ctx.lineTo(x + s * 0.38, bowlY + s * 0.14)
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillStyle = '#7a6144'
+  ctx.fillRect(x + s * 0.3, bowlY - s * 0.04, s * 0.4, s * 0.04)
 
-  const h = s * (0.42 + flick * 0.22)
-  ctx.fillStyle = INK.flame
-  ctx.beginPath()
-  ctx.moveTo(x + s * 0.5, baseY - h)
-  ctx.quadraticCurveTo(x + s * 0.8, baseY - h * 0.3, x + s * 0.63, baseY)
-  ctx.lineTo(x + s * 0.37, baseY)
-  ctx.quadraticCurveTo(x + s * 0.2, baseY - h * 0.3, x + s * 0.5, baseY - h)
-  ctx.fill()
-  ctx.fillStyle = INK.flameHot
-  ctx.beginPath()
-  ctx.moveTo(x + s * 0.5, baseY - h * 0.6)
-  ctx.quadraticCurveTo(x + s * 0.65, baseY - h * 0.2, x + s * 0.57, baseY)
-  ctx.lineTo(x + s * 0.43, baseY)
-  ctx.quadraticCurveTo(x + s * 0.35, baseY - h * 0.2, x + s * 0.5, baseY - h * 0.6)
-  ctx.fill()
+  // The flame, in three tongues so it has an edge rather than a gradient.
+  const h = s * (0.5 + flick * 0.26)
+  const tongue = (width: number, height: number, colour: string, lift: number) => {
+    ctx.fillStyle = colour
+    ctx.beginPath()
+    ctx.moveTo(cx, bowlY - height - lift)
+    ctx.quadraticCurveTo(cx + width, bowlY - height * 0.35, cx + width * 0.62, bowlY - s * 0.02)
+    ctx.lineTo(cx - width * 0.62, bowlY - s * 0.02)
+    ctx.quadraticCurveTo(cx - width, bowlY - height * 0.35, cx, bowlY - height - lift)
+    ctx.fill()
+  }
+  tongue(s * 0.26, h, '#e2561c', 0)
+  tongue(s * 0.19, h * 0.82, INK.flame, s * 0.02)
+  tongue(s * 0.1, h * 0.5, INK.flameHot, s * 0.01)
+  ctx.fillStyle = 'rgba(255,255,220,0.9)'
+  ctx.fillRect(cx - s * 0.035, bowlY - h * 0.22, s * 0.07, h * 0.2)
 }
 
 /**
@@ -795,24 +821,26 @@ const STYLE: Style = 'warrior'
 /**
  * The runner.
  *
- * Dressed off the original: a cream shirt and loose cream trousers with a
- * crimson sash, and a deep blue head wrap whose tail streams behind him — the
- * one thing on the box art that was already half a ninja. The wrap comes
- * across the face, which is ours.
+ * Off the original: a sleeveless top, loose trousers, a sash at the waist, a
+ * band round the head with the ends left long, and no shoes. Bare arms and
+ * bare feet are not a detail — they are most of the reason he reads as a
+ * person. An earlier version had him hooded and masked with a shoulder plate
+ * and bound forearms, and it looked like a machine, because there was no skin
+ * anywhere in it.
  *
  * Cream on purpose. These rooms are dark and every guard is darker than he is,
- * so the lightest thing on the screen is always him and the eye finds him
- * before it finds anything else. That matters more at phone size than any
- * amount of detail does; an earlier version had him in slate head to foot and
- * he disappeared into the masonry.
+ * so the lightest thing on the screen is always him.
  */
 const PRINCE_LOOK: Look = {
   body: '#efe7d6',
-  legs: '#d9cfb8',
+  legs: '#e4dbc6',
   trim: '#c0392b',
-  skin: '#e3ab7a',
-  hair: '#2f4a6b',
-  mask: '#3a5a7e',
+  skin: '#e0a878',
+  hair: '#2b1d14',
+  band: '#2f5f9e',
+  sleeveless: true,
+  barefoot: true,
+  loose: true,
 }
 
 /** Where the prince's feet are, and how he is standing. */
@@ -841,7 +869,21 @@ export function drawGuard(ctx: Ctx, guard: Guard, view: View): void {
     guard.facing,
     // A guard always has his sword out. That is the whole of what a guard is.
     poseFor('stand', guard.frame, guard.health <= 0 ? 'dead' : guard.stance),
-    { body: robe.robe, legs: robe.legs, trim: robe.trim, skin: robe.skin, hair: robe.legs, mask: robe.legs },
+    {
+      body: robe.robe,
+      legs: robe.legs,
+      trim: robe.trim,
+      skin: robe.skin,
+      hair: '#1f1611',
+      band: robe.trim,
+      // Turban, coat over baggy trousers, curved blade, and shoes — dressed
+      // apart from him in every way, so a room with one in it reads at a
+      // glance.
+      turban: true,
+      coat: true,
+      loose: true,
+      curved: true,
+    },
     STYLE,
     true,
   )

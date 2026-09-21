@@ -76,7 +76,7 @@ export const LEAN: Build = { height: 1.38, width: 0.15, head: 0.118, hip: 0.52, 
  * is. The head comes down a little, which is what lets the shoulders look
  * broad rather than merely wide.
  */
-export const WARRIOR: Build = { height: 1.36, width: 0.225, head: 0.132, hip: 0.47, limb: 0.088 }
+export const WARRIOR: Build = { height: 1.36, width: 0.2, head: 0.15, hip: 0.47, limb: 0.082 }
 
 interface Pose {
   lean: number
@@ -165,16 +165,39 @@ export function skeleton(pose: Pose, size: number, build: Build): Joints {
   }
 }
 
+/**
+ * What somebody is wearing.
+ *
+ * Costume belongs to the character, not to the drawing style — one is who he
+ * is and the other is how the lines are put down. Keeping them apart is what
+ * lets a guard be a guard in the same frames.
+ *
+ * The flags here are all about skin. An earlier version had him in a hood, a
+ * mask, a shoulder plate and bound forearms, and the result read as a machine:
+ * there was no person anywhere in it. What makes a figure human at this size
+ * is seeing the bits of them that are not cloth — a face, hair, bare arms,
+ * bare feet — so those are the things this controls.
+ */
 export interface Look {
   body: string
   legs: string
   trim: string
   skin: string
-  /** Hair, or the cowl, depending on the style. */
   hair: string
-  /** The face covering, if the style has one. */
-  mask?: string
-  hat?: string
+  /** A band round the head, tied at the back with the ends left long. */
+  band?: string
+  /** A wrapped turban instead, for the guards. */
+  turban?: boolean
+  /** Bare arms: a sleeveless top, so the whole arm is skin. */
+  sleeveless?: boolean
+  /** No shoes at all, which is how he is drawn in the original. */
+  barefoot?: boolean
+  /** Trousers cut wide, so they flare at the ankle rather than ending. */
+  loose?: boolean
+  /** A curved blade. */
+  curved?: boolean
+  /** A long coat over the trousers, down to the knee. */
+  coat?: boolean
 }
 
 export type Style = 'warrior' | 'outline' | 'acrobat' | 'silhouette' | 'inked'
@@ -184,25 +207,20 @@ interface Spec {
   ink: string | null
   inkWidth: number
   rim: string | null
-  /** A cowl over the head and a mask across the face, instead of hair. */
-  hood?: boolean
-  /** Bindings down the forearms and the shins. */
-  wraps?: boolean
-  /** Cloth off the back of the neck that trails when he moves. */
+  /** Cloth off the back of the head that trails when he moves. */
   scarf?: boolean
-  /** A plate over the near shoulder. */
-  pauldron?: boolean
   /** How far to round every corner off, as a fraction of his height. */
   round?: number
 }
 
 /** How each style is put together. Kept as data so they can be compared fairly. */
 export const STYLES: Record<Style, Spec> = {
-  // The one the game uses: a hooded fighter on the heavy build, with a wide
-  // belt, bound forearms and shins, and a scarf that trails behind him.
+  // The one the game uses. A soft dark line rather than a hard black one:
+  // black outlines everywhere are most of what made the earlier figure read
+  // as stamped out of metal.
   warrior: {
-    build: WARRIOR, ink: '#14161c', inkWidth: 0.019, rim: null,
-    hood: true, wraps: true, scarf: true, pauldron: true, round: 0.016,
+    build: WARRIOR, ink: '#2a2118', inkWidth: 0.014, rim: null,
+    scarf: true, round: 0.018,
   },
   // Flat colour with a heavy dark line round everything. An outline is what
   // makes flat shapes read as drawn rather than as shapes.
@@ -296,33 +314,46 @@ function bone(ctx: Ctx, a: Point, b: Point, thick: number, fill: string, ink: st
   ctx.stroke()
 }
 
-/** A limb: two bones and a foot or a hand at the end of them. */
+/** A limb: two bones, and a foot or a hand at the end of them. */
 function limb(
   ctx: Ctx, l: Limbs, thick: number, upper: string, lower: string,
-  ink: string | null, inkWidth: number, boot: { size: number; colour: string } | null,
-  wraps?: string | null,
+  ink: string | null, inkWidth: number,
+  foot: { size: number; colour: string; bare: boolean } | null,
+  /** Trousers cut wide: the leg widens towards the ankle instead of ending. */
+  loose = false,
+  round = 0,
 ): void {
   bone(ctx, l.hip, l.knee, thick, upper, ink, inkWidth)
-  bone(ctx, l.knee, l.ankle, thick * 0.88, lower, ink, inkWidth)
-  if (boot) {
-    // The foot points forward from the ankle and stays near level, whatever
-    // the shin is doing. Drawn in the shin's own frame it swings round with
-    // the leg, and a foot that points backwards on the back half of a stride
-    // is the single loudest thing wrong with a walk.
-    const shin = Math.atan2(l.ankle.x - l.knee.x, l.ankle.y - l.knee.y)
-    const tilt = Math.max(-0.5, Math.min(0.5, -shin * 0.35))
-    const toe = {
-      x: l.ankle.x + Math.cos(tilt) * boot.size,
-      y: l.ankle.y + Math.sin(tilt) * boot.size,
-    }
-    bone(ctx, l.ankle, toe, thick * 1.05, boot.colour, ink, inkWidth)
+  if (loose) {
+    // A tapered slab rather than a capsule, because a trouser leg hangs and a
+    // tube does not, and the hang is most of what says cloth rather than pipe.
+    slab(ctx, l.knee, l.ankle, thick * 0.46, thick * 0.8, lower, ink, inkWidth, 0, round)
+  } else {
+    bone(ctx, l.knee, l.ankle, thick * 0.88, lower, ink, inkWidth)
   }
-  if (wraps) {
-    for (const at of [0.3, 0.55, 0.8]) {
-      const a = along(l.knee, l.ankle, at)
-      const b = along(l.knee, l.ankle, at + 0.1)
-      bone(ctx, a, b, thick * 1.02, wraps, null, 0)
+  if (!foot) return
+
+  // The foot points forward from the ankle and stays near level, whatever the
+  // shin is doing. Drawn in the shin's own frame it swings round with the leg,
+  // and a foot that points backwards on the back half of a stride is the
+  // single loudest thing that can be wrong with a walk.
+  const shin = Math.atan2(l.ankle.x - l.knee.x, l.ankle.y - l.knee.y)
+  const tilt = Math.max(-0.5, Math.min(0.5, -shin * 0.35))
+  const length = foot.size * (foot.bare ? 0.82 : 1)
+  const toe = {
+    x: l.ankle.x + Math.cos(tilt) * length,
+    y: l.ankle.y + Math.sin(tilt) * length,
+  }
+  if (foot.bare) {
+    // A bare foot is thinner than a boot and has a heel behind the ankle,
+    // rather than being a block stuck on the end of the leg.
+    const heel = {
+      x: l.ankle.x - Math.cos(tilt) * length * 0.32,
+      y: l.ankle.y - Math.sin(tilt) * length * 0.32,
     }
+    bone(ctx, heel, toe, thick * 0.62, foot.colour, ink, inkWidth)
+  } else {
+    bone(ctx, l.ankle, toe, thick * 1.05, foot.colour, ink, inkWidth)
   }
 }
 
@@ -336,7 +367,7 @@ function limb(
  */
 function profile(
   ctx: Ctx, at: Point, lean: number, hh: number, look: Look,
-  ink: string | null, inkWidth: number, hood: boolean, round = 0,
+  ink: string | null, inkWidth: number, round = 0,
 ): void {
   const hw = hh * 0.62
   ctx.save()
@@ -371,71 +402,57 @@ function profile(
   }
   soften(ctx, face, look.skin, round)
 
-  if (hood) {
+  const hair = new Path2D()
+  hair.moveTo(back - hw * 0.06, y(0.88))
+  hair.lineTo(back - hw * 0.08, y(0.16))
+  hair.lineTo(back + hw * 0.2, y(-0.05))
+  hair.lineTo(front - hw * 0.26, y(-0.04))
+  hair.lineTo(front - hw * 0.2, y(0.18))
+  hair.lineTo(front - hw * 0.42, y(0.16))
+  hair.lineTo(back + hw * 0.26, y(0.26))
+  hair.lineTo(back + hw * 0.22, y(0.86))
+  hair.closePath()
+  if (ink) ctx.stroke(hair)
+  soften(ctx, hair, look.hair, round)
+
+  if (look.turban) {
     /**
-     * A cowl, drawn as one shape that wraps the skull and comes down the neck,
-     * with the face left open from the brow to the cheekbone. What makes a
-     * hood read as a hood rather than as a hat is that it is *bigger* than the
-     * head — it stands off the crown and hangs past the jaw.
+     * Cloth wound round the head, sitting above the brow and wider than the
+     * skull, with the winding shown by two lighter bands across it and a tail
+     * hanging at the back. A turban drawn as a smooth dome is a helmet.
      */
-    const cowl = new Path2D()
-    cowl.moveTo(back - hw * 0.22, y(1.16))
-    cowl.lineTo(back - hw * 0.22, y(0.2))
-    cowl.lineTo(back + hw * 0.16, y(-0.16))
-    cowl.lineTo(front - hw * 0.06, y(-0.14))
-    cowl.lineTo(front + hw * 0.06, y(0.3))
-    cowl.lineTo(front - hw * 0.26, y(0.28))
-    cowl.lineTo(front - hw * 0.3, y(0.44))
-    cowl.lineTo(front + hw * 0.06, y(0.56))
-    cowl.lineTo(front + hw * 0.04, y(0.86))
-    cowl.lineTo(back + hw * 0.3, y(1.14))
-    cowl.closePath()
-    if (ink) ctx.stroke(cowl)
-    soften(ctx, cowl, look.hair, round)
-
-    // The mask across the mouth and nose, a shade off the cowl so the face
-    // opening is a slot rather than a hole.
-    const mask = new Path2D()
-    mask.moveTo(back + hw * 0.1, y(0.5))
-    mask.lineTo(front - hw * 0.28, y(0.46))
-    mask.lineTo(front + hw * 0.08, y(0.56))
-    mask.lineTo(front + hw * 0.04, y(0.84))
-    mask.lineTo(back + hw * 0.24, y(0.96))
-    mask.lineTo(back + hw * 0.08, y(0.82))
-    mask.closePath()
-    if (ink) ctx.stroke(mask)
-    soften(ctx, mask, look.mask ?? look.hair, round)
-  } else {
-    const hair = new Path2D()
-    hair.moveTo(back - hw * 0.07, y(1.0))
-    hair.lineTo(back - hw * 0.07, y(0.2))
-    hair.lineTo(back + hw * 0.22, y(-0.04))
-    hair.lineTo(front - hw * 0.14, y(-0.04))
-    hair.lineTo(front - hw * 0.01, y(0.32))
-    hair.lineTo(front - hw * 0.3, y(0.28))
-    hair.lineTo(back + hw * 0.26, y(0.34))
-    hair.lineTo(back + hw * 0.24, y(1.0))
-    hair.closePath()
-    if (ink) ctx.stroke(hair)
-    ctx.fillStyle = look.hair
-    ctx.fill(hair)
+    const wrap = new Path2D()
+    wrap.moveTo(back - hw * 0.26, y(0.3))
+    wrap.lineTo(back - hw * 0.18, y(-0.16))
+    wrap.lineTo(back + hw * 0.24, y(-0.42))
+    wrap.lineTo(front - hw * 0.06, y(-0.34))
+    wrap.lineTo(front + hw * 0.12, y(0.06))
+    wrap.lineTo(front + hw * 0.06, y(0.28))
+    wrap.closePath()
+    if (ink) ctx.stroke(wrap)
+    soften(ctx, wrap, look.band ?? look.trim, round)
+    ctx.fillStyle = 'rgba(255,255,255,0.16)'
+    ctx.fillRect(back - hw * 0.22, y(0.02), hw * 1.2, hh * 0.07)
+    ctx.fillRect(back - hw * 0.18, y(-0.2), hw * 1.1, hh * 0.06)
+  } else if (look.band) {
+    // A band across the forehead, over the hair and under the fringe.
+    ctx.fillStyle = look.band
+    ctx.beginPath()
+    ctx.moveTo(back - hw * 0.16, y(0.22))
+    ctx.lineTo(back - hw * 0.14, y(0.03))
+    ctx.lineTo(front + hw * 0.02, y(0.14))
+    ctx.lineTo(front + hw * 0.02, y(0.32))
+    ctx.closePath()
+    ctx.fill()
+    if (ink) { ctx.strokeStyle = ink; ctx.lineWidth = inkWidth * 1.6; ctx.stroke() }
   }
 
-  if (look.hat) {
-    const hat = new Path2D()
-    hat.moveTo(back - hw * 0.14, y(0.34))
-    hat.lineTo(back - hw * 0.05, y(-0.16))
-    hat.lineTo(front - hw * 0.05, y(-0.16))
-    hat.lineTo(front + hw * 0.03, y(0.3))
-    hat.closePath()
-    if (ink) ctx.stroke(hat)
-    ctx.fillStyle = look.hat
-    ctx.fill(hat)
-  }
-
-  // One eye, under the brow, because a profile has one.
-  ctx.fillStyle = ink ?? '#1a140d'
-  ctx.fillRect(front - hw * 0.26, y(0.4), hw * 0.16, Math.max(1.5, hh * 0.085))
+  // One eye, under the brow, because a profile has one — and a mouth, because
+  // without one the lower half of the face is blank and he looks like a mask.
+  ctx.fillStyle = '#20180f'
+  ctx.fillRect(front - hw * 0.28, y(0.38), hw * 0.17, Math.max(1.5, hh * 0.09))
+  ctx.fillStyle = 'rgba(90,50,32,0.75)'
+  ctx.fillRect(front - hw * 0.2, y(0.69), hw * 0.2, Math.max(1.2, hh * 0.05))
   ctx.restore()
 }
 
@@ -460,7 +477,13 @@ export function drawFigure(
   const body = style === 'silhouette' ? '#20222e' : look.body
   const legs = style === 'silhouette' ? '#191b25' : look.legs
   const farLegs = dim(legs, 0.66)
-  const boot = { size: thick * 0.9, colour: style === 'silhouette' ? '#12131b' : '#3a2c22' }
+  const round = j.h * (spec.round ?? 0)
+  const bare = look.barefoot ?? false
+  const boot = {
+    size: thick * 0.95,
+    colour: bare ? look.skin : style === 'silhouette' ? '#12131b' : '#3a2c22',
+    bare,
+  }
 
   ctx.save()
   ctx.translate(x, footY)
@@ -476,7 +499,7 @@ export function drawFigure(
     const head = { x: j.w * 1.1, y: -j.h * 0.06 }
     bone(ctx, { x: -j.w * 1.3, y: -j.h * 0.05 }, { x: j.w * 0.1, y: -j.h * 0.05 }, thick * 1.1, legs, ink, iw)
     bone(ctx, { x: -j.w * 0.1, y: -j.h * 0.07 }, head, thick * 1.5, body, ink, iw)
-    profile(ctx, { x: head.x + j.w * 0.2, y: -j.h * 0.09 }, -1.35, j.h * spec.build.head * 0.9, look, ink, iw, spec.hood ?? false, j.h * (spec.round ?? 0))
+    profile(ctx, { x: head.x + j.w * 0.2, y: -j.h * 0.09 }, -1.35, j.h * spec.build.head * 0.9, look, ink, iw, j.h * (spec.round ?? 0))
     ctx.restore()
     return
   }
@@ -493,50 +516,75 @@ export function drawFigure(
    * of a white tunic in every standing pose — he wears sleeves, so only the
    * hand is skin, and the hand is short.
    */
+  /**
+   * An arm.
+   *
+   * Sleeveless means the whole thing is skin, which is most of why the figure
+   * reads as a person rather than as a suit: at this size a bare arm against a
+   * pale top is the clearest human thing on the screen. With sleeves it is
+   * cloth to the wrist and a hand on the end.
+   */
   const arm = (l: Limbs, cloth: string, hand: string, t: number) => {
+    if (look.sleeveless) {
+      bone(ctx, l.shoulder, l.elbow, t * 0.92, hand, ink, iw)
+      bone(ctx, l.elbow, l.hand, t * 0.82, hand, ink, iw)
+      return
+    }
     bone(ctx, l.shoulder, l.elbow, t, cloth, ink, iw)
     const wrist = along(l.elbow, l.hand, 0.72)
-    bone(ctx, l.elbow, wrist, t * 0.88, spec.wraps ? dim(cloth, 0.74) : cloth, ink, iw)
-    if (spec.wraps) {
-      // Three bindings, which is enough to say bound without drawing rope.
-      for (const at of [0.25, 0.5, 0.75]) {
-        const a = along(l.elbow, wrist, at)
-        const b = along(l.elbow, wrist, at + 0.1)
-        bone(ctx, a, b, t * 0.94, dim(cloth, 0.92), null, 0)
-      }
-    }
+    bone(ctx, l.elbow, wrist, t * 0.88, cloth, ink, iw)
     bone(ctx, wrist, l.hand, t * 0.8, hand, ink, iw)
   }
 
-  limb(ctx, j.far, thick, farLegs, farLegs, ink, iw, boot, spec.wraps ? dim(farLegs, 1.22) : null)
+  limb(ctx, j.far, thick, farLegs, farLegs, ink, iw,
+    { ...boot, colour: bare ? dim(look.skin, 0.72) : boot.colour }, look.loose, round * 0.8)
   arm(j.far, dim(sleeve, 0.74), dim(look.skin, 0.68), thick * 0.82)
 
   // The scarf goes on before he does, so it hangs behind him. How far it
   // streams out comes from how far his legs are apart and how hard he is
   // leaning — no clock needed, and it lands differently on every frame of a
   // run for free.
-  if (spec.scarf) {
-    const drive = Math.min(1, Math.abs(pose.legFront - pose.legBack) * 0.7 + Math.abs(pose.lean) * 1.1)
-    const root = along(j.shoulder, j.neck, 0.12)
-    const tip = { x: root.x - j.w * (0.34 + drive * 0.62), y: root.y + j.h * (0.14 - drive * 0.13) }
-    ctx.lineCap = 'round'
-    for (const [colour, width] of [[ink, thick * 0.3 + iw * 2], [look.trim, thick * 0.3]] as const) {
-      if (!colour) continue
-      ctx.strokeStyle = colour
-      ctx.lineWidth = width
-      ctx.beginPath()
-      ctx.moveTo(root.x, root.y)
-      ctx.quadraticCurveTo(root.x - j.w * 0.24, root.y + j.h * 0.03, tip.x, tip.y)
-      ctx.stroke()
+  if (spec.scarf && look.band) {
+    /**
+     * The ends of the headband, left long and hanging down his back.
+     *
+     * How far they lift comes from how far his legs are apart and how hard he
+     * is leaning, so they stream on a run and hang when he stands — no clock
+     * needed, and they land differently on every frame for free. Tapered to a
+     * point: at a constant width the first version was a red girder sticking
+     * out of the back of his head.
+     */
+    const drive = Math.min(1, Math.abs(pose.legFront - pose.legBack) * 0.6 + Math.abs(pose.lean) * 0.9)
+    const root = { x: j.neck.x - j.w * 0.12, y: j.neck.y - j.h * 0.05 }
+    for (const [reach, drop] of [[0.14, 0.16], [0.1, 0.22]] as const) {
+      const tip = {
+        x: root.x - j.w * (reach + drive * 0.26),
+        y: root.y + j.h * (drop - drive * (drop - 0.03)),
+      }
+      const mid = along(root, tip, 0.5)
+      slab(ctx, root, mid, thick * 0.2, thick * 0.15, look.band, null, 0, 0, round * 0.4)
+      slab(ctx, mid, tip, thick * 0.15, thick * 0.03, look.band, null, 0, 0, round * 0.4)
     }
   }
 
-  // Neck, then the torso as a shape rather than a fat stroke. A round-capped
-  // stroke overshoots the shoulder by half its own width, which put a white
-  // dome over the head and turned every one of these into an egg.
-  bone(ctx, j.shoulder, j.neck, thick * 0.62, dim(look.skin, 0.88), ink, iw)
-  const round = j.h * (spec.round ?? 0)
-  slab(ctx, j.hip, j.shoulder, j.w * 0.24, j.w * 0.3, body, ink, iw, 0, round)
+  // Neck and bare shoulders first. The torso as a shape rather than a fat
+  // stroke: a round-capped stroke overshoots the shoulder by half its own
+  // width, which put a dome over the head and turned every one of these into
+  // an egg.
+  bone(ctx, j.shoulder, j.neck, thick * 0.66, dim(look.skin, 0.9), ink, iw)
+  slab(ctx, j.hip, j.shoulder, j.w * 0.2, j.w * 0.25, look.sleeveless ? look.skin : body, ink, iw, 0, round)
+
+  /**
+   * The top itself.
+   *
+   * Sleeveless means it stops short of the shoulders, so the chest and the
+   * shoulder are skin and the whole arm hangs off bare. Drawing the garment
+   * all the way up to the neck is what made an earlier version look like a
+   * man in a suit rather than a man.
+   */
+  const collar = along(j.hip, j.shoulder, look.sleeveless ? 0.82 : 1)
+  slab(ctx, j.hip, collar, j.w * 0.21, j.w * 0.23, body, ink, iw, 0, round)
+
   /**
    * The back of him, in shadow.
    *
@@ -546,33 +594,25 @@ export function drawFigure(
    * their back turned and their neck wrenched round. The light has to come
    * from one side, and it has to be the side he is facing.
    */
-  slab(ctx, j.hip, j.shoulder, j.w * 0.08, j.w * 0.1, dim(body, 0.8), null, 0, -j.w * 0.16, round * 0.7)
+  slab(ctx, j.hip, collar, j.w * 0.07, j.w * 0.08, dim(body, 0.82), null, 0, -j.w * 0.13, round * 0.7)
 
-  // The belt: wide, with a knot at the front and a short tail below it.
-  const waist = along(j.hip, j.shoulder, spec.hood ? 0.19 : 0.16)
-  slab(ctx, along(j.hip, j.shoulder, 0.02), waist, j.w * 0.31, j.w * 0.31, look.trim, ink, iw, 0, round * 0.8)
-  if (spec.hood) {
-    const knot = along(j.hip, j.shoulder, 0.14)
-    ctx.fillStyle = dim(look.trim, 0.78)
-    ctx.beginPath()
-    ctx.ellipse(knot.x + j.w * 0.2, knot.y, j.w * 0.1, j.w * 0.13, 0, 0, Math.PI * 2)
-    ctx.fill()
-    bone(ctx, { x: knot.x + j.w * 0.2, y: knot.y }, { x: knot.x + j.w * 0.16, y: knot.y + j.h * 0.12 },
-      thick * 0.45, look.trim, ink, iw)
+  // A coat over the trousers, for the guards, cut away at the front so it does
+  // not swallow the legs.
+  if (look.coat) {
+    const hem = { x: j.hip.x - j.w * 0.12, y: j.hip.y + j.h * 0.17 }
+    slab(ctx, along(j.hip, j.shoulder, 0.3), hem, j.w * 0.22, j.w * 0.26, dim(body, 0.88), ink, iw, -j.w * 0.05, round)
   }
 
-  // A plate over the near shoulder, which is most of what says "fighter".
-  if (spec.pauldron) {
-    ctx.fillStyle = dim(body, 0.74)
-    ctx.beginPath()
-    ctx.ellipse(j.shoulder.x + j.w * 0.12, j.shoulder.y + j.h * 0.028, j.w * 0.24, j.w * 0.17, -j.lean, 0, Math.PI * 2)
-    if (ink) { ctx.strokeStyle = ink; ctx.lineWidth = iw * 2; ctx.stroke() }
-    ctx.fill()
-  }
+  // The sash: wound round the waist, with the end hanging at the front.
+  const waist = along(j.hip, j.shoulder, 0.2)
+  slab(ctx, along(j.hip, j.shoulder, 0.01), waist, j.w * 0.25, j.w * 0.25, look.trim, ink, iw, 0, round * 0.8)
+  const knot = along(j.hip, j.shoulder, 0.1)
+  bone(ctx, { x: knot.x + j.w * 0.14, y: knot.y }, { x: knot.x + j.w * 0.1, y: knot.y + j.h * 0.14 },
+    thick * 0.4, look.trim, ink, iw)
 
-  profile(ctx, j.neck, j.lean, j.h * spec.build.head, look, ink, iw, spec.hood ?? false, round)
+  profile(ctx, j.neck, j.lean, j.h * spec.build.head, look, ink, iw, round)
 
-  limb(ctx, j.near, thick, legs, legs, ink, iw, boot, spec.wraps ? dim(legs, 1.22) : null)
+  limb(ctx, j.near, thick, legs, legs, ink, iw, boot, look.loose, round * 0.8)
   arm(j.near, sleeve, look.skin, thick * 0.86)
 
   // A light down the leading edge, which is the whole of why a silhouette
@@ -601,10 +641,19 @@ export function drawFigure(
     ctx.fillRect(-j.w * 0.08, -j.w * 0.12, j.w * 0.2, j.w * 0.24)
     ctx.fillStyle = '#d8dee8'
     ctx.beginPath()
-    ctx.moveTo(j.w * 0.12, -t / 2)
-    ctx.lineTo(j.w * 0.12 + len, -t * 0.15)
-    ctx.lineTo(j.w * 0.12 + len, t * 0.15)
-    ctx.lineTo(j.w * 0.12, t / 2)
+    if (look.curved) {
+      // A scimitar: the back of the blade bows away and the edge follows it,
+      // so the whole thing sweeps rather than pointing.
+      const rise = len * 0.3
+      ctx.moveTo(j.w * 0.12, -t / 2)
+      ctx.quadraticCurveTo(j.w * 0.12 + len * 0.6, -rise * 0.7, j.w * 0.12 + len, -rise)
+      ctx.quadraticCurveTo(j.w * 0.12 + len * 0.6, -rise * 0.25, j.w * 0.12, t / 2)
+    } else {
+      ctx.moveTo(j.w * 0.12, -t / 2)
+      ctx.lineTo(j.w * 0.12 + len, -t * 0.15)
+      ctx.lineTo(j.w * 0.12 + len, t * 0.15)
+      ctx.lineTo(j.w * 0.12, t / 2)
+    }
     ctx.closePath()
     if (ink) { ctx.strokeStyle = ink; ctx.lineWidth = iw * 1.4; ctx.stroke() }
     ctx.fill()
