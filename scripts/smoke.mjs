@@ -243,6 +243,35 @@ if ((await dungeonButton.count()) === 0) {
   if (minutes < 0 || minutes > 60) problems.push(`the dungeon clock reads ${minutes}`)
 }
 
+// --- the pipes: momentum, a jump, and the flag at the far end --------------
+await page.goto(URL, { waitUntil: 'networkidle' })
+await page.waitForTimeout(1200)
+await page.locator('button[aria-label="Settings"]').click()
+await page.waitForTimeout(500)
+
+const pipesButton = page.getByRole('button', { name: 'The Pipes' })
+if ((await pipesButton.count()) === 0) {
+  problems.push('no way in to the pipes from the settings')
+} else {
+  await pipesButton.first().click()
+  await page.waitForTimeout(1400)
+
+  const pipesHud = async () => (await page.textContent('header')).replace(/\s+/g, ' ').trim()
+  if (!/level 1\b/i.test(await pipesHud())) problems.push('the pipes did not open on level 1')
+  if (!/lives 3\b/i.test(await pipesHud())) problems.push('the pipes did not start with three lives')
+
+  // Run right for a while. He has to actually get somewhere.
+  await page.keyboard.down('ArrowRight')
+  await page.keyboard.down('Shift')
+  await page.waitForTimeout(2500)
+  await page.keyboard.up('Shift')
+  await page.keyboard.up('ArrowRight')
+  await page.waitForTimeout(400)
+
+  const pipesText = await page.innerText('body')
+  if (/\d+\s*%/.test(pipesText)) problems.push('a percentage is being shown in the pipes')
+}
+
 await browser.close()
 
 // No screen may grow a score for being right at maths.
@@ -253,4 +282,4 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: played the maze, bought from the shop, ran Dave through the hideout, and went down into the dungeon')
+console.log('smoke test clean: played the maze, bought from the shop, ran Dave through the hideout, went down into the dungeon, and ran the pipes')

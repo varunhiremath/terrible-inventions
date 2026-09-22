@@ -155,7 +155,8 @@ export function Settings() {
         <div className="grid grid-cols-2 gap-2">
           <Btn onClick={() => go('arcade')} className="px-3 py-3 text-sm">Papa Panic</Btn>
           <Btn onClick={() => go('dave')} className="px-3 py-3 text-sm">Dangerous Dave</Btn>
-          <Btn onClick={() => go('prince')} className="col-span-2 px-3 py-3 text-sm">The Dungeon</Btn>
+          <Btn onClick={() => go('prince')} className="px-3 py-3 text-sm">The Dungeon</Btn>
+          <Btn onClick={() => go('pipes')} className="px-3 py-3 text-sm">The Pipes</Btn>
         </div>
         <Btn onClick={openShop} className="px-3 py-3 text-sm">Open the maths shop</Btn>
       </Panel>

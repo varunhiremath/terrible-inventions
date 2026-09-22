@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Arcade } from './screens/Arcade'
 import { Dave } from './screens/Dave'
+import { Pipes } from './screens/Pipes'
 import { Prince } from './screens/Prince'
 import { Shop } from './screens/Shop'
 import { Note } from './screens/Note'
@@ -68,6 +69,8 @@ export default function App() {
       return <Dave />
     case 'prince':
       return <Prince />
+    case 'pipes':
+      return <Pipes />
     case 'shop':
       return <Shop />
     case 'note':
