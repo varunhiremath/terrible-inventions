@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { Level } from './level'
 import { NO_INPUT, type Input } from './prince'
 import { FPS } from './sequences'
 import { LEVELS, levelFor } from './levels'
@@ -82,13 +83,28 @@ describe('the sword', () => {
   })
 })
 
+/** One floor, a plate on it, and a gate further along. */
+function plated(): Level {
+  return {
+    name: 'plate',
+    start: { col: 2, row: 1, facing: 1 },
+    rows: [
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+      'X###.####|###################X',
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+    ],
+  }
+}
+
 describe('gates and plates', () => {
   it('opens every gate for a while when a plate is stood on', () => {
-    const level = LEVELS[1]
-    const plate = level.rows.flatMap((row, r) => [...row].map((t, c) => ({ t, c, r }))).find((x) => x.t === '.')!
+    // Its own level rather than whichever shipped one happens to have a plate
+    // in it. This is a test of the mechanism, and it should not start failing
+    // because a level was redrawn.
+    const level = plated()
     const run = newRun(level, 2)
     expect(gatesOpen(run)).toBe(false)
-    const pressed = step({ ...run, prince: { ...run.prince, col: plate.c, row: plate.r } }, NO_INPUT, 'none', roll)
+    const pressed = step({ ...run, prince: { ...run.prince, col: 4, row: 1 } }, NO_INPUT, 'none', roll)
     expect(gatesOpen(pressed)).toBe(true)
   })
 

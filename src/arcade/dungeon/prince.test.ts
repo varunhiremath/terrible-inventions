@@ -310,11 +310,25 @@ describe('pressing up', () => {
     }
   }
 
-  it('climbs onto a floor overhead, and ends a whole floor higher', () => {
-    const level = twoFloors('########', '########')
+  it('climbs the ledge in front of him, and ends a floor higher', () => {
+    // Open air over his head at column 2, and the ledge begins at column 3.
+    const level = twoFloors('########', '  ######')
     const after = until(newPrince(level), level, press({ up: true }), 20)
     expect(after.row).toBe(1)
     expect(after.dead).toBe(false)
+  })
+
+  it('will not climb with a ceiling over his head', () => {
+    /**
+     * The rule the first version got wrong. It climbed wherever any floor was
+     * overhead, so running along under a continuous ceiling and tapping jump
+     * put him on the next storey at what looked like random moments. You climb
+     * at the edge of a ledge: open air above you, and a floor one up and one
+     * along to catch.
+     */
+    const level = twoFloors('########', '########')
+    const after = until(newPrince(level), level, press({ up: true }), 20)
+    expect(after.row).toBe(2)
   })
 
   it('does not climb into the ceiling', () => {
@@ -339,12 +353,14 @@ describe('pressing up', () => {
   })
 
   it('gets him onto the ledge whenever there is one to get onto', () => {
-    // The check the shipped bug failed: six frames of climbing that put him
-    // back on the floor he started on.
-    const level = twoFloors('########', '########')
+    // The check the first shipped bug failed: six frames of climbing that put
+    // him back on the floor he started on.
+    const level = twoFloors('########', '  ######')
     const start = newPrince(level)
     const after = until(start, level, press({ up: true }), 12)
     expect(after.row).toBe(start.row - 1)
+    // And onto the ledge itself, not into the gap he climbed through.
+    expect(after.col).toBeGreaterThan(start.col)
   })
 
   it('goes somewhere, rather than hopping on the spot', () => {

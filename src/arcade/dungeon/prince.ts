@@ -1,5 +1,5 @@
 import { SEQUENCES, type Action } from './sequences'
-import { TILE, blocksMovement, climbable, standable, tileAt, type Level } from './level'
+import { TILE, blocksMovement, climbable, isSolid, standable, tileAt, type Level } from './level'
 import type { Stance } from './combat'
 
 /**
@@ -118,18 +118,26 @@ function command(prince: Prince, level: Level, input: Input): Prince {
   if (input.up) {
     if (running) return begin(prince, 'runJump')
     if (forward !== 0) return begin(prince, 'standJump')
-    // A floor above him is a ledge to climb; a wall above him is the ceiling,
-    // and the first version started a climb into it that played six frames and
-    // put him back exactly where he stood.
+    /**
+     * Straight up.
+     *
+     * You climb at the edge of a ledge, not anywhere a floor happens to be
+     * overhead. Two things have to be true: open air directly above his head,
+     * so there is somewhere to rise into, and a floor one level up and one
+     * tile in front, which is the ledge he catches. The version before this
+     * climbed wherever there was any floor above him at all, so running along
+     * under a ceiling and tapping jump put him on the next storey at what
+     * looked like random moments.
+     */
+    const col = Math.round(prince.col)
+    const headroom = !isSolid(tileAt(level, col, prince.row - 1))
+    const ahead = col + prince.facing
     const ledge =
-      climbable(level, Math.round(prince.col), prince.row - 1) &&
-      !prince.collapsed.includes(cellKey(prince.col, prince.row - 1))
-    if (ledge) return begin(prince, 'climbLedge')
-    // Otherwise he jumps, forwards, the way he is facing. The version before
-    // this hopped straight up instead, on the reasoning that leaping two tiles
-    // without being asked is a surprising way to find out where the next pit
-    // is — but a hop moves him nowhere at all, so pressing the button looked
-    // exactly like pressing nothing. A jump button has to jump.
+      climbable(level, ahead, prince.row - 1) &&
+      !prince.collapsed.includes(`${ahead},${prince.row - 1}`)
+    if (headroom && ledge) return begin(prince, 'climbLedge')
+    // Nothing to climb, so he jumps, forwards, the way he is facing. A jump
+    // button has to jump.
     return begin(prince, 'standJump')
   }
 
@@ -168,11 +176,13 @@ export function tick(prince: Prince, level: Level, input: Input, gateOpen = fals
   const active = SEQUENCES[next.action]
   const frame = active.frames[Math.min(next.frame, active.frames.length - 1)]
 
-  // Horizontal movement, stopped dead by anything solid in the way.
+  // Vertical first, which only a climb ever asks for: the tile he is climbing
+  // onto is one floor up, and testing the sideways move at the floor he is
+  // leaving would find the wall he is climbing past and refuse it.
+  next.row += frame.dy
+  // Then horizontal, stopped dead by anything solid in the way.
   const wanted = next.col + frame.dx * next.facing
   if (canEnter(next, level, wanted, gateOpen)) next.col = wanted
-  // And vertical, which only a climb ever asks for.
-  next.row += frame.dy
 
   next.frame += 1
 

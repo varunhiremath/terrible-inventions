@@ -843,12 +843,45 @@ const PRINCE_LOOK: Look = {
   loose: true,
 }
 
+/**
+ * How far off the ground an action lifts him, in floors.
+ *
+ * The frame tables carry displacement along the floor and nothing else,
+ * because that is all the simulation needs: a jump lands where the table says
+ * and the arc in between changes nothing. But on screen it changes
+ * everything. Without it a standing jump is a figure sliding two tiles
+ * forward slightly faster than a walk, which is exactly what it was reported
+ * as — "jump doesn't work, it just makes me move forward faster".
+ *
+ * So the arc lives here, in the drawing, where it belongs: a half sine over
+ * the length of the sequence, peaking in the middle. A climb rises instead of
+ * arcing, and drops to nothing on the last frame because that is the frame
+ * where the simulation actually moves him up a floor.
+ */
+function liftOf(action: string, frame: number): number {
+  const over = (frames: number, height: number) =>
+    Math.sin((Math.min(frame, frames) / frames) * Math.PI) * height
+  switch (action) {
+    case 'standJump':
+      return over(8, 0.62)
+    case 'runJump':
+      return over(8, 0.7)
+    case 'climbLedge':
+      // Climbing, not jumping: he goes up and stays up.
+      return frame >= 5 ? 0 : (frame / 5) * 0.95
+    case 'climbUp':
+      return frame >= 5 ? 0 : (frame / 5) * 0.4
+    default:
+      return 0
+  }
+}
+
 /** Where the prince's feet are, and how he is standing. */
 export function drawPrince(ctx: Ctx, prince: Prince, view: View, fighting: boolean): void {
   drawFigure(
     ctx,
     px(view, prince.col) + view.size / 2,
-    py(view, prince.row),
+    py(view, prince.row) - liftOf(prince.action, prince.frame) * view.floorHeight,
     view.size,
     prince.facing,
     poseFor(prince.action, prince.frame, fighting ? (prince.stance ?? 'ready') : 'none'),

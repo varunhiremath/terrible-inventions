@@ -188,10 +188,11 @@ export const SEQUENCES: Record<Action, Sequence> = {
   },
 
   /**
-   * Climbing the ledge above from standing, which is a different move from
-   * pulling up out of a hang: this one ends a floor higher than it began.
-   * The floor change is on the last frame, so the hands are over the lip
-   * before the feet arrive.
+   * Catching the ledge in front and above and pulling up onto it.
+   *
+   * A different move from pulling up out of a hang, which puts him back on
+   * the floor he was already holding: this one ends a floor higher and a tile
+   * further on, which is where the ledge is.
    */
   climbLedge: {
     frames: [
@@ -200,7 +201,10 @@ export const SEQUENCES: Record<Action, Sequence> = {
       f(0, 0, 'climb3'),
       f(0, 0, 'climb4'),
       f(0, 0, 'climb5'),
-      f(0, -1, 'climb6'),
+      // Up a floor and onto the ledge in front, which is where he was
+      // reaching. Both on the last frame, so the hands are over the lip
+      // before the feet arrive.
+      f(1, -1, 'climb6'),
     ],
     then: 'stand',
     interruptible: false,

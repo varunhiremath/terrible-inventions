@@ -225,8 +225,19 @@ export function Prince() {
         // that the bottom slab is drawn past the edge of the board and anyone
         // standing on it floats over nothing.
         const rows = ROOM_ROWS + FLOOR_DEPTH
-        const floorHeight = middle / rows
-        const size = Math.min(w / ROOM_COLS, floorHeight * 0.78)
+        /**
+         * A room has a shape, and it keeps it.
+         *
+         * The tile width used to be worked out from whatever was left over,
+         * and the floor height from whatever was left over vertically, which
+         * meant the two had nothing to do with each other. On a phone held
+         * upright that gave floors four times taller than a tile is wide: the
+         * rooms came out stretched into caverns, the prince was a speck, and
+         * almost none of the level fitted on the screen. So the tile decides
+         * the floor, and what is left over becomes a margin.
+         */
+        const size = Math.min(w / ROOM_COLS, (middle / rows) * 0.78)
+        const floorHeight = size / 0.78
         const boardW = size * ROOM_COLS
         const boardH = floorHeight * rows
 
@@ -244,7 +255,7 @@ export function Prince() {
         }
 
         ctx.save()
-        ctx.translate(Math.round((w - boardW) / 2), Math.round(capH))
+        ctx.translate(Math.round((w - boardW) / 2), Math.round(capH + (middle - boardH) / 2))
         ctx.beginPath()
         ctx.rect(0, 0, boardW, boardH)
         ctx.clip()
@@ -267,7 +278,8 @@ export function Prince() {
         ctx.textAlign = 'right'
         ctx.fillText(`${minutesLeft(next)} MIN`, w - size * 0.4, capH / 2)
 
-        const chevronY = capH + boardH + statusH / 2
+        const boardTop = capH + (middle - boardH) / 2
+        const chevronY = boardTop + boardH + statusH / 2
         drawChevrons(ctx, size * 0.4, chevronY, statusH * 0.7, next.prince.health, next.maxHealth)
         const enemy = fightingGuard(next)
         if (enemy && enemy.health > 0) {
@@ -280,7 +292,7 @@ export function Prince() {
           // with whatever happened to be standing in the middle of it.
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
-          const my = capH + boardH - text * 1.2
+          const my = boardTop + boardH - text * 1.2
           const mw = ctx.measureText(next.message).width + text * 1.6
           ctx.fillStyle = 'rgba(8,10,14,0.82)'
           ctx.fillRect(w / 2 - mw / 2, my - text * 0.95, mw, text * 1.9)
