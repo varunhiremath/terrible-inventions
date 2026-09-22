@@ -17,6 +17,14 @@ export type Screen = 'arcade' | 'dave' | 'prince' | 'pipes' | 'shop' | 'coop' | 
 /** How far above his solo level a two-player puzzle is pitched. */
 export const COOP_BONUS = 200
 
+/** Which screens have a story to tell before you get there. */
+const INTRO_FOR: Partial<Record<Screen, string>> = {
+  arcade: 'arcade',
+  dave: 'dave',
+  prince: 'prince',
+  pipes: 'pipes',
+}
+
 interface Shopping {
   /** Null for the compulsory continue after a game over. */
   item: ShopItem | null
@@ -40,6 +48,12 @@ interface State {
 
   boot: () => Promise<void>
   go: (screen: Screen) => void
+  /** The game whose intro is playing, if one is. */
+  intro: string | null
+  /** Plays a game's intro now, whether or not it has been seen. */
+  watchIntro: (id: string) => void
+  /** Marks it watched and goes on to the game it belongs to. */
+  introDone: () => void
 
   beginRun: () => void
   advanceLevel: (score: number) => void
@@ -93,7 +107,32 @@ export const useStore = create<State>((set, get) => ({
     set({ save, ready: true })
   },
 
-  go: (screen) => set({ screen }),
+  /**
+   * Going to a game plays its intro first, once.
+   *
+   * After that it goes straight in. Sending someone through half a minute of
+   * story every single time they open a game is how a good intro becomes a
+   * thing people learn to tap past without looking.
+   */
+  go: (screen) => {
+    const story = INTRO_FOR[screen]
+    if (story && !get().save.seenIntro?.[story]) {
+      set({ screen, intro: story })
+      return
+    }
+    set({ screen, intro: null })
+  },
+
+  intro: null,
+  watchIntro: (id) => set({ intro: id }),
+  introDone: () => {
+    const id = get().intro
+    set({ intro: null })
+    if (!id) return
+    const save = { ...get().save, seenIntro: { ...get().save.seenIntro, [id]: true } }
+    set({ save })
+    void persistSave(save)
+  },
 
   beginRun: () =>
     set({ run: { level: get().save.arcade.level, powerUps: get().save.arcade.powerUps }, screen: 'arcade' }),

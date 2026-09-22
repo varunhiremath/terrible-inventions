@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { Arcade } from './screens/Arcade'
 import { Dave } from './screens/Dave'
+import { Intro } from './intro/Intro'
+import { STORIES } from './intro/stories'
 import { Pipes } from './screens/Pipes'
 import { Prince } from './screens/Prince'
 import { Shop } from './screens/Shop'
@@ -13,7 +15,7 @@ import { unlock } from './audio'
 import { startMusic, stopMusic, unlockAudio } from './music/player'
 
 export default function App() {
-  const { ready, screen, save, boot } = useStore()
+  const { ready, screen, save, boot, intro, introDone } = useStore()
 
   useEffect(() => {
     void boot()
@@ -63,6 +65,12 @@ export default function App() {
   useEffect(() => stopMusic, [])
 
   if (!ready) return null
+
+  // The intro sits over whatever screen it belongs to, so finishing it lands
+  // you in the game rather than back at a menu.
+  if (intro && STORIES[intro]) {
+    return <Intro story={STORIES[intro]} onDone={introDone} />
+  }
 
   switch (screen) {
     case 'dave':

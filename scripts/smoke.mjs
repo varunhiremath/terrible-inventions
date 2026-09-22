@@ -20,6 +20,22 @@ const browser = await chromium.launch({
 })
 const page = await browser.newPage({ viewport: { width: 1180, height: 820 } })
 
+/**
+ * Gets past a game's intro, if one is playing.
+ *
+ * Every game now tells its story the first time you open it, which sits
+ * between the menu and the game. Adding that broke every route in here at
+ * once, which is exactly what this file is for.
+ */
+const skipIntro = async () => {
+  const skip = page.getByRole('button', { name: 'Skip' })
+  if ((await skip.count()) > 0) {
+    await skip.first().click()
+    await page.waitForTimeout(700)
+  }
+}
+
+
 const problems = []
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`))
 page.on('console', (m) => {
@@ -166,6 +182,8 @@ if ((await daveButton.count()) === 0) {
   problems.push('no way in to Dangerous Dave from the settings')
 } else {
   await daveButton.first().click()
+  await page.waitForTimeout(600)
+  await skipIntro()
   await page.waitForTimeout(1200)
 
   // textContent, not innerText: Dave's score bar is drawn into the picture and
@@ -222,6 +240,8 @@ if ((await dungeonButton.count()) === 0) {
   problems.push('no way in to the dungeon from the settings')
 } else {
   await dungeonButton.first().click()
+  await page.waitForTimeout(600)
+  await skipIntro()
   await page.waitForTimeout(1500)
 
   const dungeonHud = async () => (await page.textContent('header')).replace(/\s+/g, ' ').trim()
@@ -254,6 +274,8 @@ if ((await pipesButton.count()) === 0) {
   problems.push('no way in to the pipes from the settings')
 } else {
   await pipesButton.first().click()
+  await page.waitForTimeout(600)
+  await skipIntro()
   await page.waitForTimeout(1400)
 
   const pipesHud = async () => (await page.textContent('header')).replace(/\s+/g, ' ').trim()

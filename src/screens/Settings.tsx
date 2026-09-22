@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { fill, getProfile } from '../config/profile'
+import { STORIES, STORY_ORDER } from '../intro/stories'
 import { Btn, Panel, Screen } from '../ui/bits'
 import { exportSave, importSave } from '../engine/storage'
 import { useStore } from '../store'
@@ -9,7 +10,7 @@ import { useStore } from '../store'
  * looking in here finds his own name and a text box, which is not a catastrophe.
  */
 export function Settings() {
-  const { save, saveNames, saveNote, replaceSave, setRewards, setVoice, setMusic, openShop, go } = useStore()
+  const { save, saveNames, saveNote, replaceSave, setRewards, setVoice, setMusic, openShop, go, watchIntro } = useStore()
   const profile = getProfile()
 
   const [kidName, setKidName] = useState(save.names.kidName ?? '')
@@ -157,6 +158,14 @@ export function Settings() {
           <Btn onClick={() => go('dave')} className="px-3 py-3 text-sm">Dangerous Dave</Btn>
           <Btn onClick={() => go('prince')} className="px-3 py-3 text-sm">The Dungeon</Btn>
           <Btn onClick={() => go('pipes')} className="px-3 py-3 text-sm">The Pipes</Btn>
+        </div>
+        <p className="mt-3 text-sm text-dim">Watch an intro again</p>
+        <div className="grid grid-cols-4 gap-2">
+          {STORY_ORDER.map((id) => (
+            <Btn key={id} onClick={() => watchIntro(id)} className="px-2 py-3 text-xs">
+              {STORIES[id].title}
+            </Btn>
+          ))}
         </div>
         <Btn onClick={openShop} className="px-3 py-3 text-sm">Open the maths shop</Btn>
       </Panel>

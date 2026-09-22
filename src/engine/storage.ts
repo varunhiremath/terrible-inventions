@@ -43,6 +43,14 @@ export interface SaveState {
   coopLog: { id: string; rating: number; solved: boolean; at: number }[]
   /** Power-ups carry between runs, which is what makes shopping worth doing. */
   arcade: { level: number; highScore: number; powerUps: PowerUps }
+  /**
+   * Which games have had their intro watched.
+   *
+   * Only so it plays once by itself. Every one of them can be watched again
+   * from the settings whenever you like — an intro you cannot get back to is
+   * one you dare not skip.
+   */
+  seenIntro: Record<string, boolean>
 }
 
 export function emptySave(): SaveState {
@@ -58,6 +66,7 @@ export function emptySave(): SaveState {
     log: [],
     coopLog: [],
     arcade: { level: 1, highScore: 0, powerUps: emptyPowerUps() },
+    seenIntro: {},
   }
 }
 
