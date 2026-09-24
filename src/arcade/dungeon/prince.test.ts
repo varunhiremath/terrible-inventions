@@ -398,3 +398,42 @@ describe('pressing up', () => {
     expect(up.dead).toBe(false)
   })
 })
+
+describe('falling out of the level', () => {
+  /*
+   * Found by a nine-year-old, not by a test: "if I fall I keep falling!"
+   *
+   * Every row past the bottom of the map reads as empty space, so nothing is
+   * ever underfoot again, so the landing code never runs. He drops one floor
+   * every three frames for the rest of the level, which is not a death and not
+   * a fall either — it is just the game quietly ending while still running.
+   */
+  const bottomless: Level = {
+    name: 'bottomless',
+    rows: ['##X##', '##X##'].map((r) => r.replace('X', ' ')),
+    start: { col: 1, row: 0, facing: 1 as const },
+  }
+
+  it('does not fall forever off the bottom of the map', () => {
+    let prince = newPrince(bottomless)
+    // Long enough that any real fall in any real level has finished.
+    prince = play(prince, bottomless, 200, press({ right: true }))
+
+    expect(prince.action, 'still falling after 200 frames').not.toBe('fall')
+  })
+
+  it('counts falling out of the world as a death', () => {
+    let prince = newPrince(bottomless)
+    prince = play(prince, bottomless, 200, press({ right: true }))
+
+    expect(prince.dead).toBe(true)
+    expect(prince.health).toBe(0)
+  })
+
+  it('never leaves him below the floor of the map', () => {
+    let prince = newPrince(bottomless)
+    prince = play(prince, bottomless, 200, press({ right: true }))
+
+    expect(prince.row).toBeLessThanOrEqual(bottomless.rows.length)
+  })
+})

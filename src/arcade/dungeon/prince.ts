@@ -230,6 +230,22 @@ function applyFall(prince: Prince, level: Level, input: Input): Prince {
   if (next.framesFalling % FRAMES_PER_FLOOR !== 0) return next
 
   next.row += 1
+
+  /*
+   * Off the bottom of the map.
+   *
+   * Every row past the last one reads as empty space, so nothing is ever
+   * underfoot again and the landing below never runs: he dropped a floor every
+   * three frames for the rest of the level, which is not a death and not a
+   * fall either, just the game quietly ending while still running. Reported by
+   * the person playing it, in four words: "if I fall I keep falling".
+   *
+   * A drop with no bottom to it is fatal, which is also what it looks like.
+   */
+  if (next.row >= level.rows.length) {
+    return { ...begin(next, 'dead'), row: level.rows.length, dead: true, health: 0 }
+  }
+
   if (!hasGround(next, level)) return next
 
   // Landed. How far he fell decides what it cost.
