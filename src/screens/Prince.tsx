@@ -33,7 +33,7 @@ import {
 import { playCue } from '../music/player'
 import { createPacer } from '../arcade/pacing'
 import { fill } from '../config/profile'
-import { Btn } from '../ui/bits'
+import { BackButton, Btn } from '../ui/bits'
 import { say, silence } from '../voice'
 import { useStore } from '../store'
 import { Interlude } from './Interlude'
@@ -277,7 +277,16 @@ export function Prince() {
         ctx.textBaseline = 'middle'
         ctx.fillStyle = INK.caption
         ctx.textAlign = 'left'
-        ctx.fillText(`LEVEL ${next.number}`, size * 0.4, capH / 2)
+        /*
+         * Room for the way out, which sits in this corner.
+         *
+         * Measured from the button's real size in screen pixels rather than
+         * guessed as a multiple of the header height: the header scales with
+         * the board and the button does not, so on a short wide screen the
+         * guess left "BACK" and the first reading touching each other.
+         */
+        const backRoom = 70 * (canvas.width / Math.max(1, canvas.clientWidth))
+        ctx.fillText(`LEVEL ${next.number}`, backRoom, capH / 2)
         ctx.textAlign = 'right'
         ctx.fillText(`${minutesLeft(next)} MIN`, w - size * 0.4, capH / 2)
 
@@ -409,15 +418,7 @@ export function Prince() {
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
       </div>
 
-      <button
-        type="button"
-        onClick={() => go('home')}
-        onPointerDown={(e) => e.stopPropagation()}
-        onPointerUp={(e) => e.stopPropagation()}
-        className="absolute bottom-1 right-2 z-20 px-2 font-mono text-[0.7rem] uppercase tracking-widest text-dim/40"
-      >
-        back
-      </button>
+      <BackButton onClick={() => go('home')} />
 
       {asking && <Interlude onDone={restartLevel} />}
 

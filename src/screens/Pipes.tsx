@@ -15,7 +15,7 @@ import {
 import { scrollTo } from '../camera'
 import { createPacer } from '../arcade/pacing'
 import { fill } from '../config/profile'
-import { Btn } from '../ui/bits'
+import { BackButton, Btn } from '../ui/bits'
 import { useStore } from '../store'
 import { Interlude } from './Interlude'
 
@@ -242,6 +242,15 @@ export function Pipes() {
          * space kept between them.
          */
         const gap = size * 0.4
+        /*
+         * Room for the way out, which sits in this corner.
+         *
+         * Measured from the button's real size in screen pixels rather than
+         * guessed as a multiple of the header height: the header scales with
+         * the board and the button does not, so on a short wide screen the
+         * guess left "BACK" and the first reading touching each other.
+         */
+        const backRoom = 70 * (canvas.width / Math.max(1, canvas.clientWidth))
         const coins = `${next.coins} COINS`
         const level = `LEVEL ${next.number}`
         const remaining = `${Math.ceil(next.seconds)}`
@@ -255,14 +264,14 @@ export function Pipes() {
         const fits = () => {
           ctx.font = `bold ${text}px ui-monospace, monospace`
           const side = Math.max(ctx.measureText(coins).width, ctx.measureText(remaining).width)
-          return side * 2 + ctx.measureText(level).width + gap * 4 <= w
+          return side * 2 + ctx.measureText(level).width + gap * 2 + backRoom * 2 <= w
         }
         while (text > 9 && !fits()) text -= 1
 
         ctx.fillStyle = '#eef2f8'
         ctx.textBaseline = 'middle'
         ctx.textAlign = 'left'
-        ctx.fillText(coins, gap, capH / 2)
+        ctx.fillText(coins, backRoom, capH / 2)
         ctx.textAlign = 'center'
         ctx.fillText(level, w / 2, capH / 2)
         ctx.textAlign = 'right'
@@ -379,15 +388,7 @@ export function Pipes() {
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
       </div>
 
-      <button
-        type="button"
-        onClick={() => go('home')}
-        onPointerDown={(e) => e.stopPropagation()}
-        onPointerUp={(e) => e.stopPropagation()}
-        className="absolute bottom-1 right-2 z-20 px-2 font-mono text-[0.7rem] uppercase tracking-widest text-dim/40"
-      >
-        back
-      </button>
+      <BackButton onClick={() => go('home')} />
 
       {asking && <Interlude onDone={restart} />}
 

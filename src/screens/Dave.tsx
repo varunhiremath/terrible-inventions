@@ -19,7 +19,7 @@ import {
   type View,
 } from '../dave/draw'
 import { fill } from '../config/profile'
-import { Btn } from '../ui/bits'
+import { BackButton, Btn } from '../ui/bits'
 import { say, silence } from '../voice'
 import { useStore } from '../store'
 import { Interlude } from './Interlude'
@@ -190,7 +190,16 @@ export function Dave() {
         ctx.fillStyle = EGA.brightGreen
         ctx.textAlign = 'left'
         const pad = size * 0.6
-        ctx.fillText(`SCORE: ${String(next.score).padStart(5, '0')}`, pad, midline)
+        /*
+         * Room for the way out, which sits in this corner.
+         *
+         * Measured from the button's real size in screen pixels rather than
+         * guessed as a multiple of the header height: the header scales with
+         * the board and the button does not, so on a short wide screen the
+         * guess left "BACK" and the first reading touching each other.
+         */
+        const backRoom = 70 * (canvas.width / Math.max(1, canvas.clientWidth))
+        ctx.fillText(`SCORE: ${String(next.score).padStart(5, '0')}`, backRoom, midline)
         ctx.textAlign = 'center'
         ctx.fillText(`LEVEL ${String(next.number).padStart(2, '0')}`, w / 2, midline)
 
@@ -340,15 +349,7 @@ export function Dave() {
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => go('home')}
-        onPointerDown={(e) => e.stopPropagation()}
-        onPointerUp={(e) => e.stopPropagation()}
-        className="absolute bottom-1 right-2 z-20 px-2 font-mono text-[0.7rem] uppercase tracking-widest text-dim/50"
-      >
-        back
-      </button>
+      <BackButton onClick={() => go('home')} />
 
       {asking && <Interlude onDone={again} />}
 
