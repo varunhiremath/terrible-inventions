@@ -20,6 +20,7 @@ import {
   loopLength,
   readPart,
   type CueName,
+  type Wave,
   type Track,
   type TrackName,
 } from './score'
@@ -69,6 +70,36 @@ export function unlockAudio(): void {
   if (ctx && ctx.state === 'suspended') void ctx.resume().catch(() => {})
 }
 
+
+/**
+ * Pulse waves, which are most of why a chip sounds like a chip.
+ *
+ * Web Audio gives you a square, and a square is a pulse that is high exactly
+ * half the time. The sound chips of the era could also be high an eighth or a
+ * quarter of the time, and those narrower pulses are the thin, nasal, reedy
+ * voice everybody actually remembers — a 50% square on its own sounds like a
+ * test tone, which is what this was using for everything.
+ *
+ * A pulse of width d has harmonics of size (2/n·pi)·sin(n·pi·d), so the wave
+ * can be built straight from that and handed to the oscillator.
+ */
+const pulses = new Map<number, PeriodicWave>()
+
+function pulseWave(ctx: AudioContext, duty: number): PeriodicWave {
+  const found = pulses.get(duty)
+  if (found) return found
+
+  const harmonics = 32
+  const real = new Float32Array(harmonics)
+  const imag = new Float32Array(harmonics)
+  for (let n = 1; n < harmonics; n++) {
+    imag[n] = (2 / (n * Math.PI)) * Math.sin(n * Math.PI * duty)
+  }
+  const wave = ctx.createPeriodicWave(real, imag, { disableNormalization: false })
+  pulses.set(duty, wave)
+  return wave
+}
+
 function hiss(ctx: AudioContext): AudioBuffer {
   if (noise) return noise
   const frames = Math.floor(ctx.sampleRate * 0.12)
@@ -79,10 +110,31 @@ function hiss(ctx: AudioContext): AudioBuffer {
   return buffer
 }
 
+/** Everything about how a part is played, as opposed to what it plays. */
+export interface Voice {
+  wave: Wave
+  /** For a pulse: how much of each cycle is high. Ignored by other waves. */
+  duty?: number
+  /** Depth in cents, speed in Hz, and how long to wait before it starts. */
+  vibrato?: { cents: number; hz: number; delay?: number }
+  /**
+   * Semitone offsets cycled within one note, fast, to fake a chord.
+   *
+   * With three oscillators and four parts to play, the chips could not hold a
+   * chord down. So they flicked between its notes once per frame instead, and
+   * the ear hears a rough, buzzing chord rather than three separate notes. It
+   * is the single most recognisable trick in the idiom and no amount of
+   * writing better melodies substitutes for it.
+   */
+  arp?: readonly number[]
+  /** How fast to flick through `arp`, in steps per second. */
+  arpRate?: number
+}
+
 function playNote(
   ctx: AudioContext,
   out: GainNode,
-  wave: OscillatorType,
+  voice: Voice,
   frequency: number,
   at: number,
   seconds: number,
@@ -90,8 +142,44 @@ function playNote(
 ): void {
   const osc = ctx.createOscillator()
   const env = ctx.createGain()
-  osc.type = wave
-  osc.frequency.setValueAtTime(frequency, at)
+
+  if (voice.wave === 'pulse') osc.setPeriodicWave(pulseWave(ctx, voice.duty ?? 0.25))
+  else osc.type = voice.wave
+
+  if (voice.arp && voice.arp.length > 1) {
+    // Stepped, not ramped: the flick between notes is the whole point, and a
+    // slide between them sounds like a broken tape.
+    const rate = voice.arpRate ?? 18
+    const steps = Math.max(1, Math.ceil(seconds * rate))
+    for (let i = 0; i < steps; i++) {
+      const semitones = voice.arp[i % voice.arp.length]
+      osc.frequency.setValueAtTime(frequency * Math.pow(2, semitones / 12), at + i / rate)
+    }
+  } else {
+    osc.frequency.setValueAtTime(frequency, at)
+  }
+
+  if (voice.vibrato) {
+    // A held note that does not move sounds synthetic in a way a held note
+    // that wavers very slightly does not.
+    const { cents, hz, delay = 0.12 } = voice.vibrato
+    if (seconds > delay + 0.05) {
+      const lfo = ctx.createOscillator()
+      const depth = ctx.createGain()
+      lfo.frequency.value = hz
+      // Cents are a ratio, so the depth in Hz depends on the note.
+      depth.gain.setValueAtTime(0, at)
+      depth.gain.setValueAtTime(0, at + delay)
+      depth.gain.linearRampToValueAtTime(
+        frequency * (Math.pow(2, cents / 1200) - 1),
+        at + delay + 0.08,
+      )
+      lfo.connect(depth)
+      depth.connect(osc.frequency)
+      lfo.start(at)
+      lfo.stop(at + seconds + 0.02)
+    }
+  }
 
   // A hard start and stop clicks. A few milliseconds of fade at each end is
   // the difference between a chiptune and a fault.
@@ -150,7 +238,7 @@ function schedule(): void {
         playNote(
           ctx,
           out,
-          part.wave,
+          part,
           note.frequency,
           cursor,
           note.length * step * (part.sustain ?? 0.9),
@@ -219,7 +307,7 @@ export function playCue(name: CueName): void {
         playNote(
           ctx,
           master,
-          part.wave,
+          part,
           note.frequency,
           start + note.at * step,
           note.length * step * (part.sustain ?? 0.9),

@@ -19,7 +19,15 @@
  * be tested without an audio context anywhere in sight.
  */
 
-export type Wave = 'square' | 'triangle' | 'sawtooth' | 'sine'
+/**
+ * `pulse` is the one that matters.
+ *
+ * A square wave is a pulse that is high exactly half the time, and on its own
+ * it sounds like a test tone. The chips could also be high an eighth or a
+ * quarter of the time, and those narrower pulses are the thin, reedy voice the
+ * era actually sounded like.
+ */
+export type Wave = 'square' | 'triangle' | 'sawtooth' | 'sine' | 'pulse'
 
 export interface Part {
   wave: Wave
@@ -27,6 +35,21 @@ export interface Part {
   gain: number
   /** How long a note rings relative to its written length. */
   sustain?: number
+  /** For a pulse: how much of each cycle is high. 0.125, 0.25 and 0.5 are the classic three. */
+  duty?: number
+  /** Depth in cents, speed in Hz, and how long to wait before it starts. */
+  vibrato?: { cents: number; hz: number; delay?: number }
+  /**
+   * Semitone offsets flicked through inside one note, to fake a chord.
+   *
+   * With three oscillators and four things to play, the chips could not hold a
+   * chord down, so they switched between its notes once per frame instead. The
+   * ear hears a rough buzzing chord rather than three separate notes, and it
+   * is the most recognisable trick in the whole idiom.
+   */
+  arp?: readonly number[]
+  /** How fast to flick through `arp`, in steps per second. */
+  arpRate?: number
   pattern: string
 }
 
@@ -143,9 +166,27 @@ export const CHASE: Track = {
   beatsPerMinute: 126,
   drums: CHASE_DRUMS,
   parts: [
-    { wave: 'square', gain: 0.16, sustain: 0.85, pattern: CHASE_LEAD },
+    {
+      wave: 'pulse',
+      duty: 0.25,
+      gain: 0.15,
+      sustain: 0.85,
+      vibrato: { cents: 22, hz: 5.5, delay: 0.1 },
+      pattern: CHASE_LEAD,
+    },
     { wave: 'triangle', gain: 0.3, sustain: 0.6, pattern: CHASE_BASS },
-    { wave: 'sine', gain: 0.09, sustain: 0.95, pattern: CHASE_PAD },
+    {
+      // Was a held sine, which is a thing no chip of the era could do. Now it
+      // flicks root, fifth, octave inside every note instead, which is how one
+      // oscillator carried a whole chord.
+      wave: 'pulse',
+      duty: 0.125,
+      gain: 0.07,
+      sustain: 0.95,
+      arp: [0, 7, 12],
+      arpRate: 20,
+      pattern: CHASE_PAD,
+    },
   ],
 }
 
@@ -238,9 +279,25 @@ export const PIPES: Track = {
   beatsPerMinute: 148,
   drums: PIPES_DRUMS,
   parts: [
-    { wave: 'square', gain: 0.15, sustain: 0.8, pattern: PIPES_LEAD },
+    {
+      // The narrowest pulse of the three, which is the brightest and thinnest.
+      wave: 'pulse',
+      duty: 0.125,
+      gain: 0.14,
+      sustain: 0.8,
+      vibrato: { cents: 18, hz: 6, delay: 0.14 },
+      pattern: PIPES_LEAD,
+    },
     { wave: 'triangle', gain: 0.28, sustain: 0.55, pattern: PIPES_BASS },
-    { wave: 'sine', gain: 0.08, sustain: 0.95, pattern: PIPES_PAD },
+    {
+      wave: 'pulse',
+      duty: 0.25,
+      gain: 0.07,
+      sustain: 0.95,
+      arp: [0, 7, 12],
+      arpRate: 22,
+      pattern: PIPES_PAD,
+    },
   ],
 }
 
@@ -292,9 +349,16 @@ export const CAVERN: Track = {
   name: "Dave's Caves",
   beatsPerMinute: 104,
   parts: [
-    { wave: 'triangle', gain: 0.16, sustain: 0.9, pattern: CAVERN_LEAD },
-    { wave: 'sine', gain: 0.2, sustain: 1, pattern: CAVERN_BASS },
-    { wave: 'square', gain: 0.06, sustain: 0.3, pattern: CAVERN_DRIP },
+    {
+      wave: 'pulse',
+      duty: 0.5,
+      gain: 0.13,
+      sustain: 0.9,
+      vibrato: { cents: 30, hz: 4.5, delay: 0.2 },
+      pattern: CAVERN_LEAD,
+    },
+    { wave: 'triangle', gain: 0.22, sustain: 1, pattern: CAVERN_BASS },
+    { wave: 'pulse', duty: 0.125, gain: 0.05, sustain: 0.3, pattern: CAVERN_DRIP },
   ],
 }
 
@@ -321,9 +385,11 @@ export const DUNGEON: Track = {
   beatsPerMinute: 76,
   parts: [
     {
-      wave: 'triangle',
-      gain: 0.15,
+      wave: 'pulse',
+      duty: 0.25,
+      gain: 0.13,
       sustain: 0.95,
+      vibrato: { cents: 35, hz: 4.8, delay: 0.18 },
       pattern: [
         'D5 .  .  -  C5 .  Bb4 . ',
         'A4 .  .  -  G4 .  F#4 . ',
@@ -344,7 +410,7 @@ export const DANGER: Track = {
   name: 'Danger',
   beatsPerMinute: 150,
   parts: [
-    { wave: 'square', gain: 0.13, sustain: 0.6, pattern: 'A4 Bb4 A4 Eb4 - A4 Bb4 A4 Eb4 - D5 . . .' },
+    { wave: 'pulse', duty: 0.125, gain: 0.12, sustain: 0.6, pattern: 'A4 Bb4 A4 Eb4 - A4 Bb4 A4 Eb4 - D5 . . .' },
     { wave: 'triangle', gain: 0.22, sustain: 0.5, pattern: 'D3 - D3 - - D3 - D3 - - Eb3 . . .' },
   ],
 }
@@ -353,7 +419,7 @@ export const DANGER: Track = {
 export const BLADE: Track = {
   name: 'Blade',
   beatsPerMinute: 160,
-  parts: [{ wave: 'square', gain: 0.12, sustain: 0.35, pattern: 'Bb5 - D6 - - -' }],
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.12, sustain: 0.35, pattern: 'Bb5 - D6 - - -' }],
 }
 
 /** A potion: the only cue in the game that goes up and stays there. */
@@ -381,7 +447,7 @@ export const VICTORY: Track = {
   name: 'Victory',
   beatsPerMinute: 120,
   parts: [
-    { wave: 'square', gain: 0.13, sustain: 0.7, pattern: 'D4 Eb4 F#4 G4 A4 .  D5 .  .  . ' },
+    { wave: 'pulse', duty: 0.25, gain: 0.13, sustain: 0.7, pattern: 'D4 Eb4 F#4 G4 A4 .  D5 .  .  . ' },
     { wave: 'triangle', gain: 0.2, sustain: 0.8, pattern: 'D3 .  .  .  A3 .  D4 .  .  . ' },
   ],
 }
@@ -410,14 +476,14 @@ export const TIMER: Track = {
 export const COIN: Track = {
   name: 'Coin',
   beatsPerMinute: 200,
-  parts: [{ wave: 'square', gain: 0.12, sustain: 0.5, pattern: 'B5 E6 .  . ' }],
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.12, sustain: 0.5, pattern: 'B5 E6 .  . ' }],
 }
 
 /** A jump. Short, because he does it constantly. */
 export const HOP: Track = {
   name: 'Hop',
   beatsPerMinute: 220,
-  parts: [{ wave: 'square', gain: 0.1, sustain: 0.4, pattern: 'C5 G5 -  - ' }],
+  parts: [{ wave: 'pulse', duty: 0.25, gain: 0.1, sustain: 0.4, pattern: 'C5 G5 -  - ' }],
 }
 
 /** Landing on something. Down, not up: this one happened to someone else. */
@@ -431,7 +497,7 @@ export const STOMP: Track = {
 export const GROW: Track = {
   name: 'Grow',
   beatsPerMinute: 180,
-  parts: [{ wave: 'square', gain: 0.12, sustain: 0.6, pattern: 'C4 E4 G4 C5 E5 G5 C6 . ' }],
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.12, sustain: 0.6, pattern: 'C4 E4 G4 C5 E5 G5 C6 . ' }],
 }
 
 /** A life lost. Falls, and keeps falling. */
@@ -449,7 +515,7 @@ export const FLAG: Track = {
   name: 'Flag',
   beatsPerMinute: 140,
   parts: [
-    { wave: 'square', gain: 0.14, sustain: 0.7, pattern: 'G4 C5 E5 G5 .  E5 G5 C6 .  .  .  . ' },
+    { wave: 'pulse', duty: 0.25, gain: 0.14, sustain: 0.7, pattern: 'G4 C5 E5 G5 .  E5 G5 C6 .  .  .  . ' },
     { wave: 'triangle', gain: 0.18, sustain: 0.8, pattern: 'C3 .  .  .  G3 .  .  C4 .  .  .  . ' },
   ],
 }

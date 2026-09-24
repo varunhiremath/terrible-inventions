@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CUES,
   TRACKS,
   eighthSeconds,
   loopLength,
@@ -142,5 +143,79 @@ describe('the tracks', () => {
     expect(TRACKS.cavern.beatsPerMinute).toBeLessThan(TRACKS.pipes.beatsPerMinute)
     expect(TRACKS.cavern.drums).toBeUndefined()
     expect(TRACKS.pipes.drums).toBeDefined()
+  })
+})
+
+/**
+ * The voices.
+ *
+ * These settings are the difference between something that sounds like a chip
+ * and something that sounds like a signal generator, and every one of them
+ * fails silently: a duty cycle of 0 is a wave with no sound in it at all, and
+ * an arpeggio of one note is just a note.
+ */
+describe('how the parts are played', () => {
+  const everyPart = [
+    ...Object.entries(TRACKS).flatMap(([name, track]) =>
+      track.parts.map((part) => [name, part] as const),
+    ),
+    ...Object.entries(CUES).flatMap(([name, cue]) => cue.parts.map((part) => [name, part] as const)),
+  ]
+
+  it('gives every pulse a usable width', () => {
+    // At 0 or 1 a pulse is flat, and flat is silence.
+    for (const [name, part] of everyPart) {
+      if (part.wave !== 'pulse') continue
+      expect(part.duty ?? 0.25, name).toBeGreaterThan(0.05)
+      expect(part.duty ?? 0.25, name).toBeLessThan(0.95)
+    }
+  })
+
+  it('only sets a width on a wave that has one', () => {
+    for (const [name, part] of everyPart) {
+      if (part.duty !== undefined) expect(part.wave, name).toBe('pulse')
+    }
+  })
+
+  it('makes every arpeggio more than one note', () => {
+    for (const [name, part] of everyPart) {
+      if (!part.arp) continue
+      expect(part.arp.length, name).toBeGreaterThan(1)
+      // Flicking through notes slowly is not an arpeggio, it is a tune.
+      expect(part.arpRate ?? 18, name).toBeGreaterThan(10)
+    }
+  })
+
+  it('keeps vibrato to a waver rather than a siren', () => {
+    for (const [name, part] of everyPart) {
+      if (!part.vibrato) continue
+      expect(part.vibrato.cents, name).toBeLessThan(60)
+      expect(part.vibrato.hz, name).toBeGreaterThan(2)
+      expect(part.vibrato.hz, name).toBeLessThan(9)
+    }
+  })
+
+  it('actually uses the pulse waves it went to the trouble of building', () => {
+    // The whole engine is pointless if every part is still a plain square.
+    const pulses = everyPart.filter(([, part]) => part.wave === 'pulse')
+    expect(pulses.length).toBeGreaterThan(6)
+  })
+
+  it('gives every tune played over a game a chord, one way or another', () => {
+    // A melody and a bass with nothing between them sounds thin at any tempo.
+    // The thinking music is the exception and stays two voices on purpose: it
+    // plays while somebody is working something out, and the whole job of it
+    // is to be ignorable.
+    for (const [name, track] of Object.entries(TRACKS)) {
+      if (name === 'thinking') continue
+      const voices = track.parts.length
+      const arps = track.parts.filter((p) => p.arp).length
+      expect(voices + arps, name).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  it('keeps the thinking music out of the way', () => {
+    expect(TRACKS.thinking.parts.length).toBeLessThan(3)
+    expect(TRACKS.thinking.parts.some((p) => p.arp)).toBe(false)
   })
 })
