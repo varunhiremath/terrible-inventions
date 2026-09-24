@@ -134,16 +134,24 @@ export function Intro({ story, onDone }: { story: Story; onDone: () => void }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 bg-black px-4 py-3">
-        <p className="font-mono text-[0.7rem] uppercase tracking-widest text-dim/60">
-          tap for the next bit
+      {/*
+        * The way out, along the bottom.
+        *
+        * The story plays before every go at a game now rather than only the
+        * first, so this has to be the most obvious thing on the screen after
+        * the picture: full width, thumb height, and there from the first frame.
+        * A skip you have to look for is worse than no skip at all.
+        */}
+      <div className="bg-black px-4 pb-4 pt-3">
+        <p className="mb-2 text-center font-mono text-[0.7rem] uppercase tracking-widest text-dim/60">
+          tap the picture for the next bit
         </p>
         <button
           type="button"
           onClick={done}
-          className="rounded-full border border-dim/40 px-5 py-2 font-mono text-xs uppercase tracking-widest text-paper"
+          className="w-full rounded-2xl border-2 border-dim/40 py-4 font-mono text-sm font-bold uppercase tracking-[0.2em] text-paper active:translate-y-[2px]"
         >
-          Skip
+          Skip to the game
         </button>
       </div>
     </div>

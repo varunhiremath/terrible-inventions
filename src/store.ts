@@ -98,19 +98,17 @@ export const useStore = create<State>((set, get) => ({
   },
 
   /**
-   * Going to a game plays its intro first, once.
+   * Going to a game plays its intro first, every time.
    *
-   * After that it goes straight in. Sending someone through half a minute of
-   * story every single time they open a game is how a good intro becomes a
-   * thing people learn to tap past without looking.
+   * It used to play once and never again, on the reasoning that half a minute
+   * of story before every single go is how a good intro becomes a thing people
+   * tap past without looking. Asked for the other way round: the story before
+   * each game, with a way out of it. So the skip sits at the bottom of the
+   * screen from the first frame, and one press is the whole of getting past it.
    */
   go: (screen) => {
     const story = INTRO_FOR[screen]
-    if (story && !get().save.seenIntro?.[story]) {
-      set({ screen, intro: story })
-      return
-    }
-    set({ screen, intro: null })
+    set({ screen, intro: story ?? null })
   },
 
   intro: null,

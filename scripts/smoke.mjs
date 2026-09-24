@@ -205,10 +205,20 @@ if (!(await playedOn(beforeTaps))) problems.push('the board stopped playing afte
 // that is the gesture a phone user reaches for first. All four directions get
 // a turn, because any one of them may be a wall or an already-cleared corridor
 // — the score is what proves he moved, and he has to be able to move at all.
+/*
+ * A fresh game for this one, and for the arrow keys below.
+ *
+ * These phases deliberately steer him into the machines, so a run of them
+ * spends lives. Once the third is gone the score stops for good, and from out
+ * here that is indistinguishable from a control that has stopped working.
+ */
+await enter('Papa Panic')
+await page.waitForTimeout(2500)
+const dragBoard = await page.locator('canvas').boundingBox()
 const beforeDrag = await scoreNow()
 for (const [dx, dy] of [[0, -300], [300, 0], [0, 300], [-300, 0]]) {
-  const midX = board.x + board.width / 2
-  const midY = board.y + board.height / 2
+  const midX = dragBoard.x + dragBoard.width / 2
+  const midY = dragBoard.y + dragBoard.height / 2
   await clearQuestion()
   await page.mouse.move(midX, midY)
   await page.mouse.down()
@@ -218,6 +228,8 @@ for (const [dx, dy] of [[0, -300], [300, 0], [0, 300], [-300, 0]]) {
 }
 if (!(await playedOn(beforeDrag))) problems.push('the board stopped playing after dragging on it')
 
+await enter('Papa Panic')
+await page.waitForTimeout(2500)
 const beforeKeys = await scoreNow()
 for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']) {
   await clearQuestion()

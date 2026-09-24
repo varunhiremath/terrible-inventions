@@ -9,8 +9,32 @@ import type { Problem } from '../engine/types'
  * picture and the answer are the same object: you tap the broken step, or the
  * machine you think is lying, rather than translating your thinking into a
  * number first.
+ *
+ * The question itself is printed here rather than by whoever is showing the
+ * problem. It was left to the caller once, and the caller forgot: a pile of
+ * blocks and a number pad turned up with nothing at all saying what was being
+ * asked. Keeping it in here means there is no caller that can get it wrong.
  */
 export function ProblemView({
+  problem,
+  locked,
+  onAnswer,
+}: {
+  problem: Problem
+  locked: boolean
+  onAnswer: (given: string, correct: boolean) => void
+}) {
+  return (
+    <>
+      <p className="text-xl leading-snug text-chalk sm:text-2xl">{fill(problem.prompt)}</p>
+      <div className="mt-4">
+        <ProblemBody problem={problem} locked={locked} onAnswer={onAnswer} />
+      </div>
+    </>
+  )
+}
+
+function ProblemBody({
   problem,
   locked,
   onAnswer,
