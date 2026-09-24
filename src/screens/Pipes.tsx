@@ -12,6 +12,7 @@ import {
   drawBackdrop, drawEnemies, drawFlag, drawHero, drawItems, drawLevel, drawPad, drawSky,
   type View,
 } from '../pipes/draw'
+import { scrollTo } from '../camera'
 import { createPacer } from '../arcade/pacing'
 import { fill } from '../config/profile'
 import { Btn } from '../ui/bits'
@@ -179,32 +180,46 @@ export function Pipes() {
         const capH = Math.max(h * 0.06, 22)
         const middle = Math.max(60, h - padH - capH)
 
-        // Every row that has anything in it is always on screen, so the tile
-        // size falls out of the height. Wide screens get more of the level
-        // either side, which is what a wide screen is for here.
-        const size = middle / VIEW_ROWS
+        /*
+         * How big a tile is.
+         *
+         * Taken from the height alone at first, so that every row with
+         * anything in it is always on screen. On a phone held upright that
+         * makes the tiles enormous and the view about six columns wide: most
+         * of the screen is empty sky, the player is a speck at the bottom, and
+         * you cannot see far enough ahead to react to anything.
+         *
+         * So there is a floor on how many columns are shown, and if honouring
+         * it leaves the level shorter than the space available, the extra goes
+         * above as sky rather than being spent on bigger tiles.
+         */
+        // Ten is the balance: at thirteen he is a speck on a narrow screen, at
+        // six you cannot see far enough ahead to react to anything.
+        const MIN_ACROSS = 10
+        const size = Math.min(middle / VIEW_ROWS, w / MIN_ACROSS)
         const across = w / size
+        const boardH = size * VIEW_ROWS
 
-        /**
+        /*
          * The camera.
          *
-         * Holds him a third of the way in rather than in the middle, because
-         * he is nearly always running right and what matters is seeing what is
-         * coming. And it never scrolls back: going left takes you towards the
-         * edge of the screen, not the world back the other way.
+         * It used to ratchet forwards and never come back, on the reasoning
+         * that he is nearly always running right. He is not: walking left took
+         * him to the edge of the screen and then off it, with the view refusing
+         * to follow. It keeps him inside a band with a fifth of the screen
+         * clear either side now, and goes both ways.
          */
-        const want = next.body.x - across / 3
-        camera.current = Math.max(camera.current, want)
-        camera.current = Math.min(camera.current, next.level.rows[0].length - across)
-        camera.current = Math.max(0, camera.current)
+        camera.current = scrollTo(camera.current, next.body.x, across, next.level.rows[0].length)
 
         const view: View = { col: camera.current, size, clock: clock.current }
 
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         drawSky(ctx, w, h)
         ctx.save()
-        ctx.translate(0, capH)
-        drawBackdrop(ctx, view, middle)
+        // The ground sits at the bottom of the space, and any room left over
+        // is sky above it.
+        ctx.translate(0, capH + (middle - boardH))
+        drawBackdrop(ctx, view, boardH)
         drawLevel(ctx, next, view, w)
         drawFlag(ctx, next.level, view, next.status === 'won', clock.current)
         drawItems(ctx, next, view)
@@ -217,16 +232,41 @@ export function Pipes() {
         ctx.fillRect(0, 0, w, capH)
         ctx.fillRect(0, capH + middle, w, h - capH - middle)
 
-        const text = Math.max(13, Math.min(size * 0.72, capH * 0.62))
+        /*
+         * Three readings across one bar.
+         *
+         * Sized from the tile before, which has nothing to do with how much
+         * room the words need: on a phone held upright the tiles are large and
+         * the screen is narrow, so "0 COINS" and "LEVEL 1" ran into each other
+         * with no gap at all. Measured and shrunk to fit instead, with a proper
+         * space kept between them.
+         */
+        const gap = size * 0.4
+        const coins = `${next.coins} COINS`
+        const level = `LEVEL ${next.number}`
+        const remaining = `${Math.ceil(next.seconds)}`
+        let text = Math.min(size * 0.72, capH * 0.62)
+        /*
+         * The middle one is centred and the other two are pinned to the sides,
+         * so what decides whether they collide is the widest side against half
+         * the middle — not the three widths added up, which was the first
+         * attempt and let "0 COINS" run straight into "LEVEL 1" with no gap.
+         */
+        const fits = () => {
+          ctx.font = `bold ${text}px ui-monospace, monospace`
+          const side = Math.max(ctx.measureText(coins).width, ctx.measureText(remaining).width)
+          return side * 2 + ctx.measureText(level).width + gap * 4 <= w
+        }
+        while (text > 9 && !fits()) text -= 1
+
         ctx.fillStyle = '#eef2f8'
-        ctx.font = `bold ${text}px ui-monospace, monospace`
         ctx.textBaseline = 'middle'
         ctx.textAlign = 'left'
-        ctx.fillText(`${next.coins} COINS`, size * 0.4, capH / 2)
+        ctx.fillText(coins, gap, capH / 2)
         ctx.textAlign = 'center'
-        ctx.fillText(`LEVEL ${next.number}`, w / 2, capH / 2)
+        ctx.fillText(level, w / 2, capH / 2)
         ctx.textAlign = 'right'
-        ctx.fillText(`${Math.ceil(next.seconds)}`, w - size * 0.4, capH / 2)
+        ctx.fillText(remaining, w - gap, capH / 2)
 
         padRef.current = padLayout(w, h)
         drawPad(ctx, padRef.current, held as unknown as Record<string, boolean>)

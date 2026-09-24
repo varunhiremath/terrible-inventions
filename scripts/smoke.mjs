@@ -36,6 +36,46 @@ const skipIntro = async () => {
 }
 
 
+/**
+ * Gets past the between-lives question, if one is up.
+ *
+ * Losing a life now puts a question on the screen, and while it is there the
+ * board is not listening. This file was written before that existed, so the
+ * steering checks below could be measuring a game that was waiting for an
+ * answer about the capital of Australia — which reads, from here, exactly like
+ * a control that stopped working.
+ */
+const clearQuestion = async () => {
+  const skip = page.getByRole('button', { name: /^skip$/i })
+  if ((await skip.count()) > 0) {
+    await skip.first().click()
+    await page.waitForTimeout(1200)
+    return true
+  }
+  return false
+}
+
+/**
+ * Waits for the score to climb past a mark, getting questions out of the way.
+ *
+ * The checks below use a rising score to mean "the board is still playing".
+ * That is all it means: he keeps moving in whatever direction he was last
+ * given and eats whatever he runs over, so this does not prove a particular
+ * gesture steered him — it proves the game took the input and carried on
+ * rather than locking up. Comparing the score either side of a gesture used to
+ * stand in for that, and stopped working when losing a life started putting a
+ * question on the screen: the score sits still while the question is up, which
+ * from here looks exactly like a dead control.
+ */
+const playedOn = async (mark, seconds = 10) => {
+  for (let i = 0; i < seconds * 2; i++) {
+    await clearQuestion()
+    if ((await scoreNow()) > mark) return true
+    await page.waitForTimeout(500)
+  }
+  return false
+}
+
 const problems = []
 let questionText = ''
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`))
@@ -154,11 +194,12 @@ for (let pass = 0; pass < 2; pass++) {
     [0.5, 0.95],
     [0.05, 0.5],
   ]) {
+    await clearQuestion()
     await page.mouse.click(board.x + board.width * fx, board.y + board.height * fy)
     await page.waitForTimeout(700)
   }
 }
-if ((await scoreNow()) <= beforeTaps) problems.push('tapping the board did not move the player')
+if (!(await playedOn(beforeTaps))) problems.push('the board stopped playing after tapping it')
 
 // Dragging: a drag has to steer too, and a vertical one especially, since
 // that is the gesture a phone user reaches for first. All four directions get
@@ -168,19 +209,22 @@ const beforeDrag = await scoreNow()
 for (const [dx, dy] of [[0, -300], [300, 0], [0, 300], [-300, 0]]) {
   const midX = board.x + board.width / 2
   const midY = board.y + board.height / 2
+  await clearQuestion()
   await page.mouse.move(midX, midY)
   await page.mouse.down()
   await page.mouse.move(midX + dx, midY + dy, { steps: 10 })
   await page.mouse.up()
   await page.waitForTimeout(900)
 }
-if ((await scoreNow()) <= beforeDrag) problems.push('dragging did not move the player')
+if (!(await playedOn(beforeDrag))) problems.push('the board stopped playing after dragging on it')
 
+const beforeKeys = await scoreNow()
 for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']) {
+  await clearQuestion()
   await page.keyboard.press(key)
   await page.waitForTimeout(900)
 }
-if ((await scoreNow()) <= afterOpening) problems.push('steering did not move the player')
+if (!(await playedOn(beforeKeys))) problems.push('the board stopped playing after the arrow keys')
 
 /*
  * The question between lives.
@@ -191,15 +235,30 @@ if ((await scoreNow()) <= afterOpening) problems.push('steering did not move the
  * that it appears on the screen at the moment a life is lost, and that getting
  * past it puts you straight back into the game.
  */
+/*
+ * A fresh go, with all three lives.
+ *
+ * The steering checks above spend lives — they deliberately drive him into the
+ * machines — and a life lost when it is the last one ends the run rather than
+ * asking anything, so checking the question at the end of all that was
+ * checking it on a game that was already over.
+ */
+await enter('Papa Panic')
+await page.waitForTimeout(1500)
+
 const livesLeft = async () =>
   Number(
     ((await page.locator('[aria-label$="lives left"]').first().getAttribute('aria-label')) ?? '')
       .match(/(\d+) lives/)?.[1] ?? -1,
   )
+// Whatever he has left by now, not three: the steering checks above can
+// easily have cost him one, and waiting for a drop from three would then be
+// waiting for something that already happened.
+const livesBefore = await livesLeft()
 let died = false
 for (let i = 0; i < 60 && !died; i++) {
   await page.waitForTimeout(1000)
-  died = (await livesLeft()) < 3
+  died = (await livesLeft()) < livesBefore
 }
 
 if (!died) {

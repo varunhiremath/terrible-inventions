@@ -60,6 +60,8 @@ export function Prince() {
   const wasDuel = useRef(false)
   const padRef = useRef<Key[]>([])
   const clock = useRef(0)
+  /** Where the view sat last frame; the band only works if it can stay put. */
+  const camera = useRef(0)
   const wasStrike = useRef(false)
   const wasParry = useRef(false)
 
@@ -245,7 +247,8 @@ export function Prince() {
         ctx.fillStyle = INK.black
         ctx.fillRect(0, 0, w, h)
 
-        const room = viewAt(next.level, next.prince.col, next.prince.row)
+        const room = viewAt(next.level, camera.current, next.prince.col, next.prince.row)
+        camera.current = room.col
         const view: View = {
           col: room.col,
           row: room.row,

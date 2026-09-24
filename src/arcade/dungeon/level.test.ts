@@ -7,6 +7,10 @@ describe('the camera', () => {
    * it doesn't show me what's ahead... I'm on the right edge not visible at
    * all". The camera snapped to fixed rooms, so walking to the edge of one
    * meant walking at a wall of black.
+   *
+   * The band rule itself is proved in `src/camera.test.ts`. What matters here
+   * is that the dungeon is wired to it: the right width, the right world, and
+   * floors that move in whole steps.
    */
   const wide: Level = {
     name: 'wide',
@@ -14,50 +18,56 @@ describe('the camera', () => {
     start: { col: 1, row: 1, facing: 1 as const },
   }
 
-  const sees = (view: { col: number }, col: number) =>
-    col >= view.col && col <= view.col + ROOM_COLS - 1
+  /** Walks him from one end to the other, carrying the camera as the game does. */
+  const walk = (level: Level, to: number, row = 1) => {
+    let camera = 0
+    for (let col = 0; col <= to; col += 0.25) camera = viewAt(level, camera, col, row).col
+    return camera
+  }
 
-  it('keeps him on screen wherever he is', () => {
-    // Up to the last column, not past it: the outermost column of every level
-    // is wall, so there is no standing at 39.5 on a level 40 wide.
-    for (let col = 0; col <= 39; col += 0.5) {
-      expect(sees(viewAt(wide, col, 1), col), `at ${col}`).toBe(true)
+  it('keeps him on screen the whole way along', () => {
+    let camera = 0
+    for (let col = 0; col <= 39; col += 0.25) {
+      camera = viewAt(wide, camera, col, 1).col
+      expect(col, `at ${col}`).toBeGreaterThanOrEqual(camera)
+      expect(col, `at ${col}`).toBeLessThanOrEqual(camera + ROOM_COLS)
     }
   })
 
-  it('shows him what is ahead, not just what is behind', () => {
-    // The whole complaint: standing anywhere in the middle of a level, there
-    // has to be floor visible in front of him.
-    for (let col = 6; col < 34; col += 0.5) {
-      const view = viewAt(wide, col, 1)
-      expect(view.col + ROOM_COLS - 1 - col, `at ${col}`).toBeGreaterThanOrEqual(3)
+  it('never lets him get to the edge in the middle of a level', () => {
+    // A fifth of the screen kept clear either side, which was the ask.
+    let camera = 0
+    for (let col = 0; col <= 39; col += 0.25) {
+      camera = viewAt(wide, camera, col, 1).col
+      const clear = camera > 0 && camera + ROOM_COLS < 40
+      if (!clear) continue
+      expect(col - camera, `at ${col}`).toBeGreaterThanOrEqual(ROOM_COLS * 0.2 - 1e-9)
+      expect(camera + ROOM_COLS - col, `at ${col}`).toBeGreaterThanOrEqual(ROOM_COLS * 0.2 - 1e-9)
     }
   })
 
-  it('keeps him in the middle while there is room either side', () => {
-    const view = viewAt(wide, 20, 1)
-    const left = 20 - view.col
-    const right = view.col + ROOM_COLS - 1 - 20
-    expect(Math.abs(left - right)).toBeLessThanOrEqual(1)
+  it('follows him back the other way', () => {
+    const far = walk(wide, 30)
+    expect(viewAt(wide, far, 12, 1).col).toBeLessThan(far)
+  })
+
+  it('holds still while he moves about inside the band', () => {
+    // Walking right leaves him pressed against the right edge of the band, so
+    // the next step right moves the view with him — that is the point of it.
+    // The dead zone is what happens when he turns round and comes back.
+    const settled = walk(wide, 20)
+    expect(viewAt(wide, settled, 19.5, 1).col).toBe(settled)
+    expect(viewAt(wide, settled, 17, 1).col).toBe(settled)
   })
 
   it('stops at the edges rather than scrolling into nothing', () => {
-    expect(viewAt(wide, 0, 1).col).toBe(0)
-    expect(viewAt(wide, 1, 1).col).toBe(0)
-    expect(viewAt(wide, 39, 1).col).toBe(40 - ROOM_COLS)
-  })
-
-  it('moves smoothly rather than a tile at a time', () => {
-    // Snapping a whole tile at 127 pixels a step reads as a judder.
-    const a = viewAt(wide, 20, 1).col
-    const b = viewAt(wide, 20.25, 1).col
-    expect(b).toBeGreaterThan(a)
-    expect(b - a).toBeCloseTo(0.25, 6)
+    expect(viewAt(wide, 0, 0, 1).col).toBe(0)
+    expect(walk(wide, 39)).toBe(40 - ROOM_COLS)
   })
 
   it('never scrolls past the top or bottom', () => {
     for (let row = 0; row < 6; row++) {
-      const view = viewAt(wide, 5, row)
+      const view = viewAt(wide, 0, 5, row)
       expect(view.row, `row ${row}`).toBeGreaterThanOrEqual(0)
       expect(view.row + ROOM_ROWS, `row ${row}`).toBeLessThanOrEqual(wide.rows.length)
     }
@@ -65,9 +75,15 @@ describe('the camera', () => {
 
   it('keeps his own floor on screen', () => {
     for (let row = 0; row < 6; row++) {
-      const view = viewAt(wide, 5, row)
+      const view = viewAt(wide, 0, 5, row)
       expect(row, `row ${row}`).toBeGreaterThanOrEqual(view.row)
       expect(row, `row ${row}`).toBeLessThan(view.row + ROOM_ROWS)
+    }
+  })
+
+  it('moves floors in whole steps', () => {
+    for (let row = 0; row < 6; row++) {
+      expect(Number.isInteger(viewAt(wide, 0, 5, row).row), `row ${row}`).toBe(true)
     }
   })
 
@@ -77,6 +93,6 @@ describe('the camera', () => {
       rows: ['####', '####', '####'],
       start: { col: 1, row: 1, facing: 1 as const },
     }
-    expect(viewAt(narrow, 2, 1).col).toBe(0)
+    expect(viewAt(narrow, 0, 2, 1).col).toBe(0)
   })
 })

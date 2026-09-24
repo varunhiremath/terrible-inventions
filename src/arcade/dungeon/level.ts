@@ -6,11 +6,14 @@
  * one — which is what makes a level a set of ledges rather than a landscape,
  * and is why its jumps can be learned by heart.
  *
- * The view moves a room at a time rather than following him, which is the
- * other half of how this kind of game reads: you commit to a room, and what is
- * in the next one is something you remember rather than something you can see
- * coming. A room is ten tiles across and three floors tall.
+ * A room is ten tiles across and three floors tall. The view used to move a
+ * room at a time — you commit to a room, and what is in the next one is
+ * something you remember rather than something you can see coming — but that
+ * reads as intent only on a screen the shape the original had. On a phone held
+ * sideways it meant walking at a wall of black, so the view follows him now.
+ * `ROOM_COLS` and `ROOM_ROWS` are what fits on screen rather than a room.
  */
+import { scrollTo } from '../../camera'
 
 export const ROOM_COLS = 10
 export const ROOM_ROWS = 3
@@ -124,22 +127,25 @@ const clamp = (n: number, low: number, high: number) => Math.min(high, Math.max(
 /**
  * Where the camera sits: the top-left corner of what is on screen.
  *
- * It used to snap to fixed rooms, on the reasoning that scrolling shows you a
- * trap before you have had to decide about it. That reasoning was about a
- * screen the shape of the original's. Held sideways, a phone shows one room
- * and nothing else, and walking to the right-hand edge of it meant walking at
- * a wall of black with no way to know what was on the other side. There is no
- * decision to spoil if you cannot see anything at all.
+ * It used to snap to fixed rooms, which on a phone held sideways meant walking
+ * at a wall of black with no way to see what was on the other side. Then it
+ * centred him, which was better but still let the view swim under him with
+ * every step. It now keeps him inside a band with a fifth of the screen clear
+ * either side, the same rule the pipes use, so he is never at the edge and the
+ * view holds still while he is only shuffling about.
  *
- * So it follows him now, keeping him in the middle, and stops at the edges of
- * the level rather than scrolling past them into nothing. `col` is deliberately
- * fractional: the room slides under him rather than jumping a tile at a time.
+ * `camera` is where it sat last frame: the band only means anything if it can
+ * stay where it was.
  */
-export function viewAt(level: Level, col: number, row: number): { col: number; row: number } {
-  const lastCol = Math.max(0, levelCols(level) - ROOM_COLS)
+export function viewAt(
+  level: Level,
+  camera: number,
+  col: number,
+  row: number,
+): { col: number; row: number } {
   const lastRow = Math.max(0, level.rows.length - ROOM_ROWS)
   return {
-    col: clamp(col - (ROOM_COLS - 1) / 2, 0, lastCol),
+    col: scrollTo(camera, col, ROOM_COLS, levelCols(level)),
     // Floors are whole things and half a floor of scroll helps nobody, so the
     // vertical stays in steps: his floor, one above it, one below.
     row: clamp(Math.round(row) - 1, 0, lastRow),

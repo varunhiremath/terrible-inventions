@@ -38,6 +38,11 @@ def build(rng, number, width=190):
     flat_top = GROUND
 
     end = width - 18
+    # Counted, because it used to be left entirely to luck: a run of blocks
+    # appeared a bit over half the time and hid a mushroom under a third of
+    # those, so level one came out with none at all. The one thing in the game
+    # that changes what you can do was missing from the level you learn it in.
+    mushrooms = 0
     while col < end:
         piece = rng.random()
 
@@ -87,12 +92,18 @@ def build(rng, number, width=190):
         # the ground and no more.
         if rng.random() < 0.55 and col + 6 < end:
             at = col - rng.randint(4, 7)
-            kinds = [BRICK, QUERY, BRICK, QUERY, BRICK]
-            if rng.random() < 0.3:
+            kinds = [BRICK, QUERY, BRICK, QUERY, BRICK][: rng.randint(3, 5)]
+            # The first run of blocks in a level always hides one; after that
+            # it is luck again. Chosen from inside the run that actually gets
+            # drawn, because the list used to be trimmed after the mushroom was
+            # placed and could trim the mushroom off the end of it.
+            if mushrooms == 0 or rng.random() < 0.3:
                 kinds[rng.randrange(len(kinds))] = MUSH
-            for i, ch in enumerate(kinds[: rng.randint(3, 5)]):
+            for i, ch in enumerate(kinds):
                 if grid[GROUND - 1][at + i] == SKY:
                     put(at + i, 9, ch)
+                    if ch == MUSH:
+                        mushrooms += 1
 
         # Coins hanging in the air over a flat stretch.
         if rng.random() < 0.5:
@@ -100,6 +111,15 @@ def build(rng, number, width=190):
             for i in range(rng.randint(2, 4)):
                 if grid[10][at + i * 2] == SKY:
                     put(at + i * 2, 10, COIN)
+
+    # If no run of blocks happened at all, one goes over the opening stretch,
+    # where the ground is known to be flat and nothing can be sealed off.
+    if mushrooms == 0:
+        for c in range(22, 40):
+            if grid[GROUND][c] == EARTH and all(grid[r][c] == SKY for r in range(6, GROUND)):
+                put(c, 9, MUSH)
+                mushrooms += 1
+                break
 
     # The run up to the flag: flat, so the last thing is never a surprise.
     earth(col, width)
