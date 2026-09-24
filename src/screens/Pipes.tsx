@@ -14,6 +14,7 @@ import { createPacer } from '../arcade/pacing'
 import { fill } from '../config/profile'
 import { Btn } from '../ui/bits'
 import { useStore } from '../store'
+import { Interlude } from './Interlude'
 
 /**
  * The pipes.
@@ -38,7 +39,6 @@ interface Hud {
 
 export function Pipes() {
   const go = useStore((s) => s.go)
-  const openShop = useStore((s) => s.openShop)
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -254,9 +254,17 @@ export function Pipes() {
     setHud({ level: 1, lives: 3, coins: 0, score: 0, seconds: 300, status: 'playing' })
   }
 
-  const overlay = hud.status !== 'playing'
   const lastLevel = hud.level >= LEVELS.length
   const outOfLives = hud.lives <= 0
+  /**
+   * Losing a life asks you something and then puts you straight back in.
+   *
+   * Not a menu: the question is the whole interruption. A panel saying "you
+   * died, press again" in front of it would be one tap of nothing between the
+   * player and the game.
+   */
+  const asking = hud.status === 'dead' && !outOfLives
+  const overlay = hud.status !== 'playing' && !asking
 
   return (
     <div
@@ -276,13 +284,15 @@ export function Pipes() {
 
       <button
         type="button"
-        onClick={() => go('arcade')}
+        onClick={() => go('home')}
         onPointerDown={(e) => e.stopPropagation()}
         onPointerUp={(e) => e.stopPropagation()}
         className="absolute bottom-1 right-2 z-20 px-2 font-mono text-[0.7rem] uppercase tracking-widest text-dim/40"
       >
         back
       </button>
+
+      {asking && <Interlude onDone={restart} />}
 
       {overlay && (
         <div
@@ -311,18 +321,12 @@ export function Pipes() {
                   On to level {hud.level + 1}
                 </Btn>
               )}
-              {hud.status === 'dead' && !outOfLives && (
-                <Btn tone="go" onClick={restart} className="py-4 text-lg">
-                  Again ({hud.lives} left)
-                </Btn>
-              )}
               {(outOfLives || (hud.status === 'won' && lastLevel) || hud.status === 'outOfTime') && (
                 <Btn tone="go" onClick={startOver} className="py-4 text-lg">
                   Start again
                 </Btn>
               )}
-              <Btn onClick={openShop}>Open the maths shop</Btn>
-              <Btn onClick={() => go('arcade')}>Back</Btn>
+              <Btn onClick={() => go('home')}>Back to the menu</Btn>
             </div>
           </div>
         </div>

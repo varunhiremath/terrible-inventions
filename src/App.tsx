@@ -1,14 +1,13 @@
 import { useEffect } from 'react'
 import { Arcade } from './screens/Arcade'
 import { Dave } from './screens/Dave'
+import { Home } from './screens/Home'
 import { Intro } from './intro/Intro'
 import { STORIES } from './intro/stories'
 import { Pipes } from './screens/Pipes'
 import { Prince } from './screens/Prince'
-import { Shop } from './screens/Shop'
 import { Note } from './screens/Note'
 import { Settings } from './screens/Settings'
-import { Studio } from './screens/Studio'
 import { Coop } from './screens/Coop'
 import { useStore } from './store'
 import { unlock } from './audio'
@@ -56,7 +55,6 @@ export default function App() {
     // running underneath would take that away, and for a while one was: the
     // chase tune from the maze was playing over the whole thing.
     if (screen === 'arcade' || screen === 'dave') startMusic('chase')
-    else if (screen === 'shop') startMusic('shop')
     else stopMusic()
     // `save.music` is in here so switching it back on in settings starts the
     // tune again, rather than waiting for the next change of screen.
@@ -79,17 +77,15 @@ export default function App() {
       return <Prince />
     case 'pipes':
       return <Pipes />
-    case 'shop':
-      return <Shop />
     case 'note':
       return <Note />
     case 'settings':
       return <Settings />
-    case 'studio':
-      return <Studio />
     case 'coop':
       return <Coop />
-    default:
+    case 'arcade':
       return <Arcade />
+    default:
+      return <Home />
   }
 }

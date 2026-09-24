@@ -22,6 +22,7 @@ import { fill } from '../config/profile'
 import { Btn } from '../ui/bits'
 import { say, silence } from '../voice'
 import { useStore } from '../store'
+import { Interlude } from './Interlude'
 
 /**
  * Papa Panic.
@@ -61,8 +62,6 @@ export function Arcade() {
   const beginRun = useStore((s) => s.beginRun)
   const advanceLevel = useStore((s) => s.advanceLevel)
   const finishRun = useStore((s) => s.finishRun)
-  const openShop = useStore((s) => s.openShop)
-  const attemptContinue = useStore((s) => s.attemptContinue)
   const go = useStore((s) => s.go)
 
   const mountRef = useRef<HTMLDivElement>(null)
@@ -532,7 +531,10 @@ function PlayerIcon() {
     advanceLevel(gameRef.current?.score ?? 0)
   }
 
-  const overlay = hud.status !== 'playing'
+  // Losing a life asks you something and puts you straight back in. A panel
+  // saying "you died, press again" in front of it is a tap of nothing.
+  const asking = hud.status === 'died'
+  const overlay = hud.status !== 'playing' && !asking
 
   return (
     <div
@@ -629,6 +631,8 @@ function PlayerIcon() {
 
       {ping && !overlay && <Ping ping={ping} />}
 
+      {asking && <Interlude onDone={again} />}
+
       {overlay && (
         <div
           className="absolute inset-0 z-30 flex items-center justify-center bg-ink/85 p-4"
@@ -641,9 +645,6 @@ function PlayerIcon() {
             <p className="mt-2 text-xl leading-snug">{message ?? '…'}</p>
 
             <div className="mt-5 flex flex-col gap-2">
-              {hud.status === 'died' && (
-                <Btn tone="go" onClick={again} className="py-4 text-lg">Again</Btn>
-              )}
 
               {hud.status === 'levelComplete' && (
                 <Btn tone="go" onClick={nextLevel} className="py-4 text-lg">
@@ -652,17 +653,12 @@ function PlayerIcon() {
               )}
 
               {hud.status === 'gameOver' && (
-                <>
-                  <Btn tone="go" onClick={attemptContinue} className="py-4 text-lg">
-                    Earn another go
-                  </Btn>
-                  <Btn onClick={openShop}>Go shopping first</Btn>
-                  <Btn onClick={() => finishRun(gameRef.current?.score ?? 0)}>Start again from level 1</Btn>
-                </>
+                <Btn tone="go" onClick={() => finishRun(gameRef.current?.score ?? 0)} className="py-4 text-lg">
+                  Start again from level 1
+                </Btn>
               )}
 
-              {hud.status !== 'gameOver' && <Btn onClick={openShop}>Shop</Btn>}
-              <Btn onClick={() => go('dave')}>Dangerous Dave</Btn>
+              <Btn onClick={() => go('home')}>Pick another game</Btn>
             </div>
           </div>
         </div>

@@ -37,6 +37,7 @@ const skipIntro = async () => {
 
 
 const problems = []
+let questionText = ''
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`))
 page.on('console', (m) => {
   if (m.type() === 'error') problems.push(`console: ${m.text()} :: ${m.location()?.url ?? ''}`)
@@ -48,7 +49,49 @@ const hud = async () => (await page.innerText('header'))?.replace(/\s+/g, ' ').t
 /** The arcade bar reads "1UP <score> HIGH SCORE <best> LEVEL <n>". */
 const scoreNow = async () => Number((await hud()).match(/1up (\d+)/i)?.[1] ?? -1)
 
+/*
+ * The front door.
+ *
+ * The app used to open straight into the maze, which quietly made that one
+ * "the game" and left the other three as things you had to know were hidden
+ * in the settings. It opens on a grid of four now, so every route in here
+ * starts by picking one off it.
+ */
 await page.goto(URL, { waitUntil: 'networkidle' })
+await page.waitForTimeout(1500)
+
+const GAMES = ['Papa Panic', 'Dangerous Dave', 'The Dungeon', 'The Pipes']
+const homeText = await page.innerText('body')
+for (const game of GAMES) {
+  if (!new RegExp(game, 'i').test(homeText)) problems.push(`${game} is not on the front screen`)
+}
+if (/shop/i.test(homeText)) problems.push('the shop is still being offered')
+if ((await page.locator('canvas').count()) !== GAMES.length) {
+  problems.push('the four tiles are not each drawing their own emblem')
+}
+
+/** Opens a game from the front door, and gets past its story. */
+const enter = async (name) => {
+  await page.goto(URL, { waitUntil: 'networkidle' })
+  await page.waitForTimeout(1200)
+  const button = page.getByRole('button', { name: new RegExp(name, 'i') })
+  if ((await button.count()) === 0) {
+    problems.push(`no way in to ${name} from the front screen`)
+    return false
+  }
+  await button.first().click()
+  await page.waitForTimeout(600)
+  await skipIntro()
+  return true
+}
+
+await enter('Papa Panic')
+
+// The opening pause: nothing should have been eaten in the moment the maze
+// appears. Read straight away — the pause is a couple of seconds, and waiting
+// around to ask is the same as not asking.
+if ((await scoreNow()) > 0) problems.push('play started before the ready pause finished')
+
 await page.waitForTimeout(1500)
 
 const canvas = await page.evaluate(() => {
@@ -57,9 +100,6 @@ const canvas = await page.evaluate(() => {
 })
 if (!canvas?.w || !canvas.gl) problems.push('the maze did not render')
 if (!/level 1/i.test(await hud())) problems.push('did not open on level 1')
-
-// The opening pause: nothing should have been eaten yet.
-if ((await scoreNow()) > 0) problems.push('play started before the ready pause finished')
 
 // Then it should run, and run at a sensible pace rather than in slow motion.
 await page.waitForTimeout(4000)
@@ -79,8 +119,8 @@ if ((await page.locator('button[aria-label="up"]').count()) > 0) {
 
 // Nothing to press while playing except the quiet settings gear. A button on
 // the board is an invitation to stop playing, and the arcade puts none there.
-// The shop moved to the screen shown when a life is lost, which is where it
-// belongs anyway.
+// The one question you are ever asked comes between lives, where it costs
+// nothing to stop and think.
 const loud = await page
   .locator('header button, footer button')
   .filter({ hasNotText: /^\s*$/ })
@@ -142,48 +182,51 @@ for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']) {
 }
 if ((await scoreNow()) <= afterOpening) problems.push('steering did not move the player')
 
-// --- the shop: maths buys power, and never merely permission ---------------
 /*
- * Reached from the settings rather than by dying, which it used to do. That
- * worked only while the player was easy to catch: once the controls were
- * fixed he survived a full minute of being driven at the chasers and the test
- * simply timed out. A parent wants a way in that does not involve losing, too.
+ * The question between lives.
+ *
+ * Stop steering and the machines close in, which is the one death in any of
+ * the four games you can rely on happening on its own. Checked in a browser
+ * rather than left to the unit tests because the whole point of the thing is
+ * that it appears on the screen at the moment a life is lost, and that getting
+ * past it puts you straight back into the game.
  */
-await page.goto(URL, { waitUntil: 'networkidle' })
-await page.waitForTimeout(1200)
-await page.locator('button[aria-label="Settings"]').click()
-await page.waitForTimeout(400)
-await page.getByRole('button', { name: /Open the maths shop/ }).click()
-await page.waitForTimeout(800)
+const livesLeft = async () =>
+  Number(
+    ((await page.locator('[aria-label$="lives left"]').first().getAttribute('aria-label')) ?? '')
+      .match(/(\d+) lives/)?.[1] ?? -1,
+  )
+let died = false
+for (let i = 0; i < 60 && !died; i++) {
+  await page.waitForTimeout(1000)
+  died = (await livesLeft()) < 3
+}
 
-const shopText = await page.textContent('body')
-if (!/Harder problem, better prize/.test(shopText)) problems.push('the shop is not framed as a shop')
-if (!/Two-player puzzle/.test(shopText)) problems.push('the two-player puzzle is not offered')
-
-await page.getByRole('button', { name: /Spare life/ }).click()
-await page.waitForTimeout(900)
-if (!/nudge/i.test(await page.textContent('body'))) problems.push('the shop served no problem')
-
-// A hint must always be free and reachable.
-await page.getByRole('button', { name: /nudge/i }).click()
-await page.waitForTimeout(300)
-if (!/Nudge 1/.test(await page.textContent('body'))) problems.push('hints are not available in the shop')
+if (!died) {
+  problems.push('never lost a life in the maze, so the question was never shown')
+} else {
+  questionText = await page.innerText('body')
+  if (!/a quick one|something else/i.test(questionText)) {
+    problems.push('losing a life did not bring up a question')
+  }
+  // Either shape of question can be got past without answering it. The skip is
+  // there so that a bad moment is never a wall.
+  const skipQuestion = page.getByRole('button', { name: /^skip$/i })
+  if ((await skipQuestion.count()) === 0) {
+    problems.push('the question cannot be got past')
+  } else {
+    await skipQuestion.first().click()
+    await page.waitForTimeout(1500)
+    const after = await page.innerText('body')
+    if (/a quick one|something else/i.test(after)) problems.push('the question would not go away')
+    if (!/level 1/i.test(await hud())) problems.push('the maze did not come back after the question')
+  }
+}
 
 // --- Dangerous Dave: the board is the controller here too -----------------
 // Reachable without having to lose a life first, which is how a grown-up
 // setting the thing up will look for it.
-await page.goto(URL, { waitUntil: 'networkidle' })
-await page.waitForTimeout(1200)
-await page.locator('button[aria-label="Settings"]').click()
-await page.waitForTimeout(500)
-
-const daveButton = page.getByRole('button', { name: 'Dangerous Dave' })
-if ((await daveButton.count()) === 0) {
-  problems.push('no way in to Dangerous Dave from the settings')
-} else {
-  await daveButton.first().click()
-  await page.waitForTimeout(600)
-  await skipIntro()
+if (await enter('Dangerous Dave')) {
   await page.waitForTimeout(1200)
 
   // textContent, not innerText: Dave's score bar is drawn into the picture and
@@ -230,18 +273,7 @@ if ((await daveButton.count()) === 0) {
 }
 
 // --- the dungeon: an hour on the clock, and it never goes back -------------
-await page.goto(URL, { waitUntil: 'networkidle' })
-await page.waitForTimeout(1200)
-await page.locator('button[aria-label="Settings"]').click()
-await page.waitForTimeout(500)
-
-const dungeonButton = page.getByRole('button', { name: 'The Dungeon' })
-if ((await dungeonButton.count()) === 0) {
-  problems.push('no way in to the dungeon from the settings')
-} else {
-  await dungeonButton.first().click()
-  await page.waitForTimeout(600)
-  await skipIntro()
+if (await enter('The Dungeon')) {
   await page.waitForTimeout(1500)
 
   const dungeonHud = async () => (await page.textContent('header')).replace(/\s+/g, ' ').trim()
@@ -264,18 +296,7 @@ if ((await dungeonButton.count()) === 0) {
 }
 
 // --- the pipes: momentum, a jump, and the flag at the far end --------------
-await page.goto(URL, { waitUntil: 'networkidle' })
-await page.waitForTimeout(1200)
-await page.locator('button[aria-label="Settings"]').click()
-await page.waitForTimeout(500)
-
-const pipesButton = page.getByRole('button', { name: 'The Pipes' })
-if ((await pipesButton.count()) === 0) {
-  problems.push('no way in to the pipes from the settings')
-} else {
-  await pipesButton.first().click()
-  await page.waitForTimeout(600)
-  await skipIntro()
+if (await enter('The Pipes')) {
   await page.waitForTimeout(1400)
 
   const pipesHud = async () => (await page.textContent('header')).replace(/\s+/g, ' ').trim()
@@ -296,12 +317,14 @@ if ((await pipesButton.count()) === 0) {
 
 await browser.close()
 
-// No screen may grow a score for being right at maths.
-if (/\d+\s*%/.test(shopText)) problems.push('a percentage is being shown')
-if (/\b(accuracy)\b/i.test(shopText)) problems.push('scoring language is being shown')
+// No screen may grow a score for being right at maths. The question between
+// lives is the only place maths is ever put to him now, so it is the one that
+// has to be clean.
+if (/\d+\s*%/.test(questionText)) problems.push('a percentage is being shown')
+if (/\b(accuracy)\b/i.test(questionText)) problems.push('scoring language is being shown')
 
 if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: played the maze, bought from the shop, ran Dave through the hideout, went down into the dungeon, and ran the pipes')
+console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, went down into the dungeon, and ran the pipes')

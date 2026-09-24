@@ -10,7 +10,7 @@ import { useStore } from '../store'
  * looking in here finds his own name and a text box, which is not a catastrophe.
  */
 export function Settings() {
-  const { save, saveNames, saveNote, replaceSave, setRewards, setVoice, setMusic, openShop, go, watchIntro } = useStore()
+  const { save, saveNames, saveNote, replaceSave, setRewards, setVoice, setMusic, go, watchIntro, startCoop } = useStore()
   const profile = getProfile()
 
   const [kidName, setKidName] = useState(save.names.kidName ?? '')
@@ -46,7 +46,7 @@ export function Settings() {
     <Screen>
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-extrabold tracking-tight">Settings</h1>
-        <button type="button" onClick={() => go('arcade')} className="text-sm text-dim">
+        <button type="button" onClick={() => go('home')} className="text-sm text-dim">
           Done
         </button>
       </header>
@@ -128,11 +128,10 @@ export function Settings() {
         <h2 className="font-bold">Voice</h2>
         <p className="text-sm leading-relaxed text-dim">
           The computer voice reads every line, including ones written later, and each
-          character gets its own pitch. Your recordings only cover the thirty-seven lines
-          you read.
+          character gets its own pitch.
         </p>
-        <div className="grid grid-cols-3 gap-2">
-          {([['computer', 'Computer'], ['papa', 'Your recordings'], ['off', 'Silent']] as const).map(
+        <div className="grid grid-cols-2 gap-2">
+          {([['computer', 'Computer'], ['off', 'Silent']] as const).map(
             ([value, label]) => (
               <Btn
                 key={value}
@@ -154,11 +153,12 @@ export function Settings() {
           maths lives.
         </p>
         <div className="grid grid-cols-2 gap-2">
-          <Btn onClick={() => go('arcade')} className="px-3 py-3 text-sm">Papa Panic</Btn>
+          <Btn onClick={() => go('home')} className="px-3 py-3 text-sm">Papa Panic</Btn>
           <Btn onClick={() => go('dave')} className="px-3 py-3 text-sm">Dangerous Dave</Btn>
           <Btn onClick={() => go('prince')} className="px-3 py-3 text-sm">The Dungeon</Btn>
           <Btn onClick={() => go('pipes')} className="px-3 py-3 text-sm">The Pipes</Btn>
         </div>
+        <Btn onClick={startCoop} className="px-3 py-3 text-sm">Two-player puzzle</Btn>
         <p className="mt-3 text-sm text-dim">Watch an intro again</p>
         <div className="grid grid-cols-4 gap-2">
           {STORY_ORDER.map((id) => (
@@ -167,7 +167,6 @@ export function Settings() {
             </Btn>
           ))}
         </div>
-        <Btn onClick={openShop} className="px-3 py-3 text-sm">Open the maths shop</Btn>
       </Panel>
 
       <Panel className="flex flex-col gap-3">
@@ -192,20 +191,10 @@ export function Settings() {
       </Panel>
 
       <Panel className="flex flex-col gap-3">
-        <h2 className="font-bold">Your voice</h2>
-        <p className="text-sm leading-relaxed text-dim">
-          Record the lines {profile.papaName} says. They stay on this device and are never
-          uploaded. Needs a microphone, so this only works over HTTPS or on localhost.
-        </p>
-        <Btn onClick={() => go('studio')}>Record your voice</Btn>
-      </Panel>
-
-      <Panel className="flex flex-col gap-3">
         <h2 className="font-bold">Backup</h2>
         <p className="text-sm leading-relaxed text-dim">
           Progress lives in this browser&rsquo;s storage and nowhere else. iOS can clear that for
-          apps it thinks are unused, so take a copy occasionally. Voice recordings are not in this
-          file &mdash; download those separately from the booth.
+          apps it thinks are unused, so take a copy occasionally.
         </p>
         <Btn onClick={download}>Save a backup file</Btn>
         <Btn onClick={() => fileRef.current?.click()}>Restore from a backup</Btn>

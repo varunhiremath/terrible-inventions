@@ -1,18 +1,17 @@
 import { create } from 'zustand'
-import { GENERATORS } from './content'
 import { coopGeneratorFor, type CoopProblem } from './content/coop'
 import { updateRating } from './engine/elo'
 import { randomSeed } from './engine/rng'
+import { RECENT } from './quiz/interlude'
 import { emptySave, loadSave, persistSave, type SaveState } from './engine/storage'
 import { setProfileOverride } from './config/profile'
 import { loadVoice } from './audio'
 import { setVoiceMode, type VoiceMode } from './voice'
 import { setMusicEnabled } from './music/player'
 import { emptyPowerUps, type PowerUps } from './arcade/maze/game'
-import { CONTINUE_DELTA, SHOP, ratingFor, type ShopItem } from './arcade/shop'
 import type { Attempt, Problem } from './engine/types'
 
-export type Screen = 'arcade' | 'dave' | 'prince' | 'pipes' | 'shop' | 'coop' | 'note' | 'settings' | 'studio'
+export type Screen = 'home' | 'arcade' | 'dave' | 'prince' | 'pipes' | 'coop' | 'note' | 'settings'
 
 /** How far above his solo level a two-player puzzle is pitched. */
 export const COOP_BONUS = 200
@@ -25,14 +24,6 @@ const INTRO_FOR: Partial<Record<Screen, string>> = {
   pipes: 'pipes',
 }
 
-interface Shopping {
-  /** Null for the compulsory continue after a game over. */
-  item: ShopItem | null
-  problem: Problem
-  verdict: { correct: boolean; given: string } | null
-  hintsOpen: number
-  startedAt: number
-}
 
 interface State {
   ready: boolean
@@ -41,7 +32,11 @@ interface State {
 
   /** The run's configuration. The live game itself lives in the arcade screen. */
   run: { level: number; powerUps: PowerUps } | null
-  shopping: Shopping | null
+  /**
+   * The last few questions asked between lives, so none comes round quickly.
+   * Not saved: it only has to hold for a sitting.
+   */
+  recentQuestions: string[]
   coop: CoopProblem | null
   coopShowing: 'a' | 'b' | null
   coopSolved: boolean | null
@@ -59,12 +54,8 @@ interface State {
   advanceLevel: (score: number) => void
   finishRun: (score: number) => void
 
-  openShop: () => void
-  attempt: (itemId: string) => void
-  attemptContinue: () => void
-  answerShop: (given: string, correct: boolean) => void
-  openShopHint: () => void
-  closeShopping: () => void
+  /** Records an answer from the moment between lives. */
+  answerInterlude: (problem: Problem | null, correct: boolean, id: string) => void
 
   startCoop: () => void
   showHand: (who: 'a' | 'b' | null) => void
@@ -79,18 +70,9 @@ interface State {
   replaceSave: (save: SaveState) => void
 }
 
-/** A problem at a chosen difficulty, from whichever generator can reach it. */
-function problemAt(rating: number): Problem {
-  const able = GENERATORS.filter((g) => rating >= g.minRating && rating <= g.maxRating)
-  const pool = able.length > 0 ? able : GENERATORS
-  const generator = pool[Math.floor(Math.random() * pool.length)]
-  const clamped = Math.min(generator.maxRating, Math.max(generator.minRating, rating))
-  return generator.generate(Math.round(clamped), randomSeed())
-}
-
 export const useStore = create<State>((set, get) => ({
   ready: false,
-  screen: 'arcade',
+  screen: 'home',
   save: emptySave(),
   run: null,
   shopping: null,
@@ -160,80 +142,43 @@ export const useStore = create<State>((set, get) => ({
     void persistSave(next)
   },
 
-  openShop: () => set({ screen: 'shop', shopping: null }),
+  recentQuestions: [],
 
-  attempt: (itemId) => {
-    const item = SHOP.find((i) => i.id === itemId)
-    if (!item) return
-    set({
-      shopping: {
-        item,
-        problem: problemAt(ratingFor(item, get().save.rating)),
-        verdict: null,
-        hintsOpen: 0,
-        startedAt: Date.now(),
-      },
-    })
-  },
+  /**
+   * An answer from between lives.
+   *
+   * Maths moves the rating and goes in the log, because that is what the
+   * rating is for. History does not: knowing when the Berlin Wall came down
+   * says nothing about what sums somebody can do, and letting it move a number
+   * that decides how hard the sums are would quietly wreck both.
+   */
+  answerInterlude: (problem, correct, id) => {
+    const { save, recentQuestions } = get()
+    set({ recentQuestions: [id, ...recentQuestions].slice(0, RECENT) })
+    if (!problem) return
 
-  attemptContinue: () =>
-    set({
-      screen: 'shop',
-      shopping: {
-        item: null,
-        problem: problemAt(get().save.rating + CONTINUE_DELTA),
-        verdict: null,
-        hintsOpen: 0,
-        startedAt: Date.now(),
-      },
-    }),
-
-  openShopHint: () => {
-    const { shopping } = get()
-    if (!shopping) return
-    set({ shopping: { ...shopping, hintsOpen: Math.min(shopping.hintsOpen + 1, shopping.problem.hints.length) } })
-  },
-
-  answerShop: (given, correct) => {
-    const { shopping, save } = get()
-    if (!shopping || shopping.verdict) return
-
-    const ratingAfter = updateRating(save.rating, shopping.problem.rating, correct, save.attempts)
+    const ratingAfter = updateRating(save.rating, problem.rating, correct, save.attempts)
     const attempt: Attempt = {
-      problemId: shopping.problem.id,
-      kind: shopping.problem.kind,
-      problemRating: shopping.problem.rating,
+      problemId: problem.id,
+      kind: problem.kind,
+      problemRating: problem.rating,
       ratingBefore: save.rating,
       ratingAfter,
       correct,
-      hintsUsed: shopping.hintsOpen,
-      elapsedMs: Date.now() - shopping.startedAt,
+      hintsUsed: 0,
+      elapsedMs: 0,
       stretch: false,
       at: Date.now(),
     }
-
-    // A wrong answer costs nothing but the prize. There is no penalty for
-    // trying something above your level, which is the point of offering it.
-    const powerUps = !correct
-      ? save.arcade.powerUps
-      : shopping.item
-        ? shopping.item.apply(save.arcade.powerUps)
-        : // The coin slot: no item, just another go.
-          { ...save.arcade.powerUps, spareLives: save.arcade.powerUps.spareLives + 1 }
-
     const next: SaveState = {
       ...save,
       rating: ratingAfter,
       attempts: save.attempts + 1,
       log: [...save.log, attempt],
-      arcade: { ...save.arcade, powerUps },
     }
-
-    set({ save: next, shopping: { ...shopping, verdict: { correct, given } } })
+    set({ save: next })
     void persistSave(next)
   },
-
-  closeShopping: () => set({ shopping: null }),
 
   startCoop: () => {
     const gen = coopGeneratorFor('split-clues')

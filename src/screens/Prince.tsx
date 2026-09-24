@@ -36,6 +36,7 @@ import { fill } from '../config/profile'
 import { Btn } from '../ui/bits'
 import { say, silence } from '../voice'
 import { useStore } from '../store'
+import { Interlude } from './Interlude'
 
 /**
  * The dungeon.
@@ -51,7 +52,6 @@ const MAX_CATCHUP = 0.4
 
 export function Prince() {
   const go = useStore((s) => s.go)
-  const openShop = useStore((s) => s.openShop)
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -384,7 +384,11 @@ export function Prince() {
     setHud({ level: 1, health: 3, maxHealth: 3, minutes: 60, status: 'playing', message: null })
   }
 
-  const overlay = hud.status !== 'playing'
+  // Losing a life asks you something and puts you straight back in, on the
+  // same clock — the hour does not stop for a question any more than it stops
+  // for anything else.
+  const asking = hud.status === 'dead'
+  const overlay = hud.status !== 'playing' && !asking
 
   return (
     <div
@@ -404,13 +408,15 @@ export function Prince() {
 
       <button
         type="button"
-        onClick={() => go('arcade')}
+        onClick={() => go('home')}
         onPointerDown={(e) => e.stopPropagation()}
         onPointerUp={(e) => e.stopPropagation()}
         className="absolute bottom-1 right-2 z-20 px-2 font-mono text-[0.7rem] uppercase tracking-widest text-dim/40"
       >
         back
       </button>
+
+      {asking && <Interlude onDone={restartLevel} />}
 
       {overlay && (
         <div
@@ -432,19 +438,13 @@ export function Prince() {
             </p>
 
             <div className="mt-5 flex flex-col gap-2">
-              {hud.status === 'dead' && (
-                <Btn tone="go" onClick={restartLevel} className="py-4 text-lg">
-                  Again ({hud.minutes} min left)
-                </Btn>
-              )}
               {hud.status === 'levelDone' && (
                 <Btn tone="go" onClick={nextLevel} className="py-4 text-lg">Down to level {hud.level + 1}</Btn>
               )}
               {(hud.status === 'outOfTime' || hud.status === 'won') && (
                 <Btn tone="go" onClick={startOver} className="py-4 text-lg">Start again</Btn>
               )}
-              <Btn onClick={openShop}>Shop</Btn>
-              <Btn onClick={() => go('arcade')}>Back to the maze</Btn>
+              <Btn onClick={() => go('home')}>Back to the menu</Btn>
             </div>
           </div>
         </div>

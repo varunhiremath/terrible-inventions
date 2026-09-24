@@ -22,6 +22,7 @@ import { fill } from '../config/profile'
 import { Btn } from '../ui/bits'
 import { say, silence } from '../voice'
 import { useStore } from '../store'
+import { Interlude } from './Interlude'
 
 /**
  * Dangerous Dave.
@@ -35,7 +36,6 @@ const MAX_CATCHUP = 0.25
 
 export function Dave() {
   const go = useStore((s) => s.go)
-  const openShop = useStore((s) => s.openShop)
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -305,8 +305,11 @@ export function Dave() {
     setHud((h) => ({ ...h, status: 'playing', level: number, message: null }))
   }
 
-  const overlay = hud.status !== 'playing'
   const lastLevel = hud.level >= 10
+  // Losing a life asks you something and puts you straight back in. A panel
+  // saying "you died, press again" in front of it is a tap of nothing.
+  const asking = hud.status === 'died'
+  const overlay = hud.status !== 'playing' && !asking
 
   return (
     <div
@@ -339,13 +342,15 @@ export function Dave() {
 
       <button
         type="button"
-        onClick={() => go('arcade')}
+        onClick={() => go('home')}
         onPointerDown={(e) => e.stopPropagation()}
         onPointerUp={(e) => e.stopPropagation()}
         className="absolute bottom-1 right-2 z-20 px-2 font-mono text-[0.7rem] uppercase tracking-widest text-dim/50"
       >
         back
       </button>
+
+      {asking && <Interlude onDone={again} />}
 
       {overlay && (
         <div
@@ -367,14 +372,10 @@ export function Dave() {
             </p>
 
             <div className="mt-5 flex flex-col gap-2">
-              {hud.status === 'died' && (
-                <Btn tone="go" onClick={again} className="py-4 text-lg">Again</Btn>
-              )}
               {hud.status === 'levelComplete' && !lastLevel && (
                 <Btn tone="go" onClick={nextLevel} className="py-4 text-lg">Next room</Btn>
               )}
-              <Btn onClick={openShop}>Shop</Btn>
-              <Btn onClick={() => go('arcade')}>Back to the maze</Btn>
+              <Btn onClick={() => go('home')}>Back to the menu</Btn>
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { play, type Cue } from './audio'
+import { type Cue } from './audio'
 import { duckMusic, speakingSeconds } from './music/player'
 import { NARRATOR, PAPA, profileFor, speak, stopSpeaking, type VoiceProfile } from './speech'
 
@@ -11,13 +11,24 @@ import { NARRATOR, PAPA, profileFor, speak, stopSpeaking, type VoiceProfile } fr
  * somebody sat down and made them.
  */
 
-export type VoiceMode = 'computer' | 'papa' | 'off'
+export type VoiceMode = 'computer' | 'off'
+
+/**
+ * Anything saved from before, read forwards.
+ *
+ * There used to be a third mode that played recordings made in a booth inside
+ * the app. The booth is gone, so a device still set to it would have gone
+ * silent — which is a bug that looks exactly like the speech being broken.
+ */
+function known(mode: string): VoiceMode {
+  return mode === 'off' ? 'off' : 'computer'
+}
 
 let mode: VoiceMode = 'computer'
 
-export function setVoiceMode(next: VoiceMode): void {
-  mode = next
-  if (next !== 'computer') stopSpeaking()
+export function setVoiceMode(next: VoiceMode | string): void {
+  mode = known(next)
+  if (mode === 'off') stopSpeaking()
 }
 
 export function getVoiceMode(): VoiceMode {
@@ -39,20 +50,19 @@ export function say(
   // Under the bass, a joke is just noise.
   duckMusic(speakingSeconds(text))
 
-  if (mode === 'papa') {
-    if (options.cue) play(options.cue)
-    return
-  }
-
   const profile =
     options.as === 'papa' ? PAPA : options.seed === undefined ? NARRATOR : profileFor(options.seed)
   speak(text, profile)
 }
 
-/** Wordless punctuation — a right answer, a nudge. Never spoken aloud. */
-export function sting(cue: Cue): void {
-  if (mode === 'papa') play(cue)
-}
+/**
+ * Wordless punctuation — a right answer, a nudge.
+ *
+ * Silent now that the recordings are gone. Kept as a call so the places that
+ * punctuate a moment still say where they do it, and so putting a sound back
+ * is one function rather than a hunt through four games.
+ */
+export function sting(_cue: Cue): void {}
 
 export function silence(): void {
   stopSpeaking()
