@@ -206,9 +206,13 @@ if (!died) {
   problems.push('never lost a life in the maze, so the question was never shown')
 } else {
   questionText = await page.innerText('body')
-  if (!/a quick one|something else/i.test(questionText)) {
+  if (!/\b(numbers|history|geography|anything)\b/i.test(questionText)) {
     problems.push('losing a life did not bring up a question')
   }
+  // A question with nothing to press is a dead end, whatever it says.
+  const choices = await page.getByRole('button').count()
+  if (choices < 4) problems.push(`the question offered only ${choices} buttons`)
+
   // Either shape of question can be got past without answering it. The skip is
   // there so that a bad moment is never a wall.
   const skipQuestion = page.getByRole('button', { name: /^skip$/i })
@@ -218,7 +222,7 @@ if (!died) {
     await skipQuestion.first().click()
     await page.waitForTimeout(1500)
     const after = await page.innerText('body')
-    if (/a quick one|something else/i.test(after)) problems.push('the question would not go away')
+    if (/\b(numbers|history|geography|anything)\b/i.test(after)) problems.push('the question would not go away')
     if (!/level 1/i.test(await hud())) problems.push('the maze did not come back after the question')
   }
 }

@@ -1,32 +1,44 @@
 import { useEffect, useMemo, useState } from 'react'
+import { FlagBox } from '../ui/FlagBox'
 import { ProblemView } from '../ui/ProblemView'
-import { Btn } from '../ui/bits'
 import { fill } from '../config/profile'
-import { idOf, pickQuestion } from '../quiz/interlude'
 import { musicPlaying, startMusic, stopMusic } from '../music/player'
+import { idOf, pickQuestion, topicOf } from '../quiz/interlude'
+import { FLAG_OF } from '../quiz/flags'
+import { TOPICS } from '../quiz/types'
 import { useStore } from '../store'
 
 /**
  * The moment between lives.
  *
- * One question, one answer, and back to the game. This replaced a shop where
- * maths bought power-ups: the shop had a shape to it — pick a prize, earn it,
- * spend it — and every part of that shape was a reason to be somewhere other
- * than the game.
+ * One question, one answer, and back to the game. It gets a card of its own
+ * rather than a panel of controls, because it is the only thing on the screen
+ * and it should look like it knows that. A colour and a word at the top say
+ * which kind of question is coming before the question is read, which is worth
+ * more than it sounds: knowing you are about to be asked about flags is half
+ * of being ready to answer about flags.
  *
- * A wrong answer costs nothing. Somebody who has just lost a life is not in
- * the mood to be fined, and the explanation runs either way because the point
- * is the idea rather than the mark.
+ * A wrong answer costs nothing. Somebody who has just lost a life is not in the
+ * mood to be fined, and the explanation runs either way because the point is
+ * the idea rather than the mark.
  */
 export function Interlude({ onDone }: { onDone: () => void }) {
   const save = useStore((s) => s.save)
   const recent = useStore((s) => s.recentQuestions)
+  const lastTopic = useStore((s) => s.lastTopic)
   const answered = useStore((s) => s.answerInterlude)
 
   // Chosen once, not on every render: a re-render is not a reroll, and a
   // question that changed under you as you thought about it would be cruel.
   const question = useMemo(
-    () => pickQuestion(save.rating, Math.random(), Math.floor(Math.random() * 1e9), recent),
+    () =>
+      pickQuestion(
+        save.rating,
+        Math.random(),
+        Math.floor(Math.random() * 1e9),
+        recent,
+        lastTopic,
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
@@ -47,45 +59,82 @@ export function Interlude({ onDone }: { onDone: () => void }) {
     }
   }, [])
 
+  const topic = TOPICS[topicOf(question)]
+
   const settle = (given: string, correct: boolean) => {
     if (verdict) return
     setVerdict({ correct, given })
-    answered(question.kind === 'maths' ? question.problem : null, correct, idOf(question))
+    answered(
+      question.kind === 'maths' ? question.problem : null,
+      correct,
+      idOf(question),
+      topicOf(question),
+    )
   }
 
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-ink/95 p-3">
-      <div className="block-panel max-h-full w-full max-w-lg overflow-y-auto p-4 sm:p-5">
-        <p className="font-mono text-xs uppercase tracking-widest text-dim">
-          {question.kind === 'maths' ? 'A quick one' : 'Something else'}
-        </p>
+    <div className="fade-in absolute inset-0 z-40 flex items-center justify-center bg-ink/90 p-3 backdrop-blur-sm">
+      <div className="rise-in block-panel max-h-full w-full max-w-xl overflow-y-auto p-5 sm:p-6">
+        {/* The topic, as a colour first and a word second. */}
+        <div className="flex items-center gap-2.5">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: topic.tint }} />
+          <span
+            className="font-mono text-xs font-bold uppercase tracking-[0.2em]"
+            style={{ color: topic.tint }}
+          >
+            {topic.label}
+          </span>
+        </div>
 
         {question.kind === 'maths' ? (
-          <div className="mt-2">
+          <div className="mt-4">
             <ProblemView problem={question.problem} locked={verdict !== null} onAnswer={settle} />
           </div>
         ) : (
           <>
-            <p className="mt-2 text-lg leading-snug sm:text-xl">{fill(question.item.prompt)}</p>
-            <div className="mt-4 flex flex-col gap-2">
-              {question.options.map((option) => {
+            {question.item.flag && (
+              <div className="mt-4 overflow-hidden rounded-xl border-2 border-ink-line shadow-block">
+                <div className="aspect-[3/2] w-full">
+                  <FlagBox name={question.item.flag} className="rounded-none" />
+                </div>
+              </div>
+            )}
+
+            <p className="mt-4 text-xl leading-snug text-chalk sm:text-2xl">
+              {fill(question.item.prompt)}
+            </p>
+
+            <div
+              className={`mt-5 grid gap-2.5 ${question.item.showFlags ? 'grid-cols-2' : 'grid-cols-1'}`}
+            >
+              {question.options.map((option, i) => {
                 const picked = verdict?.given === option
                 const right = option === question.answer
-                // Once it is answered, the right one is always shown as right,
-                // whether or not it was the one chosen.
-                const tone = !verdict ? 'pick' : right ? 'chosen' : picked ? 'plain' : 'plain'
+                // Once answered, the right one is always shown as right,
+                // whether or not it was the one chosen. Being told only that
+                // you were wrong teaches nothing at all.
+                const mark = !verdict ? '' : right ? 'mark-right' : picked ? 'mark-wrong' : 'opacity-40'
+
                 return (
-                  <Btn
+                  <button
                     key={option}
-                    tone={tone}
+                    type="button"
                     disabled={verdict !== null}
                     onClick={() => settle(option, right)}
-                    className={`px-3 py-3 text-left text-base ${
-                      verdict && picked && !right ? 'border-rust/70 opacity-70' : ''
-                    }`}
+                    // Staggered, so the options read as a list arriving rather
+                    // than a block appearing.
+                    style={{ animationDelay: `${60 + i * 45}ms` }}
+                    className={`rise-in block-btn flex items-center gap-3 px-4 py-3.5 text-left text-base
+                                transition-colors disabled:opacity-100 ${mark}`}
                   >
-                    {option}
-                  </Btn>
+                    {question.item.showFlags ? (
+                      <span className="h-14 w-full overflow-hidden rounded-lg border-2 border-ink-line sm:h-16">
+                        <FlagBox name={FLAG_OF[option]} className="rounded-none" />
+                      </span>
+                    ) : (
+                      <span className="leading-snug">{option}</span>
+                    )}
+                  </button>
                 )
               })}
             </div>
@@ -93,16 +142,24 @@ export function Interlude({ onDone }: { onDone: () => void }) {
         )}
 
         {verdict && (
-          <div className="mt-4 border-t border-dim/20 pt-3">
-            <p className={`font-mono text-xs uppercase tracking-widest ${verdict.correct ? 'text-sky' : 'text-rust'}`}>
+          <div className="fade-in mt-5 border-t-2 border-ink-line pt-4">
+            <p
+              className={`font-mono text-xs font-bold uppercase tracking-[0.2em] ${
+                verdict.correct ? 'text-moss' : 'text-rust'
+              }`}
+            >
               {verdict.correct ? 'Got it' : 'Not that one'}
             </p>
-            <p className="mt-1 text-sm leading-snug text-chalk">
+            <p className="mt-2 text-[0.95rem] leading-relaxed text-chalk/90">
               {fill(question.kind === 'maths' ? question.problem.explain : question.item.explain)}
             </p>
-            <Btn tone="go" onClick={onDone} className="mt-4 w-full py-4 text-lg">
+            <button
+              type="button"
+              onClick={onDone}
+              className="block-btn mt-5 w-full bg-bolt py-4 text-lg text-ink"
+            >
               Back to it
-            </Btn>
+            </button>
           </div>
         )}
 
@@ -110,7 +167,7 @@ export function Interlude({ onDone }: { onDone: () => void }) {
           <button
             type="button"
             onClick={onDone}
-            className="mt-4 w-full px-2 py-2 font-mono text-[0.7rem] uppercase tracking-widest text-dim/50"
+            className="mt-5 w-full px-2 py-2 font-mono text-[0.7rem] uppercase tracking-[0.2em] text-dim/50 transition-colors hover:text-dim"
           >
             skip
           </button>

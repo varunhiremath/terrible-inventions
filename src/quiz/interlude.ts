@@ -2,27 +2,27 @@
  * The question that pops up between lives.
  *
  * This replaced a shop where maths bought power-ups. The shop had a shape to
- * it — choose a prize, earn it, spend it — and all of that shape was reasons
- * to be somewhere other than the game. What was wanted was much smaller: you
- * lose a life, something asks you a question, you answer it, you carry on.
+ * it — choose a prize, earn it, spend it — and all of that shape was reasons to
+ * be somewhere other than the game. What was wanted was much smaller: you lose
+ * a life, something asks you a question, you answer it, you carry on.
  *
- * So there is no currency, no inventory and no menu. A right answer is worth
- * a small nod and a wrong one costs nothing, because a nine-year-old who has
- * just lost a life is not in the mood to be fined.
+ * So there is no currency, no inventory and no menu. A right answer is worth a
+ * small nod and a wrong one costs nothing, because a nine-year-old who has just
+ * lost a life is not in the mood to be fined.
  *
  * Kept pure and away from React so the choosing can be tested: which question
  * comes up, and whether it repeats, is the whole of what this does.
  */
 import { GENERATORS } from '../content'
 import type { Problem } from '../engine/types'
-import { historyAt, type HistoryQuestion } from './history'
+import { BY_TOPIC, askFrom, topicFor } from './bank'
+import type { Ask, Topic } from './types'
 
 export type Question =
   | { kind: 'maths'; problem: Problem }
-  | { kind: 'history'; item: HistoryQuestion; options: string[]; answer: string }
+  | { kind: 'ask'; item: Ask; options: string[]; answer: string }
 
-/** How many of the last questions are remembered, so nothing comes round fast. */
-export const RECENT = 8
+export { RECENT } from './bank'
 
 /** A maths problem at a difficulty, from whichever generator can reach it. */
 export function mathsAt(rating: number, roll: number, seed: number): Problem {
@@ -52,32 +52,46 @@ export function shuffle<T>(items: readonly T[], roll: number): T[] {
 }
 
 /**
+ * How often the question is a typed-in sum rather than one off the bank.
+ *
+ * The generated maths is the thing that actually moves his rating, so it has
+ * to come round often enough to mean something. But it is also the only kind
+ * that needs a number pad and real work, and a run of them at the moment a
+ * life is lost is a punishment. One in four.
+ */
+const GENERATED = 0.25
+
+/**
  * What to ask next.
  *
- * Maths and history roughly half and half. Not strictly alternating: a child
- * who knows the next one is always a sum starts working out the sum while the
- * last life is still running out.
+ * `lastTopic` keeps the same subject from coming round twice in a row. It is
+ * the topic of the previous question, not a preference: nobody chooses this.
  */
 export function pickQuestion(
   rating: number,
   roll: number,
   seed: number,
   recent: readonly string[] = [],
+  lastTopic?: Topic,
 ): Question {
-  const wantsHistory = roll < 0.5
-  if (wantsHistory) {
-    const item = historyAt(rating, (roll * 7.3) % 1, recent)
-    return {
-      kind: 'history',
-      item,
-      options: shuffle(item.options, (roll * 3.7) % 1),
-      answer: item.options[0],
-    }
+  if (roll < GENERATED) return { kind: 'maths', problem: mathsAt(rating, (roll * 5.1) % 1, seed) }
+
+  const topic = topicFor((roll * 11.7) % 1, lastTopic)
+  const item = askFrom(BY_TOPIC[topic], rating, (roll * 7.3) % 1, recent)
+  return {
+    kind: 'ask',
+    item,
+    options: shuffle(item.options, (roll * 3.7) % 1),
+    answer: item.options[0],
   }
-  return { kind: 'maths', problem: mathsAt(rating, (roll * 5.1) % 1, seed) }
 }
 
 /** What to remember a question by, so it is not asked again straight away. */
 export function idOf(question: Question): string {
-  return question.kind === 'history' ? question.item.id : question.problem.kind
+  return question.kind === 'ask' ? question.item.id : question.problem.kind
+}
+
+/** Which topic a question belongs to, for keeping two of a kind apart. */
+export function topicOf(question: Question): Topic {
+  return question.kind === 'ask' ? question.item.topic : 'maths'
 }

@@ -3,6 +3,7 @@ import { coopGeneratorFor, type CoopProblem } from './content/coop'
 import { updateRating } from './engine/elo'
 import { randomSeed } from './engine/rng'
 import { RECENT } from './quiz/interlude'
+import type { Topic } from './quiz/types'
 import { emptySave, loadSave, persistSave, type SaveState } from './engine/storage'
 import { setProfileOverride } from './config/profile'
 import { loadVoice } from './audio'
@@ -37,6 +38,8 @@ interface State {
    * Not saved: it only has to hold for a sitting.
    */
   recentQuestions: string[]
+  /** So the next question is not the same subject again. */
+  lastTopic?: Topic
   coop: CoopProblem | null
   coopShowing: 'a' | 'b' | null
   coopSolved: boolean | null
@@ -55,7 +58,12 @@ interface State {
   finishRun: (score: number) => void
 
   /** Records an answer from the moment between lives. */
-  answerInterlude: (problem: Problem | null, correct: boolean, id: string) => void
+  answerInterlude: (
+    problem: Problem | null,
+    correct: boolean,
+    id: string,
+    topic: Topic,
+  ) => void
 
   startCoop: () => void
   showHand: (who: 'a' | 'b' | null) => void
@@ -143,18 +151,19 @@ export const useStore = create<State>((set, get) => ({
   },
 
   recentQuestions: [],
+  lastTopic: undefined,
 
   /**
    * An answer from between lives.
    *
    * Maths moves the rating and goes in the log, because that is what the
-   * rating is for. History does not: knowing when the Berlin Wall came down
+   * rating is for. The bank questions do not: knowing which flag is Portugal's
    * says nothing about what sums somebody can do, and letting it move a number
    * that decides how hard the sums are would quietly wreck both.
    */
-  answerInterlude: (problem, correct, id) => {
+  answerInterlude: (problem, correct, id, topic) => {
     const { save, recentQuestions } = get()
-    set({ recentQuestions: [id, ...recentQuestions].slice(0, RECENT) })
+    set({ recentQuestions: [id, ...recentQuestions].slice(0, RECENT), lastTopic: topic })
     if (!problem) return
 
     const ratingAfter = updateRating(save.rating, problem.rating, correct, save.attempts)

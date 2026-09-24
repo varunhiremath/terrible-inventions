@@ -38,4 +38,64 @@
            shadow-block transition-transform active:translate-y-[3px] active:shadow-none
            disabled:opacity-40 disabled:active:translate-y-0 disabled:active:shadow-block;
   }
+
+  /*
+   * The question card.
+   *
+   * Everything here is motion the eye reads as one thing arriving rather than
+   * several things appearing, which is the whole difference between a screen
+   * that feels built and one that feels assembled. The options come in one
+   * after another a few hundredths of a second apart: too slow to sit through,
+   * too quick to notice, and enough to make them read as a list.
+   */
+  .rise-in {
+    animation: rise-in 0.34s cubic-bezier(0.16, 0.84, 0.44, 1) both;
+  }
+
+  .fade-in {
+    animation: fade-in 0.4s ease both;
+  }
+
+  /* A right answer, and the same answer shown as right after a wrong guess. */
+  .mark-right {
+    @apply border-moss bg-moss/15 text-chalk;
+    animation: pop 0.32s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+  }
+
+  .mark-wrong {
+    @apply border-rust/70 bg-rust/10 text-dim;
+    animation: shake 0.3s ease both;
+  }
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes pop {
+  0%   { transform: scale(1); }
+  55%  { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-5px); }
+  75%      { transform: translateX(5px); }
+}
+
+/*
+ * Anyone who has asked their device to stop animating things means it. The
+ * card still arrives, it just arrives already there.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .rise-in, .fade-in, .mark-right, .mark-wrong {
+    animation: none;
+  }
 }
