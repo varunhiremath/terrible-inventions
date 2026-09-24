@@ -124,8 +124,23 @@ describe('the tracks', () => {
     })
   }
 
-  it('makes the shop calmer than the chase', () => {
-    expect(TRACKS.shop.beatsPerMinute).toBeLessThan(TRACKS.chase.beatsPerMinute)
-    expect(TRACKS.shop.drums).toBeUndefined()
+  it('makes the thinking music calmer than the chase', () => {
+    expect(TRACKS.thinking.beatsPerMinute).toBeLessThan(TRACKS.chase.beatsPerMinute)
+    expect(TRACKS.thinking.drums).toBeUndefined()
+  })
+
+  it('gives each game a tune of its own', () => {
+    // Dave spent a while borrowing the maze's music, and two quite different
+    // games sounded like one game with two skins.
+    const tunes = Object.values(TRACKS).map((t) => t.parts[0].pattern)
+    expect(new Set(tunes).size).toBe(tunes.length)
+  })
+
+  it('leaves the caves quieter and slower than the pipes', () => {
+    // One game is about going somewhere, the other about not falling in a
+    // hole, and they should not feel like the same errand.
+    expect(TRACKS.cavern.beatsPerMinute).toBeLessThan(TRACKS.pipes.beatsPerMinute)
+    expect(TRACKS.cavern.drums).toBeUndefined()
+    expect(TRACKS.pipes.drums).toBeDefined()
   })
 })

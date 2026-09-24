@@ -38,10 +38,10 @@ export default function App() {
   }, [])
 
   /*
-   * Each screen gets its tune. The maze is the chase; the shop is the same
-   * four chords at half the speed, because a maths problem is on screen there
-   * and music that hurries you is the last thing that helps. Everywhere else
-   * is quiet.
+   * Each game gets a tune of its own. For a while Dave was borrowing the
+   * maze's, which made two quite different games feel like one game wearing
+   * two skins; the caves have their own now, slower and mostly space, and the
+   * pipes have the only cheerful thing in here. Everywhere else is quiet.
    */
   useEffect(() => {
     if (!save.music) {
@@ -54,7 +54,9 @@ export default function App() {
     // how the original worked and most of why those cues land at all. A loop
     // running underneath would take that away, and for a while one was: the
     // chase tune from the maze was playing over the whole thing.
-    if (screen === 'arcade' || screen === 'dave') startMusic('chase')
+    const tune =
+      screen === 'arcade' ? 'chase' : screen === 'dave' ? 'cavern' : screen === 'pipes' ? 'pipes' : null
+    if (tune) startMusic(tune)
     else stopMusic()
     // `save.music` is in here so switching it back on in settings starts the
     // tune again, rather than waiting for the next change of screen.

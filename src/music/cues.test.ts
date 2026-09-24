@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { CUES, eighthSeconds, loopLength, noteFrequency, readPart, type CueName } from './score'
+import {
+  CUES,
+  DUNGEON_CUES,
+  PIPE_CUES,
+  eighthSeconds,
+  loopLength,
+  noteFrequency,
+  readPart,
+  type CueName,
+} from './score'
 
 /**
  * The cues.
@@ -39,7 +48,7 @@ describe('the dungeon cues', () => {
   })
 
   it('stay inside the one scale, so they sound like each other', () => {
-    for (const name of NAMES) {
+    for (const name of Object.keys(DUNGEON_CUES) as CueName[]) {
       for (const part of CUES[name].parts) {
         for (const note of readPart(part.pattern)) {
           expect(SCALE, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
@@ -83,5 +92,56 @@ describe('the dungeon cues', () => {
     expect(pitchClass(noteFrequency('D4'))).toBe(2)
     expect(pitchClass(noteFrequency('Eb4'))).toBe(3)
     expect(pitchClass(noteFrequency('F#4'))).toBe(6)
+  })
+})
+
+/**
+ * The pipes' cues are held to their own key, C major, for the same reason the
+ * dungeon's are held to theirs: one stray note is the easiest way to make a
+ * whole set sound wrong while every cue in it still sounds fine alone.
+ */
+describe('the pipes cues', () => {
+  const MAJOR = [0, 2, 4, 5, 7, 9, 11]
+  const NAMES = Object.keys(PIPE_CUES) as CueName[]
+
+  it('stay in C major', () => {
+    for (const name of NAMES) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          expect(MAJOR, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain(pitchClass(note.frequency))
+        }
+      }
+    }
+  })
+
+  it('are short enough to keep up with the game', () => {
+    // These answer things that happen while he is running, so they have to be
+    // over before the next one is due. A coin can be followed by another coin
+    // a third of a second later.
+    for (const name of ['coin', 'hop', 'stomp'] as CueName[]) {
+      const cue = CUES[name]
+      expect(loopLength(cue) * eighthSeconds(cue), name).toBeLessThan(1)
+    }
+  })
+
+  it('sends the good news up and the bad news down', () => {
+    // The whole point of a cue is being understood without being listened to,
+    // and up-or-down is the only part of one anybody actually hears.
+    // The first part is the tune. Flattening every part together reads the
+    // bass's last note as the tune's, which is how this test first passed the
+    // cue that ends on a low root underneath a rising melody.
+    const ends = (name: CueName) => {
+      const notes = readPart(CUES[name].parts[0].pattern)
+      return [notes[0].frequency, notes[notes.length - 1].frequency]
+    }
+    for (const good of ['coin', 'hop', 'grow', 'flag'] as CueName[]) {
+      const [first, last] = ends(good)
+      expect(last, good).toBeGreaterThan(first)
+    }
+    for (const bad of ['stomp', 'fall'] as CueName[]) {
+      const [first, last] = ends(bad)
+      expect(last, bad).toBeLessThan(first)
+    }
   })
 })

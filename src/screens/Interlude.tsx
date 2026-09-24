@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ProblemView } from '../ui/ProblemView'
 import { Btn } from '../ui/bits'
 import { fill } from '../config/profile'
 import { idOf, pickQuestion } from '../quiz/interlude'
+import { musicPlaying, startMusic, stopMusic } from '../music/player'
 import { useStore } from '../store'
 
 /**
@@ -30,6 +31,21 @@ export function Interlude({ onDone }: { onDone: () => void }) {
     [],
   )
   const [verdict, setVerdict] = useState<{ correct: boolean; given: string } | null>(null)
+
+  /*
+   * The chase tune keeps running while a question is on screen otherwise, and
+   * being hurried is the last thing that helps anyone think. This is the same
+   * four chords at half the speed, and the game's own tune comes back the
+   * moment the question is done with.
+   */
+  useEffect(() => {
+    const was = musicPlaying()
+    startMusic('thinking')
+    return () => {
+      if (was) startMusic(was)
+      else stopMusic()
+    }
+  }, [])
 
   const settle = (given: string, correct: boolean) => {
     if (verdict) return

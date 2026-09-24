@@ -150,11 +150,13 @@ export const CHASE: Track = {
 }
 
 /*
- * The shop. Same four chords, half the speed and none of the panic — it plays
- * while a maths problem is on screen, so it has to sit still and be ignorable.
+ * The question between lives. Same four chords as the chase, half the speed
+ * and none of the panic — it plays while a question is on screen, so it has to
+ * sit still and be ignorable. Music that asks to be listened to while somebody
+ * is thinking is just noise.
  */
-export const SHOP: Track = {
-  name: 'The Shop',
+export const THINKING: Track = {
+  name: 'A Quick One',
   beatsPerMinute: 84,
   parts: [
     {
@@ -179,6 +181,120 @@ export const SHOP: Track = {
         'E2 .  .  .  B2 .  .  . ',
       ].join(' '),
     },
+  ],
+}
+
+
+/*
+ * The pipes.
+ *
+ * Bright where everything else in here is not. This is the one game of the
+ * four that is about going somewhere rather than surviving, so the tune walks:
+ * C, A minor, F, G, round twice, the second pass sitting higher and reaching
+ * further. The bass never stops moving, which is what gives a side-scroller
+ * its feeling of travel — stand still in this game and the music carries on
+ * without you.
+ */
+
+const PIPES_LEAD = [
+  'E5 G5 C6 .  G5 E5 G5 . ',
+  'A5 .  E5 .  C5 .  E5 . ',
+  'F5 A5 C6 .  A5 F5 A5 . ',
+  'G5 .  D5 .  B4 .  D5 . ',
+  'C6 .  B5 C6 E6 .  C6 . ',
+  'A5 .  G5 A5 C6 .  A5 . ',
+  'F5 G5 A5 C6 D6 .  C6 . ',
+  'G5 .  B5 .  D6 .  .  . ',
+].join(' ')
+
+const PIPES_BASS = [
+  'C3 .  C3 G3 E3 .  G3 . ',
+  'A2 .  A2 E3 C3 .  E3 . ',
+  'F2 .  F2 C3 A2 .  C3 . ',
+  'G2 .  G2 D3 B2 .  D3 . ',
+  'C3 .  C3 G3 E3 .  G3 . ',
+  'A2 .  A2 E3 C3 .  E3 . ',
+  'F2 .  F2 C3 A2 .  C3 . ',
+  'G2 .  D3 .  G2 G2 B2 . ',
+].join(' ')
+
+/** A quiet third voice, holding each chord under the other two. */
+const PIPES_PAD = [
+  'C4 .  .  .  E4 .  .  . ',
+  'A3 .  .  .  C4 .  .  . ',
+  'F3 .  .  .  A3 .  .  . ',
+  'B3 .  .  .  D4 .  .  . ',
+  'E4 .  .  .  G4 .  .  . ',
+  'C4 .  .  .  E4 .  .  . ',
+  'A3 .  .  .  C4 .  .  . ',
+  'B3 .  .  .  D4 .  .  . ',
+].join(' ')
+
+/** Off the beat as often as on it, which is what makes it bounce. */
+const PIPES_DRUMS = 'x - - x - - x - '.repeat(7) + 'x - x - x - x x'
+
+export const PIPES: Track = {
+  name: 'The Pipes',
+  beatsPerMinute: 148,
+  drums: PIPES_DRUMS,
+  parts: [
+    { wave: 'square', gain: 0.15, sustain: 0.8, pattern: PIPES_LEAD },
+    { wave: 'triangle', gain: 0.28, sustain: 0.55, pattern: PIPES_BASS },
+    { wave: 'sine', gain: 0.08, sustain: 0.95, pattern: PIPES_PAD },
+  ],
+}
+
+/*
+ * Dave's caves.
+ *
+ * Dave was borrowing the maze's music, which made two quite different games
+ * feel like one game with two skins. This is his own: D minor, slow, and
+ * mostly space. A cave is a place you are careful in, so the tune leaves room
+ * to be careful in — a low line walking down, and one high note a bar,
+ * dripping.
+ */
+
+const CAVERN_LEAD = [
+  'D4 .  F4 .  A4 .  F4 . ',
+  'C4 .  E4 .  G4 .  E4 . ',
+  'Bb3 . D4 .  F4 .  D4 . ',
+  'A3 .  C4 .  E4 .  .  . ',
+  'D5 .  .  C5 A4 .  F4 . ',
+  'G4 .  .  F4 D4 .  A3 . ',
+  'Bb3 . C4 .  D4 .  F4 . ',
+  'A3 .  .  .  .  .  .  . ',
+].join(' ')
+
+const CAVERN_BASS = [
+  'D3 .  .  .  A3 .  .  . ',
+  'C3 .  .  .  G3 .  .  . ',
+  'Bb2 . .  .  F3 .  .  . ',
+  'A2 .  .  .  E3 .  .  . ',
+  'D3 .  .  .  A3 .  .  . ',
+  'G2 .  .  .  D3 .  .  . ',
+  'Bb2 . .  .  F3 .  .  . ',
+  'A2 .  .  .  .  .  .  . ',
+].join(' ')
+
+/** The drip. One note a bar, always on the same eighth, always on its own. */
+const CAVERN_DRIP = [
+  '-  -  -  -  -  -  A5 - ',
+  '-  -  -  -  -  -  G5 - ',
+  '-  -  -  -  -  -  F5 - ',
+  '-  -  -  -  -  -  E5 - ',
+  '-  -  -  -  -  -  D5 - ',
+  '-  -  -  -  -  -  F5 - ',
+  '-  -  -  -  -  -  G5 - ',
+  '-  -  -  -  -  -  A5 - ',
+].join(' ')
+
+export const CAVERN: Track = {
+  name: "Dave's Caves",
+  beatsPerMinute: 104,
+  parts: [
+    { wave: 'triangle', gain: 0.16, sustain: 0.9, pattern: CAVERN_LEAD },
+    { wave: 'sine', gain: 0.2, sustain: 1, pattern: CAVERN_BASS },
+    { wave: 'square', gain: 0.06, sustain: 0.3, pattern: CAVERN_DRIP },
   ],
 }
 
@@ -279,10 +395,75 @@ export const TIMER: Track = {
   ],
 }
 
-export const TRACKS = { chase: CHASE, shop: SHOP } as const
+
+/*
+ * The pipes, in cues.
+ *
+ * The opposite approach to the dungeon: this game is noisy on purpose. You are
+ * meant to hear what you did the instant you do it, so every one of these is
+ * under a second and a half, and every one goes up except the two that are
+ * bad news. All built from plain C major, which is what keeps them sounding
+ * like they belong to the same bright little world as the tune.
+ */
+
+/** A coin. Two notes, the second higher, and gone. */
+export const COIN: Track = {
+  name: 'Coin',
+  beatsPerMinute: 200,
+  parts: [{ wave: 'square', gain: 0.12, sustain: 0.5, pattern: 'B5 E6 .  . ' }],
+}
+
+/** A jump. Short, because he does it constantly. */
+export const HOP: Track = {
+  name: 'Hop',
+  beatsPerMinute: 220,
+  parts: [{ wave: 'square', gain: 0.1, sustain: 0.4, pattern: 'C5 G5 -  - ' }],
+}
+
+/** Landing on something. Down, not up: this one happened to someone else. */
+export const STOMP: Track = {
+  name: 'Stomp',
+  beatsPerMinute: 190,
+  parts: [{ wave: 'triangle', gain: 0.18, sustain: 0.45, pattern: 'G4 .  C4 -  - ' }],
+}
+
+/** A mushroom. The one cue that climbs the whole way. */
+export const GROW: Track = {
+  name: 'Grow',
+  beatsPerMinute: 180,
+  parts: [{ wave: 'square', gain: 0.12, sustain: 0.6, pattern: 'C4 E4 G4 C5 E5 G5 C6 . ' }],
+}
+
+/** A life lost. Falls, and keeps falling. */
+export const FALL: Track = {
+  name: 'Fall',
+  beatsPerMinute: 100,
+  parts: [
+    { wave: 'triangle', gain: 0.16, sustain: 0.9, pattern: 'C5 .  A4 .  F4 .  D4 .  C4 .  .  . ' },
+    { wave: 'sine', gain: 0.1, sustain: 1, pattern: 'C3 .  .  .  .  .  G2 .  .  .  .  . ' },
+  ],
+}
+
+/** The flag. The only thing in the game worth a fanfare. */
+export const FLAG: Track = {
+  name: 'Flag',
+  beatsPerMinute: 140,
+  parts: [
+    { wave: 'square', gain: 0.14, sustain: 0.7, pattern: 'G4 C5 E5 G5 .  E5 G5 C6 .  .  .  . ' },
+    { wave: 'triangle', gain: 0.18, sustain: 0.8, pattern: 'C3 .  .  .  G3 .  .  C4 .  .  .  . ' },
+  ],
+}
+
+export const TRACKS = {
+  chase: CHASE,
+  thinking: THINKING,
+  pipes: PIPES,
+  cavern: CAVERN,
+} as const
 export type TrackName = keyof typeof TRACKS
 
-export const CUES = {
+/** The dungeon's own set, all in the one Persian scale. */
+export const DUNGEON_CUES = {
   dungeon: DUNGEON,
   danger: DANGER,
   blade: BLADE,
@@ -291,4 +472,18 @@ export const CUES = {
   victory: VICTORY,
   timer: TIMER,
 } as const
+
+/** The pipes' own set, all in plain C major. */
+export const PIPE_CUES = {
+  coin: COIN,
+  hop: HOP,
+  stomp: STOMP,
+  grow: GROW,
+  fall: FALL,
+  flag: FLAG,
+} as const
+
+// Two sets, because each one is held to its own scale and mixing them would
+// mean holding neither to anything.
+export const CUES = { ...DUNGEON_CUES, ...PIPE_CUES } as const
 export type CueName = keyof typeof CUES

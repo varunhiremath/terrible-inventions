@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { VIEW_ROWS } from '../pipes/level'
 import { NO_INPUT, type Input } from '../pipes/physics'
-import { FIXED, newRun, stepRun, type Run, type Status } from '../pipes/run'
+import { EVENTS, FIXED, newRun, stepRun, type PipeEvent, type Run, type Status } from '../pipes/run'
+import { playCue } from '../music/player'
+import type { CueName } from '../music/score'
 import { LEVELS, levelFor } from '../pipes/levels'
 import {
   createLatch, keyAt, padHeight, padLayout, type Button, type Key,
@@ -27,6 +29,44 @@ import { Interlude } from './Interlude'
  * the corner of a block.
  */
 const MAX_CATCHUP = 0.25
+
+
+/**
+ * What each thing that happens sounds like.
+ *
+ * The run has been putting these in a list since the day it was written and
+ * nothing has ever read it, so the game has been silent from the start. Two
+ * things map onto one noise in a couple of places — a shell kicked and a
+ * goomba flattened are the same small thud — because it is the kind of noise
+ * it is that tells you what happened, not which of two similar things it was.
+ */
+const NOISE: Record<PipeEvent, CueName> = {
+  coin: 'coin',
+  jump: 'hop',
+  stomp: 'stomp',
+  kick: 'stomp',
+  break: 'stomp',
+  knock: 'stomp',
+  grow: 'grow',
+  sprout: 'grow',
+  die: 'fall',
+  shrink: 'fall',
+  win: 'flag',
+}
+
+/**
+ * Loudest thing first.
+ *
+ * A step can easily produce three of these at once — land on a goomba, break
+ * the block above, take the coin out of it — and firing all three turns a good
+ * moment into a mess. One noise per step, and it is the one that matters most.
+ */
+const LOUDEST: PipeEvent[] = [
+  'win', 'die', 'shrink', 'grow', 'sprout', 'stomp', 'kick', 'break', 'knock', 'coin', 'jump',
+]
+// Every event has to be in there somewhere, or it can never be the loudest
+// thing in a step and simply never gets heard.
+if (LOUDEST.length !== EVENTS.length) throw new Error('an event with no place in the order')
 
 interface Hud {
   level: number
@@ -96,12 +136,29 @@ export function Pipes() {
         }
 
         let stepped = false
+        /*
+         * Gathered from every step, not read off the end of them.
+         *
+         * A frame can run several steps, and each step starts with an empty
+         * event list, so the state the frame finishes on only knows about the
+         * last one. Reading the noises off that drops most of them: jumping
+         * four times on the spot made no sound at all, because the step that
+         * held the jump was never the step the frame happened to end on.
+         */
+        const heard: PipeEvent[] = []
         const { next } = pacer.advance(run, elapsed, (s) => {
           stepped = true
-          return stepRun(s, input)
+          const after = stepRun(s, input)
+          if (after.events.length > 0) heard.push(...after.events)
+          return after
         })
         if (stepped) buttons.current.consumed()
         runRef.current = next
+
+        if (heard.length > 0) {
+          const loudest = LOUDEST.find((name) => heard.includes(name))
+          if (loudest) playCue(NOISE[loudest])
+        }
 
         if (
           next.number !== shown.level || next.lives !== shown.lives ||

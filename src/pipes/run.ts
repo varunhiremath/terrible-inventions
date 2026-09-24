@@ -79,8 +79,20 @@ export interface Run {
   mercy: number
   status: Status
   /** Something worth a noise happened this step. Read and cleared by the screen. */
-  events: string[]
+  events: PipeEvent[]
 }
+
+/**
+ * Everything that can happen loudly.
+ *
+ * Named rather than left as loose strings so that adding one and forgetting to
+ * give it a sound is a build error rather than a thing nobody notices. The
+ * screen holds a noise for each of these, and that map has to be complete.
+ */
+export const EVENTS = [
+  'coin', 'sprout', 'break', 'knock', 'jump', 'die', 'grow', 'stomp', 'kick', 'shrink', 'win',
+] as const
+export type PipeEvent = (typeof EVENTS)[number]
 
 const ENEMY_SPEED = 2.2
 const SHELL_SPEED = 11
