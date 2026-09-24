@@ -136,9 +136,10 @@ function command(prince: Prince, level: Level, input: Input): Prince {
       climbable(level, ahead, prince.row - 1) &&
       !prince.collapsed.includes(`${ahead},${prince.row - 1}`)
     if (headroom && ledge) return begin(prince, 'climbLedge')
-    // Nothing to climb, so he jumps, forwards, the way he is facing. A jump
-    // button has to jump.
-    return begin(prince, 'standJump')
+    // Nothing to climb, so he jumps on the spot. Holding a direction as well
+    // is what sends him forward, and that is the whole difference between the
+    // two: up is up, up and across is across.
+    return begin(prince, 'hop')
   }
 
   if (input.down) {

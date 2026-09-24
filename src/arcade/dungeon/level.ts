@@ -119,16 +119,30 @@ export function levelCols(level: Level): number {
   return Math.max(...level.rows.map((r) => r.length))
 }
 
+const clamp = (n: number, low: number, high: number) => Math.min(high, Math.max(low, n))
+
 /**
- * Which room a position is in, and where that room starts.
+ * Where the camera sits: the top-left corner of what is on screen.
  *
- * The camera snaps to these rather than following anybody. Half a room of
- * scrolling would show you the trap before you had to decide about it.
+ * It used to snap to fixed rooms, on the reasoning that scrolling shows you a
+ * trap before you have had to decide about it. That reasoning was about a
+ * screen the shape of the original's. Held sideways, a phone shows one room
+ * and nothing else, and walking to the right-hand edge of it meant walking at
+ * a wall of black with no way to know what was on the other side. There is no
+ * decision to spoil if you cannot see anything at all.
+ *
+ * So it follows him now, keeping him in the middle, and stops at the edges of
+ * the level rather than scrolling past them into nothing. `col` is deliberately
+ * fractional: the room slides under him rather than jumping a tile at a time.
  */
-export function roomAt(col: number, row: number): { col: number; row: number } {
+export function viewAt(level: Level, col: number, row: number): { col: number; row: number } {
+  const lastCol = Math.max(0, levelCols(level) - ROOM_COLS)
+  const lastRow = Math.max(0, level.rows.length - ROOM_ROWS)
   return {
-    col: Math.floor(col / ROOM_COLS) * ROOM_COLS,
-    row: Math.floor(row / ROOM_ROWS) * ROOM_ROWS,
+    col: clamp(col - (ROOM_COLS - 1) / 2, 0, lastCol),
+    // Floors are whole things and half a floor of scroll helps nobody, so the
+    // vertical stays in steps: his floor, one above it, one below.
+    row: clamp(Math.round(row) - 1, 0, lastRow),
   }
 }
 

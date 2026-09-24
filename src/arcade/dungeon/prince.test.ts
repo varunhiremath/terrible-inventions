@@ -363,18 +363,25 @@ describe('pressing up', () => {
     expect(after.col).toBeGreaterThan(start.col)
   })
 
-  it('goes somewhere, rather than hopping on the spot', () => {
-    /**
-     * The second thing that was wrong with this button. Under a ceiling with
-     * no direction held he used to hop straight up, which moves him nowhere at
-     * all — so pressing the button looked exactly like pressing nothing, and
-     * was reported as the jump not working for the second time. A jump button
-     * has to jump.
+  it('hops on the spot under a ceiling, and visibly so', () => {
+    /*
+     * This test used to assert the opposite, and the history is worth keeping.
+     *
+     * The first version hopped straight up with no arc drawn on it, which
+     * moved him nowhere and looked exactly like pressing nothing — reported as
+     * the jump not working, twice. The fix was to make a bare press jump
+     * forward, which fixed the appearance and broke the control: the one
+     * button meant for going up became the quickest way across, reported as
+     * "a mix of run and jump".
+     *
+     * Neither problem was the hop. The problem was a hop nobody could see. So
+     * it goes nowhere again, and the arc it is drawn on is what says so.
      */
     const level = twoFloors('########', 'XXXXXXXX')
     const start = newPrince(level)
     const after = until(start, level, press({ up: true }), 12)
-    expect(after.col - start.col).toBeGreaterThan(1)
+    expect(after.col).toBeCloseTo(start.col, 6)
+    expect(tick(start, level, press({ up: true })).action).toBe('hop')
   })
 
   it('still jumps forward when a direction is held', () => {
@@ -435,5 +442,55 @@ describe('falling out of the level', () => {
     prince = play(prince, bottomless, 200, press({ right: true }))
 
     expect(prince.row).toBeLessThanOrEqual(bottomless.rows.length)
+  })
+})
+
+describe('the jump button', () => {
+  /*
+   * "The jump button not only jumps but puts you ahead too, so it's a mix of
+   * run and jump." It fell through to a standing jump, which carries him two
+   * tiles, so the one control meant for going up was also the quickest way
+   * across and there was no way to jump on the spot at all.
+   */
+  const flat = strip('........')
+
+  it('jumps straight up when no direction is held', () => {
+    const before = newPrince(flat)
+    const after = until(before, flat, press({ up: true }), 40)
+    expect(after.col).toBeCloseTo(before.col, 6)
+  })
+
+  it('still goes somewhere when a direction is held with it', () => {
+    const before = newPrince(flat)
+    const after = until(before, flat, press({ up: true, right: true }), 40)
+    expect(after.col).toBeGreaterThan(before.col + 1)
+  })
+
+  it('leaves the ground, so it reads as a jump rather than a dead button', () => {
+    // The whole risk of a jump that goes nowhere: it looks like nothing
+    // happened. An earlier version of this was removed for exactly that.
+    const airborne: string[] = []
+    let prince = newPrince(flat)
+    for (let i = 0; i < 12; i++) {
+      prince = tick(prince, flat, press({ up: true }))
+      airborne.push(prince.action)
+    }
+    expect(airborne).toContain('hop')
+    expect(SEQUENCES.hop.airborne).toBe(true)
+  })
+
+  it('lands back where it started, on its feet', () => {
+    const before = newPrince(flat)
+    const after = play(newPrince(flat), flat, 40, press({ up: true }))
+    expect(after.row).toBe(before.row)
+    expect(after.dead).toBe(false)
+  })
+
+  it('takes him nowhere at all, frame by frame', () => {
+    for (const frame of SEQUENCES.hop.frames) expect(frame.dx).toBe(0)
+  })
+
+  it('is quicker than the jump that travels', () => {
+    expect(SEQUENCES.hop.frames.length).toBeLessThan(SEQUENCES.standJump.frames.length)
   })
 })

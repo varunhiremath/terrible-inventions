@@ -20,6 +20,7 @@ export type Action =
   | 'run'
   | 'stopRun'
   | 'step'
+  | 'hop'
   | 'standJump'
   | 'runJump'
   | 'fall'
@@ -112,6 +113,33 @@ export const SEQUENCES: Record<Action, Sequence> = {
     frames: [f(0.2, 0, 'step1'), f(0.25, 0, 'step2'), f(0.3, 0, 'step3'), f(0.25, 0, 'step4')],
     then: 'stand',
     interruptible: false,
+  },
+
+  /**
+   * Straight up, and down in the same place.
+   *
+   * The jump button used to fall through to `standJump` when there was nothing
+   * overhead to climb, on the reasoning that a jump button has to jump. It
+   * does — but `standJump` carries him two tiles forward, so the one button
+   * that was meant to go up was also the fastest way to go sideways, and there
+   * was no way to jump on the spot at all. Reported as: the jump button "not
+   * only jumps but puts you ahead too, so it's a mix of run and jump".
+   *
+   * Every frame moves him nowhere. What makes it read as a jump is the arc it
+   * is drawn on, not the ground it covers.
+   */
+  hop: {
+    frames: [
+      f(0, 0, 'crouch'),
+      f(0, 0, 'jump1'),
+      f(0, 0, 'jump3'),
+      f(0, 0, 'jump5'),
+      f(0, 0, 'jump6'),
+      f(0, 0, 'jump7'),
+    ],
+    then: 'stand',
+    interruptible: false,
+    airborne: true,
   },
 
   standJump: {

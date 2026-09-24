@@ -427,8 +427,17 @@ export function drawRoom(
   const stone = STONE[level.palette ?? 'dungeon']
   backWall(ctx, width, height, stone, view.size)
 
+  /*
+   * One extra column at each end.
+   *
+   * The camera follows the prince now, so `view.col` is fractional and the
+   * left-hand column is usually half off the edge. Drawing exactly ROOM_COLS
+   * of them leaves a sliver of bare background down one side that slides about
+   * as he walks. The clip rectangle takes care of the overhang.
+   */
+  const first = Math.floor(view.col)
   for (let row = view.row; row < view.row + ROOM_ROWS; row++) {
-    for (let col = view.col; col < view.col + ROOM_COLS; col++) {
+    for (let col = first; col <= first + ROOM_COLS; col++) {
       const tile = tileAt(level, col, row)
       const x = px(view, col)
       const y = py(view, row)
@@ -483,7 +492,7 @@ export function drawRoom(
   }
 
   for (const t of level.torches ?? []) {
-    if (t.col < view.col || t.col >= view.col + ROOM_COLS) continue
+    if (t.col < first || t.col > first + ROOM_COLS) continue
     if (t.row < view.row || t.row >= view.row + ROOM_ROWS) continue
     torch(ctx, px(view, t.col), py(view, t.row), view.size, view.clock, t.col * 3)
   }
@@ -627,6 +636,7 @@ export function poseFor(action: string, frame: number, stance: string): Pose {
       stride(pose, ((frame + 0.5) / 4) * Math.PI, 0.26)
       pose.lean = 0.05
       break
+    case 'hop':
     case 'standJump':
     case 'runJump': {
       const air = frame / 8
@@ -862,6 +872,9 @@ function liftOf(action: string, frame: number): number {
   const over = (frames: number, height: number) =>
     Math.sin((Math.min(frame, frames) / frames) * Math.PI) * height
   switch (action) {
+    case 'hop':
+      // Shorter and quicker than a jump that travels: it is one bob.
+      return over(6, 0.5)
     case 'standJump':
       return over(8, 0.62)
     case 'runJump':

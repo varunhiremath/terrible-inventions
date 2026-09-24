@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ROOM_COLS, ROOM_ROWS, roomAt } from '../arcade/dungeon/level'
+import { ROOM_COLS, ROOM_ROWS, viewAt } from '../arcade/dungeon/level'
 import { FPS } from '../arcade/dungeon/sequences'
 import { NO_INPUT, type Input } from '../arcade/dungeon/prince'
 import {
@@ -245,7 +245,7 @@ export function Prince() {
         ctx.fillStyle = INK.black
         ctx.fillRect(0, 0, w, h)
 
-        const room = roomAt(next.prince.col, next.prince.row)
+        const room = viewAt(next.level, next.prince.col, next.prince.row)
         const view: View = {
           col: room.col,
           row: room.row,
@@ -262,7 +262,7 @@ export function Prince() {
         drawRoom(ctx, next.level, view, boardW, boardH, gatesOpen(next), next.prince.collapsed)
         for (const guard of next.guards) {
           if (guard.row < room.row || guard.row >= room.row + ROOM_ROWS) continue
-          if (guard.col < room.col || guard.col >= room.col + ROOM_COLS) continue
+          if (guard.col < room.col - 1 || guard.col > room.col + ROOM_COLS) continue
           drawGuard(ctx, guard, view)
         }
         drawPrince(ctx, next.prince, view, duel)
