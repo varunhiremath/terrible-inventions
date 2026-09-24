@@ -1,4 +1,4 @@
-import { GHOST_STARTS, HEIGHT, WIDTH, isWall, wrapCell, type Cell } from './maze'
+import { isWall, wrapCell, type Board, type Cell } from './maze'
 
 /**
  * The four chasers.
@@ -46,44 +46,55 @@ export interface GhostSpec {
   start: Cell
 }
 
-export const GHOSTS: readonly GhostSpec[] = [
-  {
-    id: 'papa',
-    name: '{papa}',
-    seed: 90210,
-    colour: '#e8503a',
-    personality: 'direct',
-    corner: { x: WIDTH - 2, y: 1 },
-    start: GHOST_STARTS[0],
-  },
-  {
-    id: 'bolt',
-    name: 'Bolt',
-    seed: 10427,
-    colour: '#f49ac1',
-    personality: 'ambush',
-    corner: { x: 1, y: 1 },
-    start: GHOST_STARTS[1],
-  },
-  {
-    id: 'cog',
-    name: 'Cog',
-    seed: 55291,
-    colour: '#5ad2e0',
-    personality: 'flank',
-    corner: { x: WIDTH - 2, y: HEIGHT - 2 },
-    start: GHOST_STARTS[2],
-  },
-  {
-    id: 'rivet',
-    name: 'Rivet',
-    seed: 88123,
-    colour: '#f0a04b',
-    personality: 'shy',
-    corner: { x: 1, y: HEIGHT - 2 },
-    start: GHOST_STARTS[3],
-  },
-]
+/**
+ * The four of them, for a given board.
+ *
+ * Built per board rather than written down once: the corners they retreat to
+ * and the spots they start from are both positions on a particular maze, and
+ * there are three of those now. The names, colours and personalities are the
+ * same four characters wherever they are standing.
+ */
+export function ghostsFor(board: Board): readonly GhostSpec[] {
+  const { width, height, ghostStarts } = board
+  return [
+    {
+      id: 'papa',
+      name: '{papa}',
+      seed: 90210,
+      colour: '#e8503a',
+      personality: 'direct',
+      corner: { x: width - 2, y: 1 },
+      start: ghostStarts[0],
+    },
+    {
+      id: 'bolt',
+      name: 'Bolt',
+      seed: 10427,
+      colour: '#f49ac1',
+      personality: 'ambush',
+      corner: { x: 1, y: 1 },
+      start: ghostStarts[1],
+    },
+    {
+      id: 'cog',
+      name: 'Cog',
+      seed: 55291,
+      colour: '#5ad2e0',
+      personality: 'flank',
+      corner: { x: width - 2, y: height - 2 },
+      start: ghostStarts[2],
+    },
+    {
+      id: 'rivet',
+      name: 'Rivet',
+      seed: 88123,
+      colour: '#f0a04b',
+      personality: 'shy',
+      corner: { x: 1, y: height - 2 },
+      start: ghostStarts[3],
+    },
+  ]
+}
 
 /** Beyond this the shy one joins in; closer than this it loses its nerve. */
 export const SHY_DISTANCE = 8
@@ -150,8 +161,10 @@ export function targetForAt(
   return targetFor(spec, phase, player, playerDir, papaCell)
 }
 
-export function legalDirections(at: Cell, facing: Dir): Dir[] {
-  const open = DIRS.filter((dir) => !isWall(wrapCell({ x: at.x + STEP[dir].x, y: at.y + STEP[dir].y })))
+export function legalDirections(board: Board, at: Cell, facing: Dir): Dir[] {
+  const open = DIRS.filter(
+    (dir) => !isWall(board, wrapCell(board, { x: at.x + STEP[dir].x, y: at.y + STEP[dir].y })),
+  )
   const forward = open.filter((dir) => dir !== OPPOSITE[facing])
   // A dead end leaves turning back as the only option, so it has to be allowed.
   return forward.length > 0 ? forward : open
@@ -164,8 +177,8 @@ export function legalDirections(at: Cell, facing: Dir): Dir[] {
  * one off by doubling back, and it is the single rule that makes the chase
  * feel fair.
  */
-export function chooseDirection(at: Cell, facing: Dir, target: Cell): Dir {
-  const options = legalDirections(at, facing)
+export function chooseDirection(board: Board, at: Cell, facing: Dir, target: Cell): Dir {
+  const options = legalDirections(board, at, facing)
 
   let best = options[0]
   let bestDistance = Infinity
@@ -173,7 +186,7 @@ export function chooseDirection(at: Cell, facing: Dir, target: Cell): Dir {
   // DIRS order breaks ties, so identical situations always resolve identically.
   for (const dir of DIRS) {
     if (!options.includes(dir)) continue
-    const next = wrapCell({ x: at.x + STEP[dir].x, y: at.y + STEP[dir].y })
+    const next = wrapCell(board, { x: at.x + STEP[dir].x, y: at.y + STEP[dir].y })
     const d = distanceSquared(next, target)
     if (d < bestDistance) {
       bestDistance = d
@@ -185,8 +198,8 @@ export function chooseDirection(at: Cell, facing: Dir, target: Cell): Dir {
 }
 
 /** Frightened ghosts wander, which is what makes them catchable without being free. */
-export function randomDirection(at: Cell, facing: Dir, roll: number): Dir {
-  const options = legalDirections(at, facing)
+export function randomDirection(board: Board, at: Cell, facing: Dir, roll: number): Dir {
+  const options = legalDirections(board, at, facing)
   return options[Math.floor(roll * options.length) % options.length]
 }
 

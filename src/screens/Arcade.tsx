@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { HEIGHT, MAZE, TILE, WIDTH, edibleCells, key } from '../arcade/maze/maze'
-import { GHOSTS, type Dir } from '../arcade/maze/ghosts'
+import { TILE, boardFor, edibleCells, key } from '../arcade/maze/maze'
+import { ghostsFor, type Dir } from '../arcade/maze/ghosts'
 import {
   newGame,
   positionBetween,
@@ -125,6 +125,16 @@ function PlayerIcon() {
     say(fill(taunt('levelStart')), { as: 'papa' })
   }, [run])
 
+  /*
+   * Which maze this level uses.
+   *
+   * The scene below is built from it — the walls, the pellets, the camera fit —
+   * so it is a dependency of building the scene, not a detail inside it. The
+   * boards are different sizes, and for a while this effect ran once on mount
+   * and every later level was drawn on the first level's walls.
+   */
+  const board = boardFor(run?.level ?? 1)
+
   useEffect(() => {
     const mount = mountRef.current
     if (!mount) return
@@ -177,7 +187,7 @@ function PlayerIcon() {
     const WALL_THICKNESS = 0.16
 
     const plane = new THREE.PlaneGeometry(1, 1)
-    const bars = wallBars(MAZE, TILE.WALL, WALL_THICKNESS)
+    const bars = wallBars(board.rows, TILE.WALL, WALL_THICKNESS)
     const walls = new THREE.InstancedMesh(
       plane,
       new THREE.MeshBasicMaterial({ color: WALL_COLOUR }),
@@ -197,7 +207,7 @@ function PlayerIcon() {
     scene.add(walls)
 
     // --- dots and fruit -----------------------------------------------------
-    const { dots, power } = edibleCells()
+    const { dots, power } = edibleCells(board)
 
     const pellets = new THREE.InstancedMesh(
       plane,
@@ -238,7 +248,7 @@ function PlayerIcon() {
     player.group.position.y = ACTOR_HEIGHT
     scene.add(player.group)
 
-    const ghosts: { normal: Ghost; scared: Ghost }[] = GHOSTS.map((spec) => {
+    const ghosts: { normal: Ghost; scared: Ghost }[] = ghostsFor(board).map((spec) => {
       const normal = buildGhost(new THREE.Color(spec.colour).getHex())
       const scared = buildGhost(FRIGHTENED_COLOUR)
       normal.group.position.y = ACTOR_HEIGHT
@@ -264,8 +274,8 @@ function PlayerIcon() {
       // Exactly the maze, with no margin left or right: the tunnel mouths sit
       // on the very edge of the screen, so walking out of one side really is
       // walking off the edge of the phone.
-      const spanX = WIDTH
-      const spanY = HEIGHT
+      const spanX = board.width
+      const spanY = board.height
 
       const { frustum } = fitBoard(w, h, spanX, spanY, {
         top: height(hudRef.current),
@@ -280,7 +290,7 @@ function PlayerIcon() {
       camera.bottom = frustum.bottom
       camera.updateProjectionMatrix()
 
-      const centre = new THREE.Vector3(WIDTH / 2 - 0.5, 0, HEIGHT / 2 - 0.5)
+      const centre = new THREE.Vector3(board.width / 2 - 0.5, 0, board.height / 2 - 0.5)
       camera.position.set(centre.x, 60, centre.z)
       camera.lookAt(centre)
       // Looking straight down, "up" on screen has to be named explicitly or
@@ -370,7 +380,7 @@ function PlayerIcon() {
           one.group.position.y = 0.02
         })
 
-        const at = positionBetween(previous.player, next.player, alpha)
+        const at = positionBetween(board, previous.player, next.player, alpha)
         player.group.position.set(at.x, ACTOR_HEIGHT, at.y)
         player.group.rotation.set(0, facingAngle(next.player.dir), 0)
         // Four chomps a second, and only while there is something to chomp at.
@@ -387,7 +397,7 @@ function PlayerIcon() {
 
         next.ghosts.forEach((ghost, i) => {
           const body = ghosts[i]
-          const pos = positionBetween(previous.ghosts[i] ?? ghost, ghost, alpha)
+          const pos = positionBetween(board, previous.ghosts[i] ?? ghost, ghost, alpha)
           const hidden = ghost.eatenFor > 0
           const scared = ghost.frightened
 
@@ -422,7 +432,8 @@ function PlayerIcon() {
       renderer.dispose()
       mount.removeChild(renderer.domElement)
     }
-  }, [])
+    // Rebuilt when the board changes, which happens twice in a run.
+  }, [board])
 
   // The panels change size when the freeze button appears or an overlay takes
   // over, and the fit depends on how much room they take.

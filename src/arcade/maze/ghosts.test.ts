@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { HEIGHT, PLAYER_START, TUNNEL_ROW, WIDTH, isWall, reachableFrom, key, wrapCell } from './maze'
+import { FULL, isWall, reachableFrom, key, wrapCell } from './maze'
 import {
   DIRS,
-  GHOSTS,
+  ghostsFor,
   OPPOSITE,
   PHASE_SCHEDULE,
   SHY_DISTANCE,
@@ -18,10 +18,10 @@ import {
   type Dir,
 } from './ghosts'
 
-const papa = GHOSTS[0]
-const bolt = GHOSTS[1]
-const cog = GHOSTS[2]
-const rivet = GHOSTS[3]
+/** The tests below are about behaviour, so they run on the full board. */
+const board = FULL
+const GHOSTS = ghostsFor(board)
+const [papa, bolt, cog, rivet] = GHOSTS
 
 describe('the cast', () => {
   it('is four distinct chasers with four personalities', () => {
@@ -32,12 +32,12 @@ describe('the cast', () => {
   })
 
   it('sends each one to a different corner when scattering', () => {
-    const corners = GHOSTS.map((g) => targetFor(g, 'scatter', PLAYER_START, 'up', papa.start))
+    const corners = GHOSTS.map((g) => targetFor(g, 'scatter', board.playerStart, 'up', papa.start))
     expect(new Set(corners.map((c) => key(c))).size).toBe(4)
   })
 
   it('starts everyone on open floor', () => {
-    for (const ghost of GHOSTS) expect(isWall(ghost.start)).toBe(false)
+    for (const ghost of GHOSTS) expect(isWall(board, ghost.start)).toBe(false)
   })
 })
 
@@ -79,29 +79,29 @@ describe('targeting', () => {
 
 describe('steering', () => {
   it('never walks into a wall', () => {
-    for (let y = 0; y < HEIGHT; y++) {
-      for (let x = 0; x < WIDTH; x++) {
+    for (let y = 0; y < board.height; y++) {
+      for (let x = 0; x < board.width; x++) {
         const at = { x, y }
-        if (isWall(at)) continue
+        if (isWall(board, at)) continue
         for (const facing of DIRS) {
-          const dir = chooseDirection(at, facing, { x: 9, y: 13 })
-          expect(isWall(wrapCell({ x: x + STEP[dir].x, y: y + STEP[dir].y }))).toBe(false)
+          const dir = chooseDirection(board, at, facing, { x: 9, y: 13 })
+          expect(isWall(board, wrapCell(board, { x: x + STEP[dir].x, y: y + STEP[dir].y }))).toBe(false)
         }
       }
     }
   })
 
   it('never turns back on itself unless there is nowhere else to go', () => {
-    for (let y = 0; y < HEIGHT; y++) {
-      for (let x = 0; x < WIDTH; x++) {
+    for (let y = 0; y < board.height; y++) {
+      for (let x = 0; x < board.width; x++) {
         const at = { x, y }
-        if (isWall(at)) continue
+        if (isWall(board, at)) continue
         for (const facing of DIRS) {
           const exits = DIRS.filter(
-            (d) => !isWall(wrapCell({ x: x + STEP[d].x, y: y + STEP[d].y })),
+            (d) => !isWall(board, wrapCell(board, { x: x + STEP[d].x, y: y + STEP[d].y })),
           )
           const isDeadEnd = exits.filter((d) => d !== OPPOSITE[facing]).length === 0
-          const dir = chooseDirection(at, facing, { x: 1, y: 1 })
+          const dir = chooseDirection(board, at, facing, { x: 1, y: 1 })
           if (!isDeadEnd) expect(dir).not.toBe(OPPOSITE[facing])
         }
       }
@@ -109,32 +109,32 @@ describe('steering', () => {
   })
 
   it('always has somewhere to go', () => {
-    for (let y = 0; y < HEIGHT; y++) {
-      for (let x = 0; x < WIDTH; x++) {
-        if (isWall({ x, y })) continue
-        for (const facing of DIRS) expect(legalDirections({ x, y }, facing).length).toBeGreaterThan(0)
+    for (let y = 0; y < board.height; y++) {
+      for (let x = 0; x < board.width; x++) {
+        if (isWall(board, { x, y })) continue
+        for (const facing of DIRS) expect(legalDirections(board, { x, y }, facing).length).toBeGreaterThan(0)
       }
     }
   })
 
   it('moves closer to its target when it can', () => {
     // Out along the tunnel row, where the corridor runs clear both ways.
-    const at = { x: 5, y: TUNNEL_ROW }
-    expect(chooseDirection(at, 'left', { x: 1, y: TUNNEL_ROW })).toBe('left')
-    expect(chooseDirection(at, 'right', { x: WIDTH - 2, y: TUNNEL_ROW })).toBe('right')
+    const at = { x: 5, y: board.tunnelRow }
+    expect(chooseDirection(board, at, 'left', { x: 1, y: board.tunnelRow })).toBe('left')
+    expect(chooseDirection(board, at, 'right', { x: board.width - 2, y: board.tunnelRow })).toBe('right')
   })
 
   it('resolves ties the same way every time', () => {
-    const at = { x: 5, y: TUNNEL_ROW }
-    const first = chooseDirection(at, 'left', at)
-    for (let i = 0; i < 20; i++) expect(chooseDirection(at, 'left', at)).toBe(first)
+    const at = { x: 5, y: board.tunnelRow }
+    const first = chooseDirection(board, at, 'left', at)
+    for (let i = 0; i < 20; i++) expect(chooseDirection(board, at, 'left', at)).toBe(first)
   })
 
   it('wanders legally when frightened', () => {
     for (let roll = 0; roll < 1; roll += 0.05) {
       for (const facing of DIRS) {
-        const dir = randomDirection({ x: 5, y: TUNNEL_ROW }, facing, roll)
-        expect(isWall(wrapCell({ x: 5 + STEP[dir].x, y: TUNNEL_ROW + STEP[dir].y }))).toBe(false)
+        const dir = randomDirection(board, { x: 5, y: board.tunnelRow }, facing, roll)
+        expect(isWall(board, wrapCell(board, { x: 5 + STEP[dir].x, y: board.tunnelRow + STEP[dir].y }))).toBe(false)
       }
     }
   })
@@ -149,14 +149,14 @@ describe('steering', () => {
    * phases turn.
    */
   it('never steers out of the maze, however long it runs', () => {
-    const reachable = reachableFrom(PLAYER_START)
+    const reachable = reachableFrom(board, board.playerStart)
     for (const ghost of GHOSTS) {
       let at = { ...ghost.start }
       let facing: Dir = 'up'
 
       for (let tick = 0; tick < 500; tick++) {
-        facing = chooseDirection(at, facing, PLAYER_START)
-        at = wrapCell({ x: at.x + STEP[facing].x, y: at.y + STEP[facing].y })
+        facing = chooseDirection(board, at, facing, board.playerStart)
+        at = wrapCell(board, { x: at.x + STEP[facing].x, y: at.y + STEP[facing].y })
         expect(reachable.has(key(at))).toBe(true)
       }
     }

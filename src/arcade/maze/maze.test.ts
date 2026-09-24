@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
-  GHOST_RESPAWN,
-  GHOST_STARTS,
-  HEIGHT,
-  MAZE,
-  PLAYER_START,
+  BOARDS,
+  FULL,
+  MEDIUM,
+  SMALL,
   TILE,
-  TUNNEL_ROW,
-  WIDTH,
+  boardFor,
   edibleCells,
   isWall,
   key,
@@ -15,101 +13,151 @@ import {
   reachableFrom,
   tileAt,
   wrapCell,
+  type Board,
 } from './maze'
 
-describe('maze shape', () => {
+/**
+ * Every board gets the same examination.
+ *
+ * These checks used to run against the one maze there was. There are three
+ * now, and a smaller board is not a safer one — it is a new hand-drawn grid
+ * with new chances of a sealed corner, a dot nobody can reach or a chaser
+ * starting inside a wall. The flood fill is the only thing that actually knows.
+ */
+describe.each(BOARDS.map((board) => [board.name, board] as const))('the %s board', (_name, board: Board) => {
   it('is a consistent rectangle', () => {
-    expect(new Set(MAZE.map((r) => r.length)).size).toBe(1)
-    expect(WIDTH).toBe(27)
-    expect(HEIGHT).toBe(31)
-    // Taller than it is wide, like the arcade original and like a phone. An
-    // almost-square maze leaves a band of nothing above and below it.
-    expect(HEIGHT).toBeGreaterThan(WIDTH)
+    expect(new Set(board.rows.map((r) => r.length)).size).toBe(1)
+    // Taller than it is wide, like a phone held upright. An almost-square
+    // board leaves a band of nothing above and below it on every screen.
+    expect(board.height).toBeGreaterThan(board.width)
   })
 
   it('is left-right symmetric, which is what mirroring buys', () => {
-    for (let y = 0; y < HEIGHT; y++) {
-      for (let x = 0; x < WIDTH; x++) {
-        expect(MAZE[y][x]).toBe(MAZE[y][WIDTH - 1 - x])
-      }
-    }
+    for (const row of board.rows) expect([...row].reverse().join('')).toBe(row)
   })
 
   it('only uses tiles the game knows about', () => {
-    const known = new Set(Object.values(TILE))
-    for (const row of MAZE) for (const tile of row) expect(known.has(tile as never)).toBe(true)
+    const known: string[] = Object.values(TILE)
+    for (const row of board.rows) for (const tile of row) expect(known).toContain(tile)
   })
 
   it('is walled all the way round except at the tunnel', () => {
-    for (let x = 0; x < WIDTH; x++) {
-      expect(isWall({ x, y: 0 })).toBe(true)
-      expect(isWall({ x, y: HEIGHT - 1 })).toBe(true)
-    }
-    for (let y = 0; y < HEIGHT; y++) {
-      const open = y === TUNNEL_ROW
-      expect(isWall({ x: 0, y })).toBe(!open)
-      expect(isWall({ x: WIDTH - 1, y })).toBe(!open)
-    }
+    board.rows.forEach((row, y) => {
+      if (y === board.tunnelRow) return
+      expect(row[0], `row ${y} left`).toBe(TILE.WALL)
+      expect(row[row.length - 1], `row ${y} right`).toBe(TILE.WALL)
+    })
+    expect(board.rows[board.tunnelRow][0]).not.toBe(TILE.WALL)
   })
-})
 
-describe('tunnel', () => {
   it('wraps around the sides', () => {
-    expect(wrapCell({ x: -1, y: TUNNEL_ROW })).toEqual({ x: WIDTH - 1, y: TUNNEL_ROW })
-    expect(wrapCell({ x: WIDTH, y: TUNNEL_ROW })).toEqual({ x: 0, y: TUNNEL_ROW })
+    expect(wrapCell(board, { x: -1, y: board.tunnelRow })).toEqual({
+      x: board.width - 1,
+      y: board.tunnelRow,
+    })
+    expect(wrapCell(board, { x: board.width, y: board.tunnelRow })).toEqual({
+      x: 0,
+      y: board.tunnelRow,
+    })
   })
 
   it('joins the two edges into one corridor', () => {
-    const left = { x: 0, y: TUNNEL_ROW }
-    const right = { x: WIDTH - 1, y: TUNNEL_ROW }
-    expect(neighbours(left).some((n) => n.x === right.x && n.y === right.y)).toBe(true)
+    const left = { x: 0, y: board.tunnelRow }
+    const right = { x: board.width - 1, y: board.tunnelRow }
+    expect(isWall(board, left)).toBe(false)
+    expect(isWall(board, right)).toBe(false)
+    expect(neighbours(board, left).map(key)).toContain(key(right))
   })
 
   it('never wraps vertically', () => {
-    expect(tileAt({ x: 9, y: -1 })).toBe(TILE.WALL)
-    expect(tileAt({ x: 9, y: HEIGHT })).toBe(TILE.WALL)
+    expect(tileAt(board, { x: 1, y: -1 })).toBe(TILE.WALL)
+    expect(tileAt(board, { x: 1, y: board.height })).toBe(TILE.WALL)
   })
-})
-
-describe('playability', () => {
-  const reachable = reachableFrom(PLAYER_START)
 
   it('starts everyone somewhere they can stand', () => {
-    expect(isWall(PLAYER_START)).toBe(false)
-    expect(isWall(GHOST_RESPAWN)).toBe(false)
-    for (const ghost of GHOST_STARTS) expect(isWall(ghost)).toBe(false)
+    expect(isWall(board, board.playerStart), 'player').toBe(false)
+    expect(isWall(board, board.ghostRespawn), 'respawn').toBe(false)
+    board.ghostStarts.forEach((start, i) => {
+      expect(isWall(board, start), `chaser ${i}`).toBe(false)
+    })
   })
 
-  // The one that matters: an unreachable dot means a level that cannot be
-  // finished, and no amount of playtesting finds it reliably.
+  it('gives everyone four different places to start', () => {
+    expect(new Set(board.ghostStarts.map(key)).size).toBe(4)
+  })
+
   it('lets the player reach every single dot', () => {
-    const { dots, power } = edibleCells()
+    const open = reachableFrom(board, board.playerStart)
+    const { dots, power } = edibleCells(board)
     for (const cell of [...dots, ...power]) {
-      expect(reachable.has(key(cell))).toBe(true)
+      expect(open.has(key(cell)), `${key(cell)} is walled off`).toBe(true)
     }
   })
 
-  it('lets every ghost reach the player', () => {
-    for (const ghost of [...GHOST_STARTS, GHOST_RESPAWN]) {
-      expect(reachable.has(key(ghost))).toBe(true)
+  it('lets every chaser reach the player', () => {
+    for (const start of board.ghostStarts) {
+      expect(reachableFrom(board, start).has(key(board.playerStart)), key(start)).toBe(true)
     }
   })
 
   it('has no open tile walled off from the rest', () => {
-    let open = 0
-    for (let y = 0; y < HEIGHT; y++) {
-      for (let x = 0; x < WIDTH; x++) if (!isWall({ x, y })) open++
-    }
-    expect(reachable.size).toBe(open)
+    const open = reachableFrom(board, board.playerStart)
+    board.rows.forEach((row, y) =>
+      [...row].forEach((tile, x) => {
+        if (tile === TILE.WALL) return
+        expect(open.has(key({ x, y })), `${x},${y} is stranded`).toBe(true)
+      }),
+    )
   })
 
-  it('puts a power pellet in each corner region', () => {
-    const { power } = edibleCells()
-    expect(power).toHaveLength(4)
-    expect(new Set(power.map((p) => `${p.x < WIDTH / 2},${p.y < HEIGHT / 2}`)).size).toBe(4)
+  it('puts power pellets on both sides', () => {
+    const { power } = edibleCells(board)
+    expect(power.length).toBeGreaterThanOrEqual(2)
+    expect(power.some((p) => p.x < board.width / 2)).toBe(true)
+    expect(power.some((p) => p.x > board.width / 2)).toBe(true)
   })
 
   it('has enough dots to be a level', () => {
-    expect(edibleCells().dots.length).toBeGreaterThan(80)
+    expect(edibleCells(board).dots.length).toBeGreaterThan(40)
+  })
+
+  it('starts the player a long way from the chasers', () => {
+    // The first attempt at this put him four steps from the nearest one, which
+    // meant dying before the first dot.
+    for (const start of board.ghostStarts) {
+      const gap = Math.abs(start.y - board.playerStart.y) + Math.abs(start.x - board.playerStart.x)
+      expect(gap, key(start)).toBeGreaterThan(4)
+    }
+  })
+})
+
+describe('the boards in order', () => {
+  it('gets bigger, never smaller', () => {
+    expect(SMALL.width).toBeLessThan(MEDIUM.width)
+    expect(MEDIUM.width).toBeLessThan(FULL.width)
+    expect(SMALL.height).toBeLessThan(MEDIUM.height)
+    expect(MEDIUM.height).toBeLessThan(FULL.height)
+  })
+
+  it('opens on the smallest one', () => {
+    expect(boardFor(1)).toBe(SMALL)
+  })
+
+  it('gives each board more than one level before moving on', () => {
+    // A board seen once is a board glimpsed rather than learned.
+    for (const board of BOARDS) {
+      const levels = [1, 2, 3, 4, 5, 6].filter((n) => boardFor(n) === board)
+      expect(levels.length, board.name).toBeGreaterThan(1)
+    }
+  })
+
+  it('reaches the full maze and stays there', () => {
+    expect(boardFor(5)).toBe(FULL)
+    for (const level of [5, 9, 20, 99]) expect(boardFor(level), String(level)).toBe(FULL)
+  })
+
+  it('makes the first board a good deal smaller than the last', () => {
+    const area = (b: Board) => b.width * b.height
+    expect(area(SMALL)).toBeLessThan(area(FULL) * 0.45)
   })
 })

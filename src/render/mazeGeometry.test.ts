@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { MAZE, TILE, WIDTH } from '../arcade/maze/maze'
+import { FULL, TILE } from '../arcade/maze/maze'
+
+/** The outlining is about shape, so it is checked on the biggest board. */
+const MAZE = FULL.rows
 import { wallBars, type WallBar } from './mazeGeometry'
 
 const T = 0.16
@@ -95,7 +98,7 @@ describe('wall outlines', () => {
     for (const bar of bars) {
       const twin = bars.find(
         (b) =>
-          Math.abs(b.x - (WIDTH - 1 - bar.x)) < 1e-9 &&
+          Math.abs(b.x - (FULL.width - 1 - bar.x)) < 1e-9 &&
           Math.abs(b.z - bar.z) < 1e-9 &&
           Math.abs(b.width - bar.width) < 1e-9,
       )

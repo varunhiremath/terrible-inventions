@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { HEIGHT, PLAYER_START, TUNNEL_ROW, WIDTH, isWall, key, neighbours, wrapCell } from './maze'
+import { BOARDS, boardFor, isWall, key, neighbours, wrapCell } from './maze'
+
+/**
+ * The board a plain `newGame()` is played on.
+ *
+ * Not the full maze: the first levels are played on a smaller one now, and
+ * these tests walk the player into real walls at real coordinates, so they
+ * have to be asking about the same grid the game just built.
+ */
+const board = boardFor(1)
 import type { Dir } from './ghosts'
 import {
   FRIGHTENED_SECONDS,
@@ -53,7 +62,7 @@ describe('setup', () => {
     expect(dotsRemaining(game)).toBeGreaterThan(80)
     expect(game.ghosts).toHaveLength(4)
     expect(game.status).toBe('playing')
-    expect(isWall(game.player.cell)).toBe(false)
+    expect(isWall(board, game.player.cell)).toBe(false)
   })
 
   it('adds shop-bought lives on top', () => {
@@ -66,8 +75,8 @@ describe('moving', () => {
     let game = fresh()
     for (let i = 0; i < 600; i++) {
       game = step(game, 1 / 60, roll)
-      expect(isWall(game.player.cell)).toBe(false)
-      for (const ghost of game.ghosts) expect(isWall(ghost.cell)).toBe(false)
+      expect(isWall(board, game.player.cell)).toBe(false)
+      for (const ghost of game.ghosts) expect(isWall(board, ghost.cell)).toBe(false)
       if (game.status !== 'playing') break
     }
   })
@@ -83,8 +92,8 @@ describe('moving', () => {
    * @param runUp how many tiles of approach must be blocked
    */
   const beforeACorner = (runUp: number) => {
-    for (let y = 1; y < HEIGHT - 1; y++) {
-      for (let x = 1; x < WIDTH - 1; x++) {
+    for (let y = 1; y < board.height - 1; y++) {
+      for (let x = 1; x < board.width - 1; x++) {
         for (const facing of ['up', 'down', 'left', 'right'] as const) {
           for (const wanted of ['up', 'down', 'left', 'right'] as const) {
             if (wanted === facing || wanted === OPPOSITE_OF[facing]) continue
@@ -92,23 +101,23 @@ describe('moving', () => {
             // Walk back from the corner, checking the corridor runs straight
             // and the wanted turn is a wall at every step of the way.
             const corner = { x, y }
-            const openAtCorner = !isWall(
-              wrapCell({ x: x + STEP[wanted].x, y: y + STEP[wanted].y }),
+            const openAtCorner = !isWall(board, 
+              wrapCell(board, { x: x + STEP[wanted].x, y: y + STEP[wanted].y }),
             )
-            if (isWall(corner) || !openAtCorner) continue
+            if (isWall(board, corner) || !openAtCorner) continue
 
             let ok = true
             for (let back = 1; back <= runUp && ok; back++) {
-              const cell = wrapCell({
+              const cell = wrapCell(board, {
                 x: x - STEP[facing].x * back,
                 y: y - STEP[facing].y * back,
               })
-              const blocked = isWall(wrapCell({ x: cell.x + STEP[wanted].x, y: cell.y + STEP[wanted].y }))
-              if (isWall(cell) || !blocked) ok = false
+              const blocked = isWall(board, wrapCell(board, { x: cell.x + STEP[wanted].x, y: cell.y + STEP[wanted].y }))
+              if (isWall(board, cell) || !blocked) ok = false
             }
             if (!ok) continue
 
-            const start = wrapCell({
+            const start = wrapCell(board, {
               x: x - STEP[facing].x * runUp,
               y: y - STEP[facing].y * runUp,
             })
@@ -175,8 +184,8 @@ describe('moving', () => {
   it('ignores a turn into a wall and carries straight on', () => {
     let game = fresh()
     const before = game.player.dir
-    // PLAYER_START sits in a horizontal corridor, so down is blocked.
-    const blocked = isWall(wrapCell({ x: PLAYER_START.x, y: PLAYER_START.y + 1 }))
+    // board.playerStart sits in a horizontal corridor, so down is blocked.
+    const blocked = isWall(board, wrapCell(board, { x: board.playerStart.x, y: board.playerStart.y + 1 }))
     if (blocked) {
       game = turn(game, 'down')
       game = run(game, 0.3)
@@ -260,7 +269,7 @@ describe('being caught', () => {
 
     expect(dotsRemaining(back)).toBe(eaten)
     expect(back.status).toBe('playing')
-    expect(back.player.cell).toEqual(PLAYER_START)
+    expect(back.player.cell).toEqual(board.playerStart)
   })
 
   it('eats a frightened chaser instead of dying, for a rising score', () => {
@@ -285,7 +294,7 @@ describe('being caught', () => {
     game = { ...game, ghosts: game.ghosts.map((g, i) => (i === 0 ? { ...g, eatenFor: 1 } : g)) }
     game = step(game, 1.1, roll)
     expect(game.ghosts[0].eatenFor).toBe(0)
-    expect(isWall(game.ghosts[0].cell)).toBe(false)
+    expect(isWall(board, game.ghosts[0].cell)).toBe(false)
   })
 
   it('catches the player across the tunnel seam', () => {
@@ -294,9 +303,9 @@ describe('being caught', () => {
     let game = fresh()
     game = {
       ...game,
-      player: { ...game.player, cell: { x: WIDTH - 1, y: TUNNEL_ROW }, progress: 0.5, dir: 'right' },
+      player: { ...game.player, cell: { x: board.width - 1, y: board.tunnelRow }, progress: 0.5, dir: 'right' },
       ghosts: game.ghosts.map((g, i) =>
-        i === 0 ? { ...g, cell: { x: 0, y: TUNNEL_ROW }, progress: 0, dir: 'right' } : g,
+        i === 0 ? { ...g, cell: { x: 0, y: board.tunnelRow }, progress: 0, dir: 'right' } : g,
       ),
     }
     expect(step(game, 1 / 60, roll).status).not.toBe('playing')
@@ -306,9 +315,9 @@ describe('being caught', () => {
     let game = fresh()
     game = {
       ...game,
-      player: { ...game.player, cell: { x: 0, y: TUNNEL_ROW }, progress: 0, dir: 'left' },
+      player: { ...game.player, cell: { x: 0, y: board.tunnelRow }, progress: 0, dir: 'left' },
       ghosts: game.ghosts.map((g, i) =>
-        i === 0 ? { ...g, cell: { x: WIDTH - 2, y: TUNNEL_ROW }, progress: 0, dir: 'right' } : g,
+        i === 0 ? { ...g, cell: { x: board.width - 2, y: board.tunnelRow }, progress: 0, dir: 'right' } : g,
       ),
     }
     expect(step(game, 1 / 60, roll).status).toBe('playing')
@@ -405,19 +414,30 @@ describe('a fair start', () => {
   // The bug this exists to prevent: the player started four steps from a
   // chaser and died before eating a single dot.
   it('starts the player well clear of every chaser', () => {
-    const dist = new Map<string, number>([[key(PLAYER_START), 0]])
-    const queue = [PLAYER_START]
-    while (queue.length) {
-      const cell = queue.shift()!
-      for (const n of neighbours(cell)) {
-        if (dist.has(key(n))) continue
-        dist.set(key(n), dist.get(key(cell))! + 1)
-        queue.push(n)
+    /*
+     * Measured in walking distance, not a straight line: a chaser ten tiles
+     * away through a wall is not ten tiles away.
+     *
+     * A third of the board's height, rather than a fixed number of tiles. The
+     * fixed ten was written when there was one maze, and on the small board it
+     * would be most of the way from top to bottom — the same rule has to mean
+     * the same thing on a board half the size.
+     */
+    for (const board of BOARDS) {
+      const want = board.height / 3
+      const dist = new Map<string, number>([[key(board.playerStart), 0]])
+      const queue = [board.playerStart]
+      while (queue.length > 0) {
+        const cell = queue.shift()!
+        for (const n of neighbours(board, cell)) {
+          if (dist.has(key(n))) continue
+          dist.set(key(n), dist.get(key(cell))! + 1)
+          queue.push(n)
+        }
       }
-    }
-
-    for (const ghost of newGame().ghosts) {
-      expect(dist.get(key(ghost.cell))!).toBeGreaterThanOrEqual(10)
+      for (const start of board.ghostStarts) {
+        expect(dist.get(key(start))!, `${board.name} from ${key(start)}`).toBeGreaterThanOrEqual(want)
+      }
     }
   })
 

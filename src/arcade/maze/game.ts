@@ -1,23 +1,20 @@
 import {
-  GHOST_RESPAWN,
-  PLAYER_START,
-  WIDTH,
-  HEIGHT,
-  TILE,
+  boardFor,
   edibleCells,
   isWall,
   key,
   tileAt,
   wrapCell,
+  type Board,
   type Cell,
 } from './maze'
 import {
-  GHOSTS,
   OPPOSITE,
   STEP,
   chooseDirection,
   phaseAt,
   randomDirection,
+  ghostsFor,
   targetForAt,
   type Dir,
   type GhostSpec,
@@ -108,6 +105,8 @@ export interface PowerUps {
 
 export interface Game {
   level: number
+  /** Which maze this level is played on. Small at first, then bigger. */
+  board: Board
   lives: number
   score: number
   player: Mover & { queued: Dir | null; queuedFor: number }
@@ -131,14 +130,22 @@ export function emptyPowerUps(): PowerUps {
 }
 
 export function newGame(level = 1, powerUps = emptyPowerUps(), lives = STARTING_LIVES): Game {
-  const { dots, power } = edibleCells()
+  const board = boardFor(level)
+  const { dots, power } = edibleCells(board)
 
   return {
     level,
+    board,
     lives: lives + powerUps.spareLives,
     score: 0,
-    player: { cell: { ...PLAYER_START }, dir: 'left', progress: 0, queued: null, queuedFor: 0 },
-    ghosts: GHOSTS.map((spec) => ({
+    player: {
+      cell: { ...board.playerStart },
+      dir: 'left',
+      progress: 0,
+      queued: null,
+      queuedFor: 0,
+    },
+    ghosts: ghostsFor(board).map((spec) => ({
       spec,
       cell: { ...spec.start },
       dir: 'up',
@@ -180,7 +187,12 @@ export function positionOf(mover: Mover): { x: number; y: number } {
  *
  * @param t how far through the pending slice the frame falls, 0 to 1
  */
-export function positionBetween(before: Mover, after: Mover, t: number): { x: number; y: number } {
+export function positionBetween(
+  board: Board,
+  before: Mover,
+  after: Mover,
+  t: number,
+): { x: number; y: number } {
   const a = positionOf(before)
   const b = positionOf(after)
   const blend = Math.min(1, Math.max(0, t))
@@ -188,13 +200,13 @@ export function positionBetween(before: Mover, after: Mover, t: number): { x: nu
   // Stepping through the tunnel takes x from one edge of the maze to the other.
   // Interpolating across that would fly the whole way back instead, so a wrap
   // simply snaps — for one frame, at the one place nobody is looking closely.
-  if (Math.abs(b.x - a.x) > WIDTH / 2 || Math.abs(b.y - a.y) > HEIGHT / 2) return b
+  if (Math.abs(b.x - a.x) > board.width / 2 || Math.abs(b.y - a.y) > board.height / 2) return b
 
   return { x: a.x + (b.x - a.x) * blend, y: a.y + (b.y - a.y) * blend }
 }
 
-function canGo(cell: Cell, dir: Dir): boolean {
-  return !isWall(wrapCell({ x: cell.x + STEP[dir].x, y: cell.y + STEP[dir].y }))
+function canGo(board: Board, cell: Cell, dir: Dir): boolean {
+  return !isWall(board, wrapCell(board, { x: cell.x + STEP[dir].x, y: cell.y + STEP[dir].y }))
 }
 
 /**
@@ -257,13 +269,13 @@ function movePlayer(game: Game, dt: number): void {
     // A queued turn is taken the moment it becomes legal. Without this the
     // controls feel unresponsive, because a turn pressed a fraction early is
     // simply dropped — it is the single most important detail in the game.
-    if (player.progress === 0 && player.queued && canGo(player.cell, player.queued)) {
+    if (player.progress === 0 && player.queued && canGo(game.board, player.cell, player.queued)) {
       player.dir = player.queued
       player.queued = null
       player.queuedFor = 0
     }
 
-    if (!canGo(player.cell, player.dir)) {
+    if (!canGo(game.board, player.cell, player.dir)) {
       player.progress = 0
       return
     }
@@ -273,7 +285,7 @@ function movePlayer(game: Game, dt: number): void {
     remaining -= advance
 
     if (player.progress >= 1) {
-      player.cell = wrapCell({
+      player.cell = wrapCell(game.board, {
         x: player.cell.x + STEP[player.dir].x,
         y: player.cell.y + STEP[player.dir].y,
       })
@@ -305,7 +317,7 @@ function moveGhost(game: Game, ghost: GhostState, dt: number, frozen: boolean, r
   if (ghost.eatenFor > 0) {
     ghost.eatenFor = Math.max(0, ghost.eatenFor - dt)
     if (ghost.eatenFor === 0) {
-      ghost.cell = { ...GHOST_RESPAWN }
+      ghost.cell = { ...game.board.ghostRespawn }
       ghost.progress = 0
       ghost.frightened = game.frightenedFor > 0
     }
@@ -322,8 +334,9 @@ function moveGhost(game: Game, ghost: GhostState, dt: number, frozen: boolean, r
     if (ghost.progress === 0) {
       ghost.dir =
         phase === 'frightened'
-          ? randomDirection(ghost.cell, ghost.dir, roll())
+          ? randomDirection(game.board, ghost.cell, ghost.dir, roll())
           : chooseDirection(
+              game.board,
               ghost.cell,
               ghost.dir,
               targetForAt(ghost.spec, phase, ghost.cell, game.player.cell, game.player.dir, game.ghosts[0].cell),
@@ -335,7 +348,10 @@ function moveGhost(game: Game, ghost: GhostState, dt: number, frozen: boolean, r
     remaining -= advance
 
     if (ghost.progress >= 1) {
-      ghost.cell = wrapCell({ x: ghost.cell.x + STEP[ghost.dir].x, y: ghost.cell.y + STEP[ghost.dir].y })
+      ghost.cell = wrapCell(game.board, {
+        x: ghost.cell.x + STEP[ghost.dir].x,
+        y: ghost.cell.y + STEP[ghost.dir].y,
+      })
       ghost.progress = 0
     }
   }
@@ -355,7 +371,7 @@ function collide(game: Game): void {
     const dy = Math.abs(at.y - player.y)
     // The tunnel makes the two ends of a row adjacent, so a plain difference
     // would miss a catch that happens across the seam.
-    const near = Math.min(dx, WIDTH - dx) < TOUCHING && dy < TOUCHING
+    const near = Math.min(dx, game.board.width - dx) < TOUCHING && dy < TOUCHING
     if (!near) continue
 
     if (ghost.frightened) {
@@ -377,8 +393,14 @@ export function respawn(game: Game): Game {
   return {
     ...game,
     status: 'playing',
-    player: { cell: { ...PLAYER_START }, dir: 'left', progress: 0, queued: null, queuedFor: 0 },
-    ghosts: GHOSTS.map((spec) => ({
+    player: {
+      cell: { ...game.board.playerStart },
+      dir: 'left',
+      progress: 0,
+      queued: null,
+      queuedFor: 0,
+    },
+    ghosts: ghostsFor(game.board).map((spec) => ({
       spec,
       cell: { ...spec.start },
       dir: 'up',
@@ -411,6 +433,7 @@ export const TURN_BUFFER_TILES = 2
 
 export function turn(game: Game, dir: Dir): Game {
   const player = game.player
+  const board = game.board
 
   /*
    * Turning back the way you came happens on the spot, not at the next tile
@@ -422,7 +445,7 @@ export function turn(game: Game, dir: Dir): Game {
    * from the other end, as the tile ahead with the progress counted backwards.
    */
   if (dir === OPPOSITE[player.dir] && player.progress > 0) {
-    const ahead = wrapCell({
+    const ahead = wrapCell(board, {
       x: player.cell.x + STEP[player.dir].x,
       y: player.cell.y + STEP[player.dir].y,
     })
@@ -456,5 +479,5 @@ export function dotsRemaining(game: Game): number {
 }
 
 export function tileUnder(game: Game): string {
-  return tileAt(game.player.cell) === TILE.WALL ? TILE.WALL : tileAt(game.player.cell)
+  return tileAt(game.board, game.player.cell)
 }
