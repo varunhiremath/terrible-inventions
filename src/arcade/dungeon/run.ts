@@ -38,6 +38,9 @@ import {
 } from './combat'
 
 /** The whole game, in seconds. */
+/** How close an unarmed prince may get to a guard before being turned back. */
+const BARRED = 1
+
 export const RUN_SECONDS = 60 * 60
 
 export type Status = 'playing' | 'dead' | 'levelDone' | 'won' | 'outOfTime'
@@ -72,6 +75,21 @@ export interface Run {
 
 export function newRun(level: Level, number = 1, framesLeft = RUN_SECONDS * FPS, hasSword = false, maxHealth = MAX_HEALTH): Run {
   const prince = newPrince(level)
+
+  /*
+   * Nobody reaches a guard unarmed except on the first floor.
+   *
+   * The sword is lying on floor one and nowhere else, and it is off the
+   * shortest way to the door — so it was quite possible to walk past it, take
+   * the stairs down, and meet every guard in the game with nothing to fight
+   * them with. Worse, a guard you cannot fight does nothing at all, so what
+   * you actually met was a statue, on a floor you could no longer leave.
+   *
+   * Finding it on floor one is the moment it is meant to be. After that, a
+   * guarded floor hands one over rather than being unplayable.
+   */
+  const armed = hasSword || (number > 1 && (level.guards?.length ?? 0) > 0)
+
   return {
     level,
     number,
@@ -84,11 +102,11 @@ export function newRun(level: Level, number = 1, framesLeft = RUN_SECONDS * FPS,
     })),
     framesLeft,
     gateFrames: 0,
-    hasSword,
+    hasSword: armed,
     maxHealth,
     status: 'playing',
     event: 'none',
-    message: number === 1 ? 'LEVEL 1' : `LEVEL ${number}`,
+    message: armed && !hasSword ? 'YOU STILL HAVE A SWORD' : `LEVEL ${number}`,
     messageFrames: FPS * 3,
   }
 }
@@ -165,6 +183,26 @@ export function step(run: Run, input: Input, move: Move, roll: () => number): Ru
     const before = next.prince
     const moved = tick(before, next.level, input, next.gateFrames > 0)
     next.prince = { ...moved, stance: 'ready', stanceFrame: 0 }
+
+    /*
+     * A guard with no duel to fight is still in the way.
+     *
+     * Without a sword there is no duel, and without a duel the guard did
+     * nothing whatsoever — you walked straight through him. Reported exactly
+     * as it looked: "the soldier seemed frozen, he didn't attack me". He bars
+     * the corridor now and says why, which turns a statue into the reason to
+     * go and find the sword.
+     */
+    if (facing && !next.hasSword) {
+      const side = facing.col >= before.col ? 1 : -1
+      const limit = facing.col - side * BARRED
+      const past = side > 0 ? next.prince.col > limit : next.prince.col < limit
+      if (past) {
+        next.prince = { ...next.prince, col: limit }
+        next = say(next, 'NO SWORD — FIND ONE', 1.5)
+      }
+    }
+
     next = pickUp(next)
   }
 

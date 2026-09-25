@@ -194,3 +194,64 @@ describe('being reproducible', () => {
     expect(a.guards.map((g) => g.health)).toEqual(b.guards.map((g) => g.health))
   })
 })
+
+describe('meeting a guard with no sword', () => {
+  /*
+   * All of this came from one report: "I reached the part where I saw a
+   * soldier. I didn't have the sword... the soldier seemed frozen. He didn't
+   * attack me."
+   *
+   * Both halves were true. A duel only runs when the prince is armed, so an
+   * unarmed encounter ran no duel at all — the guard stood still and the
+   * prince walked through him. And the sword lies on floor one and nowhere
+   * else, off the shortest way to the door, so walking past it once meant
+   * meeting every guard in the game unarmed with no way back.
+   */
+  const corridor: Level = {
+    name: 'corridor',
+    rows: ['#'.repeat(30), '#'.repeat(30), '#'.repeat(30)],
+    start: { col: 2, row: 1, facing: 1 },
+    guards: [{ col: 12, row: 1, facing: -1, skill: 0, colour: 'guard' }],
+  }
+
+  it('bars the way rather than standing there', () => {
+    const run = play(newRun(corridor, 1), 400, held({ right: true }))
+    expect(run.prince.col).toBeLessThan(12)
+  })
+
+  it('says why, so it is a reason to go and look rather than a mystery', () => {
+    const run = play(newRun(corridor, 1), 400, held({ right: true }))
+    expect(run.message).toMatch(/sword/i)
+  })
+
+  it('lets him straight past once he is armed', () => {
+    const run = play(newRun(corridor, 1, RUN_SECONDS * FPS, true), 400, held({ right: true }))
+    expect(run.prince.col).toBeGreaterThan(2)
+  })
+
+  it('leaves the first floor as the place you find it', () => {
+    // Handing one over on floor one would throw away the only moment the
+    // pickup is meant to be.
+    expect(newRun(levelFor(1), 1).hasSword).toBe(false)
+  })
+
+  it('never strands anyone on a later guarded floor', () => {
+    for (const [i, level] of LEVELS.entries()) {
+      const number = i + 1
+      if (number === 1 || (level.guards?.length ?? 0) === 0) continue
+      expect(newRun(level, number).hasSword, `${number}. ${level.name}`).toBe(true)
+    }
+  })
+
+  it('keeps a sword you already had', () => {
+    const run = newRun(levelFor(3), 3, RUN_SECONDS * FPS, true)
+    expect(run.hasSword).toBe(true)
+  })
+})
+
+describe('the sword itself', () => {
+  it('is somewhere on the first floor', () => {
+    const swords = levelFor(1).rows.reduce((n, row) => n + [...row].filter((t) => t === 's').length, 0)
+    expect(swords).toBeGreaterThan(0)
+  })
+})
