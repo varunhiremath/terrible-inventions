@@ -94,6 +94,17 @@ export interface GhostState extends Mover {
 
 export type Status = 'playing' | 'died' | 'levelComplete' | 'gameOver'
 
+/**
+ * Something worth hearing, raised by one step of the simulation.
+ *
+ * The board had one loop and nothing else — the same bars whether you were
+ * clearing a corner in peace or being run down in a dead end. The simulation
+ * is where these belong rather than the screen: the screen sees two states a
+ * frame apart and would have to work out what happened between them, and it
+ * would get it wrong the moment two things happened in the same frame.
+ */
+export type MazeEvent = 'dot' | 'pellet' | 'catch' | 'caught' | 'cleared'
+
 export interface PowerUps {
   /** Extra lives bought in the shop. */
   spareLives: number
@@ -123,6 +134,8 @@ export interface Game {
   powerUps: PowerUps
   /** Rises with each ghost eaten in one pellet, and resets when it ends. */
   comboStep: number
+  /** What just happened, for the sound. Cleared at the start of every step. */
+  events: MazeEvent[]
 }
 
 export function emptyPowerUps(): PowerUps {
@@ -134,6 +147,7 @@ export function newGame(level = 1, powerUps = emptyPowerUps(), lives = STARTING_
   const { dots, power } = edibleCells(board)
 
   return {
+    events: [],
     level,
     board,
     lives: lives + powerUps.spareLives,
@@ -224,6 +238,7 @@ export function step(game: Game, dt: number, roll: () => number = Math.random): 
     ghosts: game.ghosts.map((g) => ({ ...g, cell: { ...g.cell } })),
     dots: new Set(game.dots),
     power: new Set(game.power),
+    events: [],
     elapsed: game.elapsed + dt,
     frightenedFor: Math.max(0, game.frightenedFor - dt),
     freezeFor: Math.max(0, game.freezeFor - dt),
@@ -247,7 +262,10 @@ export function step(game: Game, dt: number, roll: () => number = Math.random): 
 
   collide(next)
 
-  if (next.dots.size === 0 && next.power.size === 0) next.status = 'levelComplete'
+  if (next.dots.size === 0 && next.power.size === 0) {
+    next.status = 'levelComplete'
+    next.events.push('cleared')
+  }
   return next
 }
 
@@ -297,10 +315,14 @@ function movePlayer(game: Game, dt: number): void {
 function eat(game: Game): void {
   const id = key(game.player.cell)
 
-  if (game.dots.delete(id)) game.score += 10
+  if (game.dots.delete(id)) {
+    game.score += 10
+    game.events.push('dot')
+  }
 
   if (game.power.delete(id)) {
     game.score += 50
+    game.events.push('pellet')
     game.frightenedFor = FRIGHTENED_SECONDS * game.powerUps.pelletBoost
     game.comboStep = 0
     for (const ghost of game.ghosts) {
@@ -379,11 +401,13 @@ function collide(game: Game): void {
       ghost.eatenFor = EATEN_RESPAWN_SECONDS
       game.comboStep += 1
       game.score += 200 * 2 ** (game.comboStep - 1)
+      game.events.push('catch')
       continue
     }
 
     game.lives -= 1
     game.status = game.lives > 0 ? 'died' : 'gameOver'
+    game.events.push('caught')
     return
   }
 }
@@ -392,6 +416,7 @@ function collide(game: Game): void {
 export function respawn(game: Game): Game {
   return {
     ...game,
+    events: [],
     status: 'playing',
     player: {
       cell: { ...game.board.playerStart },

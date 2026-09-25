@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { LEVEL_TILES_X, VIEW_TILES_X, VIEW_TILES_Y } from '../dave/level'
 import { JET_SECONDS, NO_INPUT, cameraFor, type Input } from '../dave/physics'
-import { newGame, respawn, shoot, step, type Game } from '../dave/game'
+import { newGame, respawn, shoot, step, type CaveEvent, type Game } from '../dave/game'
+import { playCue } from '../music/player'
+import type { CueName } from '../music/score'
 import { levelFor } from '../dave/levels'
 import { createPacer } from '../arcade/pacing'
 import { blendDave, blendMonster } from '../dave/blend'
@@ -34,6 +36,34 @@ import { Interlude } from './Interlude'
 
 const FIXED = 1 / 120
 const MAX_CATCHUP = 0.25
+
+/**
+ * Which sound answers which event.
+ *
+ * The caves had one loop and nothing else, whatever was happening in them.
+ */
+const NOISE: Record<CaveEvent, CueName> = {
+  gem: 'gem',
+  trophy: 'trophy',
+  exit: 'exit',
+  leap: 'leap',
+  kit: 'jetpack',
+  lost: 'lost',
+}
+
+/**
+ * One sound a frame, most important first.
+ *
+ * A frame can hold several steps, and playing every one of them at once is a
+ * noise rather than a cue. Dying while taking a diamond should be heard as a
+ * death.
+ */
+const LOUDEST: CaveEvent[] = ['lost', 'exit', 'trophy', 'kit', 'gem', 'leap']
+// Every event needs a place in the order or it can never be the loudest thing
+// in a frame, and so is never heard at all.
+if (LOUDEST.length !== Object.keys(NOISE).length) {
+  throw new Error('a cave event with no place in the order')
+}
 
 export function Dave() {
   const go = useStore((s) => s.go)
@@ -112,12 +142,26 @@ export function Dave() {
         // frame — one, two or three — which is a fine stutter that gets worse
         // the faster the screen refreshes.
         let first = true
+        /*
+         * The noises are read inside the step, not off the state the frame
+         * ends on. A frame can hold several steps, each clearing `events` for
+         * the next, so reading the last one drops the rest — and taking three
+         * diamonds in one frame made one sound. Found and fixed once already
+         * in the pipes; no reason to find it a third time.
+         */
+        const heard: CaveEvent[] = []
         const { previous, next, alpha } = pacer.advance(game, elapsed, (s) => {
           const out = step(s, { ...input, jump: jump && first }, FIXED)
           first = false
           clock.current += FIXED
+          if (out.events.length > 0) heard.push(...out.events)
           return out
         })
+
+        if (heard.length > 0) {
+          const loudest = LOUDEST.find((name) => heard.includes(name))
+          if (loudest) playCue(NOISE[loudest])
+        }
         gameRef.current = next
 
         if (

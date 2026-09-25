@@ -536,6 +536,124 @@ export const FLAG: Track = {
   ],
 }
 
+/*
+ * The maze, in cues.
+ *
+ * The board had one loop and nothing else: the same bars whether you were
+ * clearing a corner in peace or being run down in a dead end. Asked for, and
+ * fairly: "I want the sound beat to change on special events."
+ *
+ * All of these are A harmonic minor — A B C D E F G G# — which is what the
+ * chase tune is built from, so they belong to it rather than sitting on top of
+ * it. The one with the raised seventh is the one that sounds like a chase.
+ *
+ * The chomp is the hard one. It fires several times a second for the length of
+ * a board, so it has to be two notes, quiet, and over before it is noticed —
+ * a cue you hear properly the four-hundredth time is a cue you hate.
+ */
+
+/** A dot. As small as a sound can be and still be one. */
+export const CHOMP: Track = {
+  name: 'Chomp',
+  beatsPerMinute: 260,
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.05, sustain: 0.3, pattern: 'A5 E5' }],
+}
+
+/** A power pellet. The board is about to change hands. */
+export const PELLET: Track = {
+  name: 'Pellet',
+  beatsPerMinute: 190,
+  parts: [
+    { wave: 'pulse', duty: 0.25, gain: 0.12, sustain: 0.5, pattern: 'A4 C5 E5 A5 .  . ' },
+    { wave: 'triangle', gain: 0.16, sustain: 0.8, pattern: 'A2 .  .  E3 .  . ' },
+  ],
+}
+
+/** Catching one of them, which is the only time the chase runs the other way. */
+export const CATCH: Track = {
+  name: 'Catch',
+  beatsPerMinute: 210,
+  parts: [{ wave: 'pulse', duty: 0.5, gain: 0.13, sustain: 0.45, pattern: 'E5 A5 C6 E6 .  . ' }],
+}
+
+/** Caught. Down the whole scale, one note at a time, no hurry. */
+export const CAUGHT: Track = {
+  name: 'Caught',
+  beatsPerMinute: 120,
+  parts: [
+    { wave: 'triangle', gain: 0.16, sustain: 0.85, pattern: 'A4 G4 F4 E4 D4 C4 B3 A3 .  . ' },
+    { wave: 'sine', gain: 0.1, sustain: 1, pattern: 'A3 .  .  .  E3 .  .  .  A2 . ' },
+  ],
+}
+
+/** A board cleared. */
+export const CLEARED: Track = {
+  name: 'Cleared',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'pulse', duty: 0.25, gain: 0.14, sustain: 0.7, pattern: 'A4 C5 E5 A5 .  G#5 B5 E6 .  .  .  . ' },
+    { wave: 'triangle', gain: 0.18, sustain: 0.8, pattern: 'A2 .  .  .  E3 .  .  A3 .  .  .  . ' },
+  ],
+}
+
+/*
+ * The caves, in cues.
+ *
+ * D natural minor — D E F G A Bb C — which is where the cave loop lives, so
+ * these sit inside it the way the maze's sit inside the chase.
+ */
+
+/** A diamond. He takes a great many, so it is two notes and gone. */
+export const GEM: Track = {
+  name: 'Gem',
+  beatsPerMinute: 250,
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.07, sustain: 0.35, pattern: 'D5 A5' }],
+}
+
+/** The trophy: the thing the whole cave is for. */
+export const TROPHY: Track = {
+  name: 'Trophy',
+  beatsPerMinute: 165,
+  parts: [
+    { wave: 'pulse', duty: 0.25, gain: 0.13, sustain: 0.65, pattern: 'D4 F4 A4 D5 F5 A5 D6 .  .  . ' },
+    { wave: 'triangle', gain: 0.18, sustain: 0.9, pattern: 'D3 .  .  A3 .  .  D4 .  .  . ' },
+  ],
+}
+
+/** The door, once the trophy is his. */
+export const EXIT: Track = {
+  name: 'Exit',
+  beatsPerMinute: 145,
+  parts: [
+    { wave: 'pulse', duty: 0.5, gain: 0.13, sustain: 0.7, pattern: 'A4 D5 F5 A5 .  D6 .  .  .  . ' },
+    { wave: 'triangle', gain: 0.18, sustain: 0.85, pattern: 'D3 .  .  .  A3 .  D4 .  .  . ' },
+  ],
+}
+
+/** A jump. He does it constantly, so it barely happens. */
+export const LEAP: Track = {
+  name: 'Leap',
+  beatsPerMinute: 240,
+  parts: [{ wave: 'pulse', duty: 0.25, gain: 0.07, sustain: 0.3, pattern: 'A4 D5' }],
+}
+
+/** The jetpack, which climbs because that is what it is for. */
+export const JETPACK: Track = {
+  name: 'Jetpack',
+  beatsPerMinute: 200,
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.11, sustain: 0.5, pattern: 'D4 E4 F4 G4 A4 Bb4 C5 D5 .  . ' }],
+}
+
+/** Fire, water, a tentacle, or a very long drop. */
+export const LOST: Track = {
+  name: 'Lost',
+  beatsPerMinute: 110,
+  parts: [
+    { wave: 'triangle', gain: 0.16, sustain: 0.85, pattern: 'D5 C5 Bb4 A4 G4 F4 E4 D4 .  . ' },
+    { wave: 'sine', gain: 0.1, sustain: 1, pattern: 'D3 .  .  .  A2 .  .  .  D2 . ' },
+  ],
+}
+
 export const TRACKS = {
   chase: CHASE,
   thinking: THINKING,
@@ -556,6 +674,25 @@ export const DUNGEON_CUES = {
   gate: GATE,
 } as const
 
+/** The maze's own set, all in A harmonic minor, like the chase. */
+export const MAZE_CUES = {
+  chomp: CHOMP,
+  pellet: PELLET,
+  catchOne: CATCH,
+  caught: CAUGHT,
+  cleared: CLEARED,
+} as const
+
+/** The caves' own set, all in D natural minor, like the cave loop. */
+export const CAVE_CUES = {
+  gem: GEM,
+  trophy: TROPHY,
+  exit: EXIT,
+  leap: LEAP,
+  jetpack: JETPACK,
+  lost: LOST,
+} as const
+
 /** The pipes' own set, all in plain C major. */
 export const PIPE_CUES = {
   coin: COIN,
@@ -566,7 +703,8 @@ export const PIPE_CUES = {
   flag: FLAG,
 } as const
 
-// Two sets, because each one is held to its own scale and mixing them would
-// mean holding neither to anything.
-export const CUES = { ...DUNGEON_CUES, ...PIPE_CUES } as const
+// Four sets, because each is held to its own scale — and each scale is the
+// one its game's own loop is built from, so a cue sounds like the tune it
+// interrupts. Mixing them would mean holding none of them to anything.
+export const CUES = { ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES } as const
 export type CueName = keyof typeof CUES

@@ -63,6 +63,16 @@ export interface Monster {
 
 export type Status = 'playing' | 'died' | 'levelComplete' | 'gameOver'
 
+/**
+ * Something worth hearing, raised by one step of the simulation.
+ *
+ * Raised here rather than worked out by the screen: the screen sees two states
+ * a frame apart and would have to infer what happened between them, which it
+ * would get wrong the moment two things happened in the same frame — and in
+ * these caves two things happening at once is most of the game.
+ */
+export type CaveEvent = 'gem' | 'trophy' | 'exit' | 'leap' | 'kit' | 'lost'
+
 export interface Game {
   level: Level
   /** Which level this is, counting from one. */
@@ -79,6 +89,8 @@ export interface Game {
   message: string | null
   /** Counts down after taking the trophy, then the message clears. */
   messageFor: number
+  /** What just happened, for the sound. Cleared at the start of every step. */
+  events: CaveEvent[]
 }
 
 export const key = (x: number, y: number) => `${x},${y}`
@@ -103,6 +115,7 @@ function freshMonsters(level: Level): Monster[] {
 export function newGame(level: Level, number = 1, lives = STARTING_LIVES, score = 0): Game {
   const ready = normalise(level)
   return {
+    events: [],
     level: ready,
     number,
     dave: newDave(ready.start),
@@ -169,12 +182,14 @@ function collectAt(game: Game, next: Game): void {
     if (isPickup(tile)) {
       next.taken.add(id)
       next.score += WORTH[tile] ?? 0
+      next.events.push('gem')
       continue
     }
     if (tile === TILE.TROPHY) {
       next.taken.add(id)
       next.score += WORTH[TILE.TROPHY]
       next.dave = { ...next.dave, hasTrophy: true }
+      next.events.push('trophy')
       next.message = 'GO THRU THE DOOR'
       next.messageFor = 3
       continue
@@ -182,11 +197,13 @@ function collectAt(game: Game, next: Game): void {
     if (tile === TILE.JETPACK) {
       next.taken.add(id)
       next.dave = fillTank(next.dave)
+      next.events.push('kit')
       continue
     }
     if (tile === TILE.GUN) {
       next.taken.add(id)
       next.dave = { ...next.dave, hasGun: true }
+      next.events.push('kit')
       continue
     }
   }
@@ -209,6 +226,13 @@ export function step(game: Game, input: Input, dt: number): Game {
     taken: new Set(game.taken),
     monsters: game.monsters.map((m) => ({ ...m })),
     bullets: game.bullets.map((b) => ({ ...b })),
+    events: [],
+  }
+
+  // Off the ground and travelling upwards, having been on it a moment ago.
+  // The jump itself happens inside the physics, which has nowhere to say so.
+  if (game.dave.onGround && !next.dave.onGround && next.dave.vy < 0) {
+    next.events.push('leap')
   }
 
   if (next.messageFor > 0) {
@@ -300,11 +324,13 @@ export function step(game: Game, input: Input, dt: number): Game {
   if (!next.dave.alive) {
     next.lives -= 1
     next.status = next.lives > 0 ? 'died' : 'gameOver'
+    next.events.push('lost')
     return next
   }
   if (canLeave(next.level, next.dave)) {
     next.score += WORTH[TILE.DOOR]
     next.status = 'levelComplete'
+    next.events.push('exit')
   }
 
   return next

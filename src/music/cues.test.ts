@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CAVE_CUES,
   CUES,
   DUNGEON_CUES,
+  MAZE_CUES,
   PIPE_CUES,
   eighthSeconds,
   loopLength,
@@ -60,12 +62,31 @@ describe('the dungeon cues', () => {
 
   const seconds = (name: CueName) => loopLength(CUES[name]) * eighthSeconds(CUES[name])
 
+/**
+ * The cues that fire over and over: a dot, a diamond, a jump.
+ *
+ * These are a different kind of thing from the rest and the lower bound below
+ * does not apply to them. A cue that answers a dot has to be gone before the
+ * next dot, and there are four of those a second — at three tenths of a second
+ * they would overlap each other all the way round the board.
+ */
+const TICKS: CueName[] = ['chomp', 'gem', 'leap']
+
   it('are short enough to be cues rather than tunes', () => {
     // Anything much past this stops being a cue and starts being music playing
-    // over the game, which is the thing the original deliberately did not do.
+    // over the game, which is the thing worth copying: a game that is silent
+    // most of the time is a game where eight bars of anything lands.
     for (const name of NAMES) {
+      if (TICKS.includes(name)) continue
       expect(seconds(name), name).toBeGreaterThan(0.3)
       expect(seconds(name), name).toBeLessThan(10)
+    }
+  })
+
+  it('keeps the ones that fire constantly shorter than the gap between them', () => {
+    for (const name of TICKS) {
+      expect(seconds(name), name).toBeGreaterThan(0.05)
+      expect(seconds(name), name).toBeLessThan(0.3)
     }
   })
 
@@ -143,5 +164,77 @@ describe('the pipes cues', () => {
       const [first, last] = ends(bad)
       expect(last, bad).toBeLessThan(first)
     }
+  })
+})
+
+/**
+ * A harmonic minor on A — A B C D E F G G#.
+ *
+ * The raised seventh is the whole character of it: the half-step from G# up to
+ * A is what makes the chase tune sound like something behind you. The maze's
+ * cues are built from the same seven notes as its loop, so a cue interrupts
+ * the tune rather than arriving from somewhere else.
+ */
+const MAZE_SCALE = [9, 11, 0, 2, 4, 5, 7, 8]
+
+/** D natural minor — D E F G A Bb C — which is where the cave loop lives. */
+const CAVE_SCALE = [2, 4, 5, 7, 9, 10, 0]
+
+describe('the maze cues', () => {
+  it('stay inside the scale the chase tune is built from', () => {
+    for (const name of Object.keys(MAZE_CUES) as CueName[]) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          expect(MAZE_SCALE, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain(pitchClass(note.frequency))
+        }
+      }
+    }
+  })
+
+  it('keeps the chomp short, because it fires all game long', () => {
+    /*
+     * A dot cue plays several times a second for the length of a board. At a
+     * quarter of a second it stops being a sound effect and becomes a fault.
+     */
+    expect(loopLength(CUES.chomp) * eighthSeconds(CUES.chomp)).toBeLessThan(0.25)
+    for (const part of CUES.chomp.parts) {
+      expect(part.gain ?? 1).toBeLessThan(0.08)
+    }
+  })
+})
+
+describe('the cave cues', () => {
+  it('stay inside the scale the cave loop is built from', () => {
+    for (const name of Object.keys(CAVE_CUES) as CueName[]) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          expect(CAVE_SCALE, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain(pitchClass(note.frequency))
+        }
+      }
+    }
+  })
+
+  it('keeps the ones he triggers constantly out of the way', () => {
+    for (const name of ['gem', 'leap'] as CueName[]) {
+      expect(loopLength(CUES[name]) * eighthSeconds(CUES[name]), name).toBeLessThan(0.3)
+    }
+  })
+})
+
+describe('every cue', () => {
+  it('belongs to exactly one set', () => {
+    // Four sets merge into CUES, and a name in two of them would have one
+    // quietly win. Nothing would fail; the wrong sound would just play.
+    const sets = [DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES]
+    const seen = new Set<string>()
+    for (const set of sets) {
+      for (const name of Object.keys(set)) {
+        expect(seen.has(name), `${name} is in two sets`).toBe(false)
+        seen.add(name)
+      }
+    }
+    expect(seen.size).toBe(Object.keys(CUES).length)
   })
 })

@@ -10,7 +10,10 @@ import {
   turn,
   useFreeze,
   type Game,
+  type MazeEvent,
 } from '../arcade/maze/game'
+import { playCue } from '../music/player'
+import type { CueName } from '../music/score'
 import { taunt, type TauntMoment } from '../arcade/taunts'
 import { fitBoard } from '../arcade/fit'
 import { createPacer } from '../arcade/pacing'
@@ -56,6 +59,32 @@ const DOT_COLOUR = 0xffc9a8
 const WALL_COLOUR = 0xf24fd6
 /** A chaser you can eat. */
 const FRIGHTENED_COLOUR = 0x2632d6
+
+/**
+ * Which sound answers which event.
+ *
+ * The board had one loop and nothing else, whatever was happening on it.
+ */
+const NOISE: Record<MazeEvent, CueName> = {
+  dot: 'chomp',
+  pellet: 'pellet',
+  catch: 'catchOne',
+  caught: 'caught',
+  cleared: 'cleared',
+}
+
+/**
+ * One sound a frame, most important first.
+ *
+ * A frame can hold several steps and playing all of them at once is a noise
+ * rather than a cue — and the one that matters is never the dot.
+ */
+const LOUDEST: MazeEvent[] = ['cleared', 'caught', 'catch', 'pellet', 'dot']
+// Every event needs a place in the order or it can never be the loudest thing
+// in a frame, and so is never heard at all.
+if (LOUDEST.length !== Object.keys(NOISE).length) {
+  throw new Error('a maze event with no place in the order')
+}
 
 export function Arcade() {
   const save = useStore((s) => s.save)
@@ -335,7 +364,24 @@ function PlayerIcon() {
         // a frame too short to take a step. Keeping that pair here, in the
         // loop, is what was wrong: rebuilt each frame it drew the newest state
         // outright on those frames, and the motion jerked.
-        const { previous, next, alpha } = pacer.advance(game, elapsed, (s) => step(s, FIXED))
+        /*
+         * The noises are read inside the step, not off the state the frame
+         * ends on. A frame can hold several steps, each one clearing `events`
+         * for the next — so reading the last one drops the rest, and eating
+         * four dots in one frame made one chomp. That exact bug was found and
+         * fixed in the pipes; there is no reason to find it twice.
+         */
+        const heard: MazeEvent[] = []
+        const { previous, next, alpha } = pacer.advance(game, elapsed, (s) => {
+          const after = step(s, FIXED)
+          if (after.events.length > 0) heard.push(...after.events)
+          return after
+        })
+
+        if (heard.length > 0) {
+          const loudest = LOUDEST.find((name) => heard.includes(name))
+          if (loudest) playCue(NOISE[loudest])
+        }
         gameRef.current = next
 
         if (next.status !== before && before === 'playing') {
