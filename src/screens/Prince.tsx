@@ -59,6 +59,8 @@ export function Prince() {
   const runRef = useRef<Run | null>(null)
   const buttons = useRef(createLatch())
   const wasDuel = useRef(false)
+  /** Whether the gates were open last frame, so a change can be heard. */
+  const wasOpen = useRef(false)
   const padRef = useRef<Key[]>([])
   const clock = useRef(0)
   /** The pad as it was last frame, so a change of buttons re-announces them. */
@@ -190,6 +192,13 @@ export function Prince() {
         }
         if (duel && !wasDuel.current) playCue('danger')
         wasDuel.current = duel
+
+        // A gate moving somewhere off screen is still worth knowing about:
+        // standing on the plate is the whole puzzle, and until now the only
+        // way to tell it had worked was to walk back and look.
+        const open = gatesOpen(next)
+        if (open !== wasOpen.current) playCue('gate')
+        wasOpen.current = open
         if (next.prince.health < shown.health && next.status === 'playing') playCue('blade')
         if (next.prince.health > shown.health) playCue('potion')
         // Only the minute warnings, which are the only messages that arrive
@@ -245,18 +254,32 @@ export function Prince() {
          */
         const size = Math.min(w / ROOM_COLS, (middle / rows) * 0.78)
         const floorHeight = size / 0.78
+
+        /*
+         * How many floors to show.
+         *
+         * Three was baked in, because three floors is what a room is. But a
+         * phone held upright has the height for eight or nine of them and was
+         * spending the rest on black, which meant the only way to find out
+         * what was under a ledge was to jump off it and see — reported as
+         * "I basically had to jump into the darkness hoping I'll land on
+         * something". Never fewer than a room, never more than the level has.
+         */
+        const fits = Math.floor(middle / floorHeight - FLOOR_DEPTH)
+        const floors = Math.max(ROOM_ROWS, Math.min(fits, next.level.rows.length))
         const boardW = size * ROOM_COLS
-        const boardH = floorHeight * rows
+        const boardH = floorHeight * (floors + FLOOR_DEPTH)
 
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.fillStyle = INK.black
         ctx.fillRect(0, 0, w, h)
 
-        const room = viewAt(next.level, camera.current, next.prince.col, next.prince.row)
+        const room = viewAt(next.level, camera.current, next.prince.col, next.prince.row, floors)
         camera.current = room.col
         const view: View = {
           col: room.col,
           row: room.row,
+          rows: floors,
           size,
           floorHeight,
           clock: clock.current,
@@ -269,7 +292,7 @@ export function Prince() {
         ctx.clip()
         drawRoom(ctx, next.level, view, boardW, boardH, gatesOpen(next), next.prince.collapsed)
         for (const guard of next.guards) {
-          if (guard.row < room.row || guard.row >= room.row + ROOM_ROWS) continue
+          if (guard.row < room.row || guard.row >= room.row + floors) continue
           if (guard.col < room.col - 1 || guard.col > room.col + ROOM_COLS) continue
           drawGuard(ctx, guard, view)
         }

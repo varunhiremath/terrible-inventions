@@ -28,6 +28,7 @@ export type Action =
   | 'hardLand'
   | 'hang'
   | 'climbUp'
+  | 'climbDown'
   | 'climbLedge'
   | 'crouch'
   | 'drinking'
@@ -191,6 +192,25 @@ export const SEQUENCES: Record<Action, Sequence> = {
   hardLand: {
     frames: [f(0, 0, 'hurt1'), f(0, 0, 'hurt2'), f(0, 0, 'hurt3'), f(0, 0, 'hurt4'), f(0, 0, 'hurt5')],
     then: 'stand',
+    interruptible: false,
+  },
+
+  /**
+   * Backing over an edge to hang from it.
+   *
+   * The move the original is really built around: walk to the lip, turn your
+   * back on the drop, press down, and lower yourself until you are hanging off
+   * it. From there you can see what is underneath before you commit to it,
+   * which is the whole point — without it the only way to find out what is
+   * below a ledge is to jump off and hope, which is exactly how it was being
+   * played: "I basically had to jump into the darkness hoping I'll land on
+   * something."
+   *
+   * He goes nowhere at all: the hands end up on the tile the feet were on.
+   */
+  climbDown: {
+    frames: [f(0, 0, 'crouch'), f(0, 0, 'climb5'), f(0, 0, 'climb3'), f(0, 0, 'hang')],
+    then: 'hang',
     interruptible: false,
   },
 

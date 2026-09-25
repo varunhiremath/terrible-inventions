@@ -107,3 +107,36 @@ export function canFinish(level: Level, budget = 400_000): Reached {
 
   return { finished: false, seen: seen.size, furthest, rooms: [...rooms] }
 }
+
+/**
+ * Whether a particular tile can be stood on, playing the level for real.
+ *
+ * `canFinish` proves the way out is reachable and says nothing about anything
+ * else in the level. The sword on floor one sat on a ledge with solid floor
+ * directly above it and a four-tile gap either side — so it could not be
+ * fallen onto and could not be jumped to, and the only pickup in the game that
+ * matters was decoration. Nobody noticed until somebody tried to collect it.
+ */
+export function canReach(level: Level, want: string, budget = 400_000): boolean {
+  const start = newPrince(level)
+  const queue: { prince: Prince; gate: number }[] = [{ prince: start, gate: 0 }]
+  const seen = new Set<string>([keyOf(start, 0)])
+
+  while (queue.length > 0 && seen.size < budget) {
+    const here = queue.shift()!
+    if (tileAt(level, Math.round(here.prince.col), here.prince.row) === want) return true
+
+    for (const input of INPUTS) {
+      const next = tick(here.prince, level, input, here.gate > 0)
+      if (next.dead) continue
+
+      const under = tileAt(level, Math.round(next.col), next.row)
+      const gate = under === TILE.BUTTON ? GATE_HOLD : Math.max(0, here.gate - 1)
+      const key = keyOf(next, gate)
+      if (seen.has(key)) continue
+      seen.add(key)
+      queue.push({ prince: next, gate })
+    }
+  }
+  return false
+}

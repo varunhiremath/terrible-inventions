@@ -35,8 +35,8 @@ export const LEVELS: readonly Level[] = [
       'X ######                     X',
       'X       ###.# #####| ######E#X',
       'X  #         ##     ##       X',
-      'X # #### #      #            X',
-      'X #  #sh   ###  #       # #  X',
+      'X # #### #      s            X',
+      'X #  ##h   ###  #       # #  X',
     ],
   },
   {

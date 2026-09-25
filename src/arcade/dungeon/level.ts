@@ -142,13 +142,16 @@ export function viewAt(
   camera: number,
   col: number,
   row: number,
+  rows = ROOM_ROWS,
 ): { col: number; row: number } {
-  const lastRow = Math.max(0, level.rows.length - ROOM_ROWS)
+  const lastRow = Math.max(0, level.rows.length - rows)
   return {
     col: scrollTo(camera, col, ROOM_COLS, levelCols(level)),
     // Floors are whole things and half a floor of scroll helps nobody, so the
     // vertical stays in steps: his floor, one above it, one below.
-    row: clamp(Math.round(row) - 1, 0, lastRow),
+    // Him a third of the way down what is showing, so most of the room you
+    // can see is the part you are heading into.
+    row: clamp(Math.round(row) - Math.floor(rows / 3), 0, lastRow),
   }
 }
 

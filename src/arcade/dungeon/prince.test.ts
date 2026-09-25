@@ -494,3 +494,71 @@ describe('the jump button', () => {
     expect(SEQUENCES.hop.frames.length).toBeLessThan(SEQUENCES.standJump.frames.length)
   })
 })
+
+describe('lowering yourself over an edge', () => {
+  /*
+   * The move the original is built around, and the one this was missing:
+   * back up to the lip, press down, and hang off it so you can see what is
+   * underneath before committing. Without it the only way to learn what was
+   * below a ledge was to jump and hope — described exactly that way: "I
+   * basically had to jump into the darkness hoping I'll land on something."
+   */
+  const ledge: Level = {
+    name: 'ledge',
+    // Floor at 1-4, a hole at 5-8, and another floor a storey down.
+    rows: ['XXXXXXXXXXXX', 'X####    ###', 'X##########X'],
+    // Standing on the lip with his back to the hole, which is the position
+    // the move is made from.
+    start: { col: 4, row: 1, facing: -1 as const },
+  }
+
+  /** Presses down long enough to start the move, then lets the button go. */
+  const lower = (level: Level) => {
+    const started = play(newPrince(level), level, 6, press({ down: true }))
+    return play(started, level, 10, NO_INPUT)
+  }
+
+  it('hangs off the edge when down is pressed there', () => {
+    expect(lower(ledge).action).toBe('hang')
+  })
+
+  it('keeps hold instead of dropping the moment you stop pressing', () => {
+    // A hang you cannot hold is no use for looking at anything.
+    let prince = lower(ledge)
+    prince = play(prince, ledge, 120, NO_INPUT)
+    expect(prince.action).toBe('hang')
+    expect(prince.dead).toBe(false)
+  })
+
+  it('pulls back up onto the ledge', () => {
+    const hanging = lower(ledge)
+    const up = until(hanging, ledge, press({ up: true }), 40)
+    expect(up.row).toBe(1)
+    expect(up.action).not.toBe('hang')
+  })
+
+  it('lets go downwards, landing a storey below', () => {
+    const hanging = lower(ledge)
+    const dropped = play(hanging, ledge, 60, press({ down: true }))
+    expect(dropped.row).toBe(2)
+    expect(dropped.dead).toBe(false)
+  })
+
+  it('still just crouches in the middle of a floor', () => {
+    const solid: Level = {
+      name: 'solid',
+      rows: ['XXXXXXXXXXXX', 'X##########X', 'X##########X'],
+      start: { col: 5, row: 1, facing: -1 as const },
+    }
+    const after = lower(solid)
+    expect(after.action).not.toBe('hang')
+  })
+
+  it('goes nowhere sideways doing it', () => {
+    // Hands end up on the tile the feet were on. A move that shifts him a
+    // tile while he cannot see below is the problem, not the fix.
+    const before = newPrince(ledge)
+    const after = lower(ledge)
+    expect(after.col).toBeCloseTo(before.col, 6)
+  })
+})

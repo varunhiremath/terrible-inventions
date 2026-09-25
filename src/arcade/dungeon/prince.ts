@@ -33,6 +33,14 @@ export interface Prince {
   /** Floor he began the current fall from, for working out the damage. */
   fellFrom: number
   framesFalling: number
+  /**
+   * Frames left of a grip that cannot be let go of yet.
+   *
+   * Lowering yourself over an edge is done by holding down, and hanging is let
+   * go of by pressing down — so without this the same press that starts the
+   * move finishes it, and holding the button drops you the instant you arrive.
+   */
+  gripFrames: number
   health: number
   dead: boolean
   /** Tiles that have given way and are no longer there. */
@@ -53,17 +61,24 @@ export const MAX_HEALTH = 3
 export const FRAMES_PER_FLOOR = 3
 /** Falling this far hurts; one more than this is fatal. */
 export const SAFE_FALL = 1
+/** How long a fresh grip ignores the button that made it. */
+export const GRIP = 14
+
 export const HURT_FALL = 2
 
 export function newPrince(level: Level): Prince {
   return {
     col: level.start.col,
     row: level.start.row,
-    facing: 1,
+    // The level says which way he is looking, and it used to be ignored here
+    // and patched afterwards by the screen — so the solver, which builds its
+    // princes straight from this, explored every level facing the wrong way.
+    facing: level.start.facing,
     action: 'stand',
     frame: 0,
     fellFrom: 0,
     framesFalling: 0,
+    gripFrames: 0,
     health: MAX_HEALTH,
     dead: false,
     collapsed: [],
@@ -108,7 +123,12 @@ function command(prince: Prince, level: Level, input: Input): Prince {
 
   if (prince.action === 'hang') {
     if (input.up) return begin(prince, 'climbUp')
-    if (input.down || !input.shift) return { ...begin(prince, 'fall'), fellFrom: prince.row, framesFalling: 0 }
+    // Still holding the button that got him here: not a request to let go.
+    if (prince.gripFrames > 0) return prince
+    // Letting go is a thing you ask for, not a thing that happens to you.
+    // It used to drop him the moment the careful button came up, which on a
+    // touchscreen meant a hang you could not hold long enough to look down.
+    if (input.down) return { ...begin(prince, 'fall'), fellFrom: prince.row, framesFalling: 0 }
     return prince
   }
 
@@ -143,6 +163,16 @@ function command(prince: Prince, level: Level, input: Input): Prince {
   }
 
   if (input.down) {
+    /*
+     * At the lip of a drop, down lowers him over it instead of crouching.
+     *
+     * The edge has to be behind him — you back over a ledge, you do not walk
+     * off one forwards — which is why the move starts with turning round.
+     */
+    const col = Math.round(prince.col)
+    const behind = col - prince.facing
+    const atEdge = !isSolid(tileAt(level, behind, prince.row))
+    if (atEdge) return { ...begin(prince, 'climbDown'), col, gripFrames: GRIP }
     return begin(prince, 'crouch')
   }
 
@@ -160,7 +190,7 @@ function command(prince: Prince, level: Level, input: Input): Prince {
 export function tick(prince: Prince, level: Level, input: Input, gateOpen = false): Prince {
   if (prince.dead || prince.atExit) return prince
 
-  let next = { ...prince }
+  let next = { ...prince, gripFrames: Math.max(0, prince.gripFrames - 1) }
   const sequence = SEQUENCES[next.action]
 
   // A loose tile gives way a moment after it takes weight.

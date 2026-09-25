@@ -11,7 +11,7 @@
  * so they stay sharp at any size and cost nothing to ship.
  */
 import { drawHint } from '../../ui/padHints'
-import { ROOM_COLS, ROOM_ROWS, TILE, tileAt, type Level } from './level'
+import { ROOM_COLS, TILE, tileAt, type Level } from './level'
 import type { Prince } from './prince'
 import type { Guard } from './run'
 import { drawFigure, type Look, type Style } from './figure'
@@ -87,6 +87,14 @@ export interface View {
   col: number
   /** Top floor of the room on screen. */
   row: number
+  /**
+   * How many floors are on screen.
+   *
+   * Three used to be baked in, which is what a room is. Held upright, a phone
+   * had the height for eight or nine and spent the rest on black — so the only
+   * way to learn what was under a ledge was to jump off it and find out.
+   */
+  rows: number
   /** Pixels per tile across. */
   size: number
   /** Pixels per floor. Floors are taller than tiles are wide. */
@@ -367,14 +375,34 @@ function chomper(ctx: Ctx, x: number, y: number, w: number, h: number, shut: num
   }
 }
 
+/**
+ * A portcullis, in the doorway rather than across the picture.
+ *
+ * It used to be drawn the full width of the tile as a grid of bars — which
+ * reads as a gate facing you, flat against the screen, rather than one set
+ * into a wall the prince walks through. Reported as looking "oriented in
+ * plane... facing us, rather than facing the player".
+ *
+ * So there is a dark recess first, and the bars are narrower than the opening
+ * and inset into it, with a lintel across the top. The shadow either side is
+ * what makes it a doorway instead of a fence.
+ */
 function gate(ctx: Ctx, x: number, y: number, w: number, h: number, open: boolean): void {
   const drop = open ? h * 0.15 : h
+  const inset = w * 0.2
+
+  // The opening behind the bars, darker than the wall it is cut into.
   ctx.fillStyle = INK.gateDark
-  ctx.fillRect(x + w * 0.05, y - h, w * 0.9, Math.max(2, h * 0.08))
+  ctx.fillRect(x + inset * 0.5, y - h, w - inset, h)
+
+  // The lintel, which sits proud of the opening at both ends.
+  ctx.fillStyle = INK.gate
+  ctx.fillRect(x + w * 0.05, y - h, w * 0.9, Math.max(2, h * 0.1))
+
   ctx.strokeStyle = INK.gate
-  ctx.lineWidth = Math.max(1, w * 0.06)
-  for (let i = 0; i <= 4; i++) {
-    const gx = x + w * 0.08 + (i * w * 0.84) / 4
+  ctx.lineWidth = Math.max(1, w * 0.05)
+  for (let i = 0; i <= 3; i++) {
+    const gx = x + inset + (i * (w - inset * 2)) / 3
     ctx.beginPath()
     ctx.moveTo(gx, y - h)
     ctx.lineTo(gx, y - h + drop)
@@ -437,7 +465,7 @@ export function drawRoom(
    * as he walks. The clip rectangle takes care of the overhang.
    */
   const first = Math.floor(view.col)
-  for (let row = view.row; row < view.row + ROOM_ROWS; row++) {
+  for (let row = view.row; row < view.row + view.rows; row++) {
     for (let col = first; col <= first + ROOM_COLS; col++) {
       const tile = tileAt(level, col, row)
       const x = px(view, col)
@@ -466,10 +494,18 @@ export function drawRoom(
         case TILE.GATE:
           gate(ctx, x, y, s, fh * 0.9, gatesOpen)
           break
-        case TILE.BUTTON:
-          ctx.fillStyle = stone.lit
-          ctx.fillRect(x + s * 0.18, y - fh * 0.05, s * 0.64, Math.max(2, fh * 0.05))
+        case TILE.BUTTON: {
+          // Brass, not stone. Drawn in the wall's own colour it was invisible:
+          // the one tile in the level that does something looked like floor.
+          const lip = Math.max(2, fh * 0.05)
+          ctx.fillStyle = '#6b5a22'
+          ctx.fillRect(x + s * 0.14, y - lip * 0.6, s * 0.72, lip * 0.8)
+          ctx.fillStyle = '#d9b64a'
+          ctx.fillRect(x + s * 0.18, y - lip * 1.5, s * 0.64, lip)
+          ctx.fillStyle = '#f3dd93'
+          ctx.fillRect(x + s * 0.18, y - lip * 1.5, s * 0.64, Math.max(1, lip * 0.3))
           break
+        }
         case TILE.POTION_HEAL:
           potion(ctx, x, y, s, '#d8443a', false)
           break
@@ -494,7 +530,7 @@ export function drawRoom(
 
   for (const t of level.torches ?? []) {
     if (t.col < first || t.col > first + ROOM_COLS) continue
-    if (t.row < view.row || t.row >= view.row + ROOM_ROWS) continue
+    if (t.row < view.row || t.row >= view.row + view.rows) continue
     torch(ctx, px(view, t.col), py(view, t.row), view.size, view.clock, t.col * 3)
   }
 }
@@ -703,6 +739,21 @@ export function poseFor(action: string, frame: number, stance: string): Pose {
       pose.elbowSword = 0.06
       pose.elbowFree = -0.16
       break
+    case 'climbDown': {
+      // The pull-up run backwards: he starts upright and ends hanging.
+      const t = Math.min(1, frame / 3)
+      pose.crouch = 0.05 + t * 0.6
+      pose.armSword = -1.4 - t * 1.6
+      pose.armFree = -1.35 - t * 1.6
+      pose.elbowSword = 0.2 + t * 1.3
+      pose.elbowFree = 0.2 + t * 1.3
+      pose.legFront = 0.15 + t * 0.35
+      pose.legBack = -0.3
+      pose.kneeFront = 0.2 + t * 1.2
+      pose.kneeBack = 0.4
+      pose.lean = 0.05 + t * 0.25
+      break
+    }
     case 'climbUp': {
       // Pulling up: the elbows fold, the knee comes over the lip.
       const t = Math.min(1, frame / 6)
@@ -883,6 +934,10 @@ function liftOf(action: string, frame: number): number {
     case 'climbLedge':
       // Climbing, not jumping: he goes up and stays up.
       return frame >= 5 ? 0 : (frame / 5) * 0.95
+    case 'climbDown':
+      // Lowering himself: the reverse of the pull-up, so he sinks rather than
+      // rises, and ends level with the hang he is about to be in.
+      return frame >= 3 ? 0 : (1 - frame / 3) * 0.4
     case 'climbUp':
       return frame >= 5 ? 0 : (frame / 5) * 0.4
     default:

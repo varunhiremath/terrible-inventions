@@ -452,6 +452,22 @@ export const VICTORY: Track = {
   ],
 }
 
+/**
+ * A gate moving. Iron and counterweights rather than music.
+ *
+ * The same cue serves opening and closing: what you need to know is that
+ * something heavy moved somewhere, and the gate you are looking at tells you
+ * which way. Two notes that would take a second to tell apart would be worse.
+ */
+export const GATE: Track = {
+  name: 'Gate',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'pulse', duty: 0.5, gain: 0.12, sustain: 0.35, pattern: 'D3 A3 D4 .  -  - ' },
+    { wave: 'triangle', gain: 0.16, sustain: 0.3, pattern: 'D2 -  D2 -  -  - ' },
+  ],
+}
+
 /** The clock. One low toll, and a second under it. */
 export const TIMER: Track = {
   name: 'Timer',
@@ -537,6 +553,7 @@ export const DUNGEON_CUES = {
   tragic: TRAGIC,
   victory: VICTORY,
   timer: TIMER,
+  gate: GATE,
 } as const
 
 /** The pipes' own set, all in plain C major. */
