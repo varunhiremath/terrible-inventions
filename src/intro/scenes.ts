@@ -13,6 +13,8 @@
  */
 import { drawFigure, type Look } from '../arcade/dungeon/figure'
 import { poseFor } from '../arcade/dungeon/draw'
+import { EGA as DAVE_EGA, drawDave } from '../dave/draw'
+import { newDave } from '../dave/physics'
 import { drawHero, INK as PIPE_INK } from '../pipes/draw'
 import { VIEW_TOP } from '../pipes/level'
 import { newBody } from '../pipes/physics'
@@ -193,46 +195,100 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
   },
 
   /** A cave, a trophy, and a very long way down. */
+  /**
+   * Dave's caves, drawn with Dave's own code.
+   *
+   * This used to be coloured rectangles — a blue box for him, a peach square
+   * for his head, a triangle for the trophy — on a brown background that
+   * matched nothing in the game. Reported as looking "so weird and nothing
+   * like the game", which was fair: the caves are red brick on black with
+   * cyan diamonds in them, and the figure is a specific person.
+   *
+   * So the bricks use the game's palette and the figure is the game's own
+   * `drawDave`, which means the person in the intro is literally the person
+   * you play.
+   */
   cave({ ctx, w, h, t }) {
-    wash(ctx, w, h, '#1a0f08', '#080503')
-    const s = Math.min(w, h) * 0.08
-    ctx.fillStyle = '#7a3508'
-    for (let x = 0; x < w; x += s) {
-      ctx.fillRect(x, h * 0.78, s - 2, h * 0.3)
-      ctx.fillRect(x, 0, s - 2, h * 0.16)
+    ctx.fillStyle = DAVE_EGA.black
+    ctx.fillRect(0, 0, w, h)
+
+    const s = Math.min(w, h) * 0.13
+    const floor = h * 0.74
+
+    /** One red brick with the speckles the game gives them. */
+    const brick = (bx: number, by: number) => {
+      ctx.fillStyle = DAVE_EGA.red
+      ctx.fillRect(bx, by, s - 1, s - 1)
+      ctx.fillStyle = DAVE_EGA.white
+      for (let i = 0; i < 4; i++) {
+        const seed = Math.sin(bx * 12.9 + by * 78.2 + i * 37.7) * 43758.5
+        const fx = seed - Math.floor(seed)
+        const fy = Math.sin(seed) * 0.5 + 0.5
+        ctx.fillRect(bx + fx * (s - 3), by + fy * (s - 3), 2, 2)
+      }
     }
-    // Fire, licking up out of the floor between two ledges.
-    const flame = 0.6 + Math.sin(t * 18) * 0.4
-    for (const fx of [0.42, 0.52]) {
-      const grad = ctx.createLinearGradient(0, h * 0.78, 0, h * (0.78 - 0.2 * flame))
-      grad.addColorStop(0, '#ffcf4a')
-      grad.addColorStop(1, 'rgba(226,86,28,0)')
-      ctx.fillStyle = grad
+
+    // Floor, ceiling and the two walls: a cave is a room with a border.
+    for (let x = 0; x < w + s; x += s) {
+      brick(x, floor)
+      brick(x, h * 0.1)
+    }
+    for (let y = h * 0.1; y < floor; y += s) {
+      brick(0, y)
+      brick(w - s, y)
+    }
+    // A ledge to cross, which is what the game is actually made of.
+    for (let i = 0; i < 3; i++) brick(w * 0.42 + i * s, floor - s * 2.1)
+
+    // Diamonds, which are everywhere in this game and are the point of it.
+    const gem = (gx: number, gy: number, glint: number) => {
+      ctx.fillStyle = DAVE_EGA.brightCyan
       ctx.beginPath()
-      ctx.moveTo(w * fx - s * 0.5, h * 0.78)
-      ctx.quadraticCurveTo(w * fx, h * (0.78 - 0.3 * flame), w * fx + s * 0.5, h * 0.78)
+      ctx.moveTo(gx, gy - s * 0.3)
+      ctx.lineTo(gx + s * 0.22, gy)
+      ctx.lineTo(gx, gy + s * 0.3)
+      ctx.lineTo(gx - s * 0.22, gy)
+      ctx.closePath()
       ctx.fill()
+      ctx.fillStyle = `rgba(255,255,255,${0.2 + glint * 0.5})`
+      ctx.fillRect(gx - s * 0.06, gy - s * 0.16, s * 0.08, s * 0.16)
     }
-    // The trophy, glinting, which is the whole of what the game wants from you.
-    const glint = 0.5 + Math.sin(t * 8) * 0.5
-    ctx.fillStyle = '#f4c430'
+    const twinkle = 0.5 + Math.sin(t * 7) * 0.5
+    gem(w * 0.47, floor - s * 2.7, twinkle)
+    gem(w * 0.57, floor - s * 2.7, 1 - twinkle)
+    gem(w * 0.3, floor - s * 0.5, twinkle)
+
+    // The trophy, which is the whole of what the game wants from you.
+    const tx = w * 0.8
+    const ty = floor - s * 0.2
+    ctx.fillStyle = DAVE_EGA.yellow
     ctx.beginPath()
-    ctx.moveTo(w * 0.82, h * 0.7)
-    ctx.lineTo(w * 0.9, h * 0.7)
-    ctx.lineTo(w * 0.87, h * 0.78)
-    ctx.lineTo(w * 0.85, h * 0.78)
+    ctx.moveTo(tx - s * 0.3, ty - s * 0.9)
+    ctx.lineTo(tx + s * 0.3, ty - s * 0.9)
+    ctx.lineTo(tx + s * 0.12, ty - s * 0.3)
+    ctx.lineTo(tx - s * 0.12, ty - s * 0.3)
     ctx.closePath()
     ctx.fill()
-    ctx.fillStyle = `rgba(255,255,255,${0.25 + glint * 0.5})`
+    ctx.fillRect(tx - s * 0.22, ty - s * 0.3, s * 0.44, s * 0.1)
+    ctx.strokeStyle = DAVE_EGA.yellow
+    ctx.lineWidth = Math.max(2, s * 0.07)
+    for (const side of [-1, 1]) {
+      ctx.beginPath()
+      ctx.arc(tx + side * s * 0.3, ty - s * 0.72, s * 0.15, -Math.PI / 2, Math.PI / 2, side < 0)
+      ctx.stroke()
+    }
+    ctx.fillStyle = `rgba(255,255,255,${0.2 + twinkle * 0.45})`
     ctx.beginPath()
-    ctx.arc(w * 0.86, h * 0.68, s * (0.3 + glint * 0.2), 0, Math.PI * 2)
+    ctx.arc(tx, ty - s * 1.1, s * (0.16 + twinkle * 0.1), 0, Math.PI * 2)
     ctx.fill()
-    // And a small figure picking his way towards it.
-    const x = lerp(w * 0.1, w * 0.36, ease(t))
-    ctx.fillStyle = '#3a6ed0'
-    ctx.fillRect(x, h * 0.66, s * 0.4, s * 0.7)
-    ctx.fillStyle = '#e0a878'
-    ctx.fillRect(x + s * 0.06, h * 0.6, s * 0.28, s * 0.22)
+
+    // And him, walking towards it, drawn by the game itself.
+    const x = lerp(w * 0.12, w * 0.6, ease(t))
+    drawDave(
+      ctx,
+      { ...newDave({ x: 0, y: 0 }), x: x / s, y: floor / s, onGround: true, vx: 1, facing: 1 },
+      { camera: 0, size: s, clock: t * 6 },
+    )
   },
 
   /** Torchlight, stone, and a clock running down. */

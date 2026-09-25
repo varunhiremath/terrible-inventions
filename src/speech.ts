@@ -16,7 +16,15 @@ export interface VoiceProfile {
   rate: number
 }
 
-export const NARRATOR: VoiceProfile = { pitch: 1, rate: 0.98 }
+/**
+ * The narrator, who tells the stories before each game.
+ *
+ * Was pitch 1 — dead neutral — which on a device that hands back a woman's
+ * voice by default sounded like exactly that, and was asked to be "a bit more
+ * heavier in a male voice". Dropping the pitch weights any voice downwards,
+ * which is the half of this that works whatever the device has installed.
+ */
+export const NARRATOR: VoiceProfile = { pitch: 0.76, rate: 0.94 }
 
 /**
  * {papa}'s delivery. Low, because he is a large man doing a villain voice, and
@@ -74,7 +82,20 @@ const MALE_VOICES = [
   'Aaron',
   'Fred',
   'Rishi',
+  // Android's own voices are named after their speaker code rather than a
+  // person, and the code is the only thing that says who it is. These are the
+  // male English ones Google ships; a phone that has none of the named voices
+  // above almost certainly has one of these.
   'en-gb-x-gbb-network',
+  'en-gb-x-gbb-local',
+  'en-gb-x-gbd-network',
+  'en-gb-x-gbd-local',
+  'en-us-x-iom-network',
+  'en-us-x-iom-local',
+  'en-us-x-iog-network',
+  'en-us-x-iog-local',
+  'en-in-x-ene-network',
+  'en-in-x-ene-local',
 ]
 
 /** Names that turn up on some platform or other and are not male. */
