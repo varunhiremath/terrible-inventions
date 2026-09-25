@@ -32,6 +32,7 @@ import {
 } from '../arcade/dungeon/draw'
 import { playCue } from '../music/player'
 import { createPacer } from '../arcade/pacing'
+import { tweenRun } from '../arcade/dungeon/smooth'
 import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
 import { say, silence } from '../voice'
@@ -154,7 +155,7 @@ export function Prince() {
         wasParry.current = held.parry
 
         let stepped = false
-        const { next } = pacer.advance(run, elapsed, (s) => {
+        const { previous, next, alpha } = pacer.advance(run, elapsed, (s) => {
           clock.current += FIXED
           stepped = true
           return step(s, input, duel ? move : 'none', roll)
@@ -274,7 +275,31 @@ export function Prince() {
         ctx.fillStyle = INK.black
         ctx.fillRect(0, 0, w, h)
 
-        const room = viewAt(next.level, camera.current, next.prince.col, next.prince.row, floors)
+        /*
+         * Where everyone is drawn, part way between the last two steps.
+         *
+         * The simulation stays on its fifteen — the animation tables depend on
+         * those steps landing exactly — but the drawing does not have to, and
+         * drawing the newest state outright meant the same picture four times
+         * and then a jump. Reported as the game looking "so choppy", which is
+         * precisely what it was. The pacer has kept this pair all along.
+         */
+        const drawn = tweenRun(previous, next, alpha)
+
+        /*
+         * The drawn position, for a browser test to sample. Dev only. The
+         * window above carries what the simulation thinks, which is on its
+         * fifteen by design — the only way to tell whether the picture is
+         * smooth is to look at what actually reaches the canvas.
+         */
+        if (import.meta.env.DEV) {
+          const dev = window as unknown as { dungeonDrawn?: unknown }
+          dev.dungeonDrawn = { col: drawn.prince.col, row: drawn.prince.row }
+        }
+
+        // The camera follows the drawn position, not the simulated one, or the
+        // room scrolls in fifteen lurches under a figure moving smoothly.
+        const room = viewAt(next.level, camera.current, drawn.prince.col, drawn.prince.row, floors)
         camera.current = room.col
         const view: View = {
           col: room.col,
@@ -291,12 +316,12 @@ export function Prince() {
         ctx.rect(0, 0, boardW, boardH)
         ctx.clip()
         drawRoom(ctx, next.level, view, boardW, boardH, gatesOpen(next), next.prince.collapsed)
-        for (const guard of next.guards) {
+        for (const guard of drawn.guards) {
           if (guard.row < room.row || guard.row >= room.row + floors) continue
           if (guard.col < room.col - 1 || guard.col > room.col + ROOM_COLS) continue
           drawGuard(ctx, guard, view)
         }
-        drawPrince(ctx, next.prince, view, duel)
+        drawPrince(ctx, drawn.prince, view, duel)
         ctx.restore()
 
         // --- the furniture around it ----------------------------------------

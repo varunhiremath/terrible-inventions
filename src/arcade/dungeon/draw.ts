@@ -934,7 +934,7 @@ const PRINCE_LOOK: Look = {
  * arcing, and drops to nothing on the last frame because that is the frame
  * where the simulation actually moves him up a floor.
  */
-function liftOf(action: string, frame: number): number {
+export function liftOf(action: string, frame: number): number {
   const over = (frames: number, height: number) =>
     Math.sin((Math.min(frame, frames) / frames) * Math.PI) * height
   switch (action) {
