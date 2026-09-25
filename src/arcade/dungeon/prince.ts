@@ -39,6 +39,14 @@ export interface Prince {
    * Lowering yourself over an edge is done by holding down, and hanging is let
    * go of by pressing down — so without this the same press that starts the
    * move finishes it, and holding the button drops you the instant you arrive.
+   *
+   * It only counts down once the button is up. It used to count down on the
+   * clock, which meant holding the button — the natural thing to do on a
+   * touchscreen, and the only way to lower yourself over an edge in the first
+   * place — expired the grip after about a second and then dropped him on the
+   * very press that was holding him there. Reported as pressing down a few
+   * times on any platform and dying, and it was not occasional: past a second
+   * of holding, it was certain.
    */
   gripFrames: number
   health: number
@@ -61,8 +69,14 @@ export const MAX_HEALTH = 3
 export const FRAMES_PER_FLOOR = 3
 /** Falling this far hurts; one more than this is fatal. */
 export const SAFE_FALL = 1
-/** How long a fresh grip ignores the button that made it. */
-export const GRIP = 14
+/**
+ * How long a grip keeps ignoring the button, after the button comes up.
+ *
+ * Short, because letting go is now decided by the button being released
+ * rather than by this running out. All this does is stop the bounce of a
+ * press-release-press being read as two separate intentions.
+ */
+export const GRIP = 6
 
 export const HURT_FALL = 2
 
@@ -117,17 +131,40 @@ function begin(prince: Prince, action: Action): Prince {
  * Only ever consulted when the current sequence permits it, which is what makes
  * committed actions committed.
  */
+/**
+ * How far below a ledge there has to be a floor for climbing down to mean
+ * anything.
+ *
+ * Hanging is how you look before you commit, so it only earns its place where
+ * there is something to look at. Past this, the drop is not a route to
+ * anywhere — it is the bottom of the level with nothing in between.
+ */
+const REACHABLE_BELOW = 3
+
+/** Is there any floor under this column, close enough to be climbing down to? */
+function somethingBelow(level: Level, col: number, row: number): boolean {
+  for (let below = row + 1; below <= row + REACHABLE_BELOW; below++) {
+    if (below >= level.rows.length) return false
+    if (isSolid(tileAt(level, col, below))) return true
+  }
+  return false
+}
+
 function command(prince: Prince, level: Level, input: Input): Prince {
   const forward = input.right ? 1 : input.left ? -1 : 0
   const running = prince.action === 'run'
 
   if (prince.action === 'hang') {
     if (input.up) return begin(prince, 'climbUp')
-    // Still holding the button that got him here: not a request to let go.
+    /*
+     * Letting go is a thing you ask for, not a thing that happens to you.
+     *
+     * Two presses: the one that lowered him over the edge, and a separate one
+     * that drops him. Holding the first down hangs him there for as long as he
+     * likes, which is the entire point of hanging — it is how you see what is
+     * under you before committing to it.
+     */
     if (prince.gripFrames > 0) return prince
-    // Letting go is a thing you ask for, not a thing that happens to you.
-    // It used to drop him the moment the careful button came up, which on a
-    // touchscreen meant a hang you could not hold long enough to look down.
     if (input.down) return { ...begin(prince, 'fall'), fellFrom: prince.row, framesFalling: 0 }
     return prince
   }
@@ -168,11 +205,24 @@ function command(prince: Prince, level: Level, input: Input): Prince {
      *
      * The edge has to be behind him — you back over a ledge, you do not walk
      * off one forwards — which is why the move starts with turning round.
+     *
+     * And there has to be something down there. Every floor in this dungeon
+     * starts him at column two with column one empty, so the tile behind him
+     * is a gap before he has moved at all — which meant the first thing a
+     * curious player did, press down, was read as "lower yourself over the
+     * edge" into a drop with no bottom. Pressing down a few times on any
+     * platform killed him, on all thirteen floors, and that is precisely what
+     * was reported.
+     *
+     * You climb down *to* somewhere. If there is nowhere, this is not a climb,
+     * it is stepping off a tower, and it is not what a press of down means.
      */
     const col = Math.round(prince.col)
     const behind = col - prince.facing
-    const atEdge = !isSolid(tileAt(level, behind, prince.row))
-    if (atEdge) return { ...begin(prince, 'climbDown'), col, gripFrames: GRIP }
+    const gap = !isSolid(tileAt(level, behind, prince.row))
+    if (gap && somethingBelow(level, behind, prince.row)) {
+      return { ...begin(prince, 'climbDown'), col, gripFrames: GRIP }
+    }
     return begin(prince, 'crouch')
   }
 
@@ -190,7 +240,12 @@ function command(prince: Prince, level: Level, input: Input): Prince {
 export function tick(prince: Prince, level: Level, input: Input, gateOpen = false): Prince {
   if (prince.dead || prince.atExit) return prince
 
-  let next = { ...prince, gripFrames: Math.max(0, prince.gripFrames - 1) }
+  // The grip is let go of by the thumb, not by the clock: it only runs down
+  // while the button is up.
+  let next = {
+    ...prince,
+    gripFrames: input.down ? prince.gripFrames : Math.max(0, prince.gripFrames - 1),
+  }
   const sequence = SEQUENCES[next.action]
 
   // A loose tile gives way a moment after it takes weight.

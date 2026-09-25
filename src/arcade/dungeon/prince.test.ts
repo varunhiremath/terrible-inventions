@@ -148,8 +148,19 @@ describe('jumping', () => {
       rows: ['XXXXXXXXXXXXXX', 'X#####   ####X', 'X############X', 'XXXXXXXXXXXXXX'],
       start: { col: 2, row: 1, facing: 1 },
     }
-    // Run first, then jump — which is the whole point of the distinction.
-    let prince = until(newPrince(level), level, press({ right: true }), 12)
+    /*
+     * Run first, then jump — which is the whole point of the distinction.
+     *
+     * Twenty frames of run-up, not twelve. The run was halved (it was five
+     * tiles a second, which was reported as very fast), so it takes longer to
+     * cover the same ground. The jump's own reach is untouched, which is why
+     * the gap is still clearable at all: what changed is where he is standing
+     * when the button goes in, not how far the jump carries him.
+     *
+     * There is a window at both ends. Too short a run-up and he is not up to
+     * speed; too long and he has run into the gap before jumping at all.
+     */
+    let prince = until(newPrince(level), level, press({ right: true }), 20)
     expect(prince.action).toBe('run')
     prince = until(prince, level, press({ right: true, up: true }), 30)
 

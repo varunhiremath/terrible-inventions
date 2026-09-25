@@ -89,22 +89,36 @@ export const SEQUENCES: Record<Action, Sequence> = {
     interruptible: false,
   },
 
+/*
+ * How fast he goes.
+ *
+ * These were half as fast again as they are now: a run of 0.34 tiles a frame,
+ * which at fifteen frames a second is five tiles — five times his own width —
+ * every second. Reported as running very fast, and it was. A tile is about a
+ * stride, so a run wants to be somewhere near two and a half a second, which
+ * is what these come to.
+ *
+ * Only the running changes. A careful step still covers exactly one tile, and
+ * every jump keeps its own reach, because those are the distances the levels
+ * are built around — making him slower must not make a gap uncrossable.
+ */
+
   // A run has to be wound up; you cannot sprint from standing.
   startRun: {
-    frames: [f(0.08, 0, 'run1'), f(0.16, 0, 'run2'), f(0.24, 0, 'run3'), f(0.3, 0, 'run4')],
+    frames: [f(0.05, 0, 'run1'), f(0.09, 0, 'run2'), f(0.13, 0, 'run3'), f(0.16, 0, 'run4')],
     then: 'run',
     interruptible: false,
   },
 
   run: {
-    frames: [f(0.34, 0, 'run5'), f(0.34, 0, 'run6'), f(0.34, 0, 'run7'), f(0.34, 0, 'run8')],
+    frames: [f(0.17, 0, 'run5'), f(0.17, 0, 'run6'), f(0.17, 0, 'run7'), f(0.17, 0, 'run8')],
     then: 'run',
     interruptible: true,
   },
 
   // And it has to be wound down, which is how you end up over a ledge.
   stopRun: {
-    frames: [f(0.26, 0, 'skid1'), f(0.16, 0, 'skid2'), f(0.08, 0, 'skid3')],
+    frames: [f(0.14, 0, 'skid1'), f(0.09, 0, 'skid2'), f(0.04, 0, 'skid3')],
     then: 'stand',
     interruptible: false,
   },
