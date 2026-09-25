@@ -32,11 +32,11 @@ export const LEVELS: readonly Level[] = [
     torches: [{ col: 4, row: 0 }, { col: 13, row: 2 }, { col: 22, row: 1 }],
     rows: [
       'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-      'X ######                     X',
+      'X #####h                     X',
       'X       ###.# #####| ######E#X',
       'X  #         ##     ##       X',
       'X # #### #      s            X',
-      'X #  ##h   ###  #       # #  X',
+      'X #  ###   ###  #       # #  X',
     ],
   },
   {
@@ -94,9 +94,9 @@ export const LEVELS: readonly Level[] = [
       'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
       'X ####   #.###             # X',
       'X     ###     ###  |#####    X',
-      'X #          ~   ###     ##E#X',
+      'X #          ~   ###     h#E#X',
       'X   C   ~  ### ^^    # #     X',
-      'X    #  ~   C       ^ #  h   X',
+      'X    #  ~   C       ^ #  #   X',
     ],
   },
   {
@@ -138,9 +138,9 @@ export const LEVELS: readonly Level[] = [
     rows: [
       'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
       'X #####  #####     ~         X',
-      'X      ##.    ###    ######E#X',
+      'X      h#.    ###    ######E#X',
       'X  ^ ^    #      #|##        X',
-      'X   ## h       #      #   #  X',
+      'X   ## #       #      #   #  X',
       'X  C#  C ^#      ~   ^ # ### X',
     ],
   },
@@ -168,10 +168,10 @@ export const LEVELS: readonly Level[] = [
     rows: [
       'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
       'X ########.  #####|##     ## X',
-      'X          ###       ####    X',
+      'X          ###       h###    X',
       'X  #  ^  #               ##E#X',
       'X    ~# C  #                 X',
-      'X #  #    #    ~ ~   h#C # # X',
+      'X #  #    #    ~ ~   ##C # # X',
     ],
   },
   {
@@ -212,9 +212,9 @@ export const LEVELS: readonly Level[] = [
     torches: [{ col: 4, row: 0 }, { col: 13, row: 0 }, { col: 22, row: 0 }],
     rows: [
       'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-      'X ###  ##.########|########E#X',
+      'X ###  ##.########|####h###E#X',
       'X    ###                     X',
-      'X  #        #          h # # X',
+      'X  #        #          # # # X',
       'X  ##~ # ^ #  C    ~    ## # X',
       'X #  #~         #   # # # C# X',
     ],

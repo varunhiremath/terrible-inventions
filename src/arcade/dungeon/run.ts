@@ -13,6 +13,7 @@ import {
   GATE_OPEN_FRAMES,
   TILE,
   findTiles,
+  standable,
   tileAt,
   type Level,
 } from './level'
@@ -253,10 +254,29 @@ function stepDuel(run: Run, guard: Guard, move: Move, roll: () => number): Run {
     ...guard,
     ...mine.defender,
     ...his.attacker,
+    col: standable(run.level, Math.round(his.attacker.col), guard.row)
+      ? his.attacker.col
+      : guard.col,
     health: hisHealth,
     stance: hisHealth <= 0 ? 'dead' : his.attacker.stance,
     roused: true,
   }
+
+  /*
+   * A fight does not suspend the floor.
+   *
+   * A duel sets both fighters' columns straight from the combat code, which
+   * knows about reach and timing and nothing at all about the level — so
+   * backing away during a fight walked either of them clean off the end of a
+   * ledge and left them swinging in mid-air. Reported exactly that way: "I'm
+   * standing in air, and even the soldier sometimes."
+   *
+   * Neither of them may step onto a column with no floor under it. Standing
+   * your ground at the edge is the right answer here: a fight that drops you
+   * down a storey the moment you give ground is a fight about the scenery.
+   */
+  const footing = (want: number, was: number, row: number) =>
+    standable(run.level, Math.round(want), row) ? want : was
 
   return {
     ...run,
@@ -264,7 +284,7 @@ function stepDuel(run: Run, guard: Guard, move: Move, roll: () => number): Run {
     prince: {
       ...run.prince,
       facing: me.facing,
-      col: mine.attacker.col,
+      col: footing(mine.attacker.col, run.prince.col, run.prince.row),
       health: myHealth,
       stance: myHealth <= 0 ? 'dead' : mine.attacker.stance,
       stanceFrame: mine.attacker.frame,

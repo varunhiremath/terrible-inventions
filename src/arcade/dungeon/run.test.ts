@@ -255,3 +255,50 @@ describe('the sword itself', () => {
     expect(swords).toBeGreaterThan(0)
   })
 })
+
+describe('fighting near an edge', () => {
+  /*
+   * "I'm standing in air, and even the soldier sometimes."
+   *
+   * A duel sets both fighters' columns straight from the combat code, which
+   * knows about reach and timing and nothing whatsoever about the level — and
+   * the movement code that handles falling is not run while a fight is on. So
+   * giving ground during a fight walked either of them off the end of a ledge
+   * and left them swinging over the gap.
+   */
+  const brink: Level = {
+    name: 'brink',
+    // Floor from 1 to 10, then nothing. Both of them start on it.
+    rows: ['XXXXXXXXXXXXXXXX', 'X##########     ', 'X##############X'],
+    start: { col: 9, row: 1, facing: 1 },
+    guards: [{ col: 10, row: 1, facing: -1, skill: 0, colour: 'guard' }],
+  }
+
+  const solid = (run: Run, col: number) =>
+    ['#', 'X'].includes(run.level.rows[1][Math.round(col)] ?? ' ')
+
+  it('never leaves the prince over the gap while a fight is on', () => {
+    // Only while fighting. Walking off a ledge under your own steam and
+    // falling is the game working; it is being held up by nothing that is not.
+    let run = newRun(brink, 1, RUN_SECONDS * FPS, true)
+    for (let i = 0; i < 600; i++) {
+      run = step(run, held({ right: true }), 'strike', roll)
+      if (run.status !== 'playing') break
+      if (!fightingGuard(run)) continue
+      expect(solid(run, run.prince.col), `frame ${i} at col ${run.prince.col}`).toBe(true)
+    }
+  })
+
+  it('never leaves a guard over the gap either', () => {
+    let run = newRun(brink, 1, RUN_SECONDS * FPS, true)
+    for (let i = 0; i < 600; i++) {
+      run = step(run, held({ left: true }), 'parry', roll)
+      if (run.status !== 'playing') break
+      if (!fightingGuard(run)) continue
+      for (const guard of run.guards) {
+        if (guard.health <= 0) continue
+        expect(solid(run, guard.col), `frame ${i} guard at ${guard.col}`).toBe(true)
+      }
+    }
+  })
+})

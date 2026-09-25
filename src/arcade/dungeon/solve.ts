@@ -140,3 +140,35 @@ export function canReach(level: Level, want: string, budget = 400_000): boolean 
   }
   return false
 }
+
+/**
+ * Every tile he can stand on, playing the level for real.
+ *
+ * The same question `canReach` asks, asked once for the whole level instead of
+ * once per tile. Used to check that what is lying about in a level can be
+ * picked up, and to find somewhere to put it when it cannot.
+ */
+export function reachableTiles(level: Level, budget = 400_000): Set<string> {
+  const start = newPrince(level)
+  const queue: { prince: Prince; gate: number }[] = [{ prince: start, gate: 0 }]
+  const seen = new Set<string>([keyOf(start, 0)])
+  const tiles = new Set<string>()
+
+  while (queue.length > 0 && seen.size < budget) {
+    const here = queue.shift()!
+    tiles.add(`${Math.round(here.prince.col)},${here.prince.row}`)
+
+    for (const input of INPUTS) {
+      const next = tick(here.prince, level, input, here.gate > 0)
+      if (next.dead) continue
+
+      const under = tileAt(level, Math.round(next.col), next.row)
+      const gate = under === TILE.BUTTON ? GATE_HOLD : Math.max(0, here.gate - 1)
+      const key = keyOf(next, gate)
+      if (seen.has(key)) continue
+      seen.add(key)
+      queue.push({ prince: next, gate })
+    }
+  }
+  return tiles
+}
