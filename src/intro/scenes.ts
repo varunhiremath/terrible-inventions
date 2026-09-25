@@ -5,19 +5,37 @@
  * scrubbed, paused or replayed and always looks the same at the same moment.
  * Nothing here reads a clock of its own.
  *
- * They are drawn with the games' own code wherever there is any — the dungeon's
- * figure, the pipes' apprentice and enemies — so the person in the intro is
- * literally the person in the game rather than a drawing of them. That costs
- * nothing and it is the difference between an intro about the game and an
- * intro next to it.
+ * They are the games. Not drawings of the games: the real level data, drawn by
+ * the game's own drawing code, with a camera panning along it. The cutscene is
+ * a lap of the first level, and the last thing it reaches is the thing the
+ * level wants from you — the trophy, the exit, the flag.
+ *
+ * That is the whole design rule here, and it came from the only review that
+ * matters: "I want the intro video to contain quick snapshots from the game
+ * itself. A quick run through the levels and final objectives. Here the videos
+ * look very different from the actual game." They were. Every scene below used
+ * to be its own hand-drawn approximation, and an approximation of a game you
+ * are about to play is worse than nothing — it teaches you to expect the wrong
+ * thing.
+ *
+ * The one scene that is not a game is the workshop, and it is a silhouette. It
+ * is nobody's portrait.
  */
-import { drawFigure, type Look } from '../arcade/dungeon/figure'
-import { poseFor } from '../arcade/dungeon/draw'
-import { EGA as DAVE_EGA, drawDave } from '../dave/draw'
+import { drawPrince, drawRoom, FLOOR_DEPTH } from '../arcade/dungeon/draw'
+import { isSolid as dungeonSolid, levelCols, ROOM_COLS, ROOM_ROWS } from '../arcade/dungeon/level'
+import { levelFor as dungeonLevel } from '../arcade/dungeon/levels'
+import { newPrince } from '../arcade/dungeon/prince'
+import { boardFor, isWall, key as cellKey, neighbours, TILE as MAZE, type Board, type Cell } from '../arcade/maze/maze'
+import { drawLevel as drawCave, EGA as DAVE_EGA, drawDave } from '../dave/draw'
+import { isSolid as caveSolid, VIEW_TILES_X, VIEW_TILES_Y } from '../dave/level'
+import { levelFor as caveLevel } from '../dave/levels'
 import { newDave } from '../dave/physics'
-import { drawHero, INK as PIPE_INK } from '../pipes/draw'
-import { VIEW_TOP } from '../pipes/level'
+import { drawBackdrop, drawEnemies, drawFlag, drawHero, drawItems, drawLevel as drawPipes, INK as PIPE_INK } from '../pipes/draw'
+import { isSolid as pipeSolid, VIEW_ROWS, VIEW_TOP } from '../pipes/level'
+import { levelFor as pipeLevel } from '../pipes/levels'
 import { newBody } from '../pipes/physics'
+import { newRun } from '../pipes/run'
+import { drawMachine, drawRunner, MACHINE_INK } from '../render/silhouettes'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -34,6 +52,18 @@ export interface Stage {
 /** Eased, so nothing in a cutscene moves at a constant speed. */
 const ease = (t: number) => t * t * (3 - 2 * t)
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+const clamp = (n: number, low: number, high: number) => Math.min(high, Math.max(low, n))
+
+/**
+ * How far along the level we are by now, 0 to 1.
+ *
+ * Off the story clock rather than the beat, so the camera carries on through
+ * a cut instead of snapping back to the start of the level every time the
+ * narrator draws breath. A story is around half a minute; `over` is set a
+ * little under that for each game so the pan lands on the objective while
+ * there is still a line left to say about it.
+ */
+const sweep = (clock: number, over: number) => ease(clamp(clock / over, 0, 1))
 
 function wash(ctx: Ctx, w: number, h: number, top: string, bottom: string): void {
   const sky = ctx.createLinearGradient(0, 0, 0, h)
@@ -43,54 +73,53 @@ function wash(ctx: Ctx, w: number, h: number, top: string, bottom: string): void
   ctx.fillRect(0, 0, w, h)
 }
 
-/** Papa, looming. The villain of all four of these. */
-function papa(ctx: Ctx, cx: number, cy: number, s: number, menace: number): void {
+/**
+ * The villain, at his bench, in silhouette.
+ *
+ * This was a face — a big cartoon head that rose into the middle of the frame
+ * and grinned. It was asked about as "not sure if that big face is supposed to
+ * be me?", which is the answer on its own: a face invites you to read it as
+ * somebody's face, and nobody in this app has one. A hunched shape seen from
+ * behind at a workbench says villain without saying whose.
+ */
+function villain(ctx: Ctx, cx: number, cy: number, s: number, menace: number): void {
   ctx.save()
   ctx.translate(cx, cy)
   ctx.scale(s, s)
 
-  ctx.fillStyle = '#2a2f3a'
+  // The bench light behind him, which is what makes him a silhouette at all.
+  const lamp = ctx.createRadialGradient(0, -0.2, 0.05, 0, -0.2, 1.7)
+  lamp.addColorStop(0, `rgba(255,210,120,${0.36 + menace * 0.2})`)
+  lamp.addColorStop(1, 'rgba(255,170,60,0)')
+  ctx.fillStyle = lamp
+  ctx.fillRect(-2.6, -2.2, 5.2, 4.4)
+
+  ctx.fillStyle = '#080a0f'
+  // Shoulders, rounded and rising as the menace goes up: a hunch is a mood.
+  const hunch = lerp(0.1, 0.28, menace)
   ctx.beginPath()
-  ctx.ellipse(0, 0.3, 1.1, 1.25, 0, 0, Math.PI * 2)
+  ctx.moveTo(-1.05, 1.4)
+  ctx.quadraticCurveTo(-0.95, 0.1 + hunch, -0.42, -0.16 + hunch)
+  ctx.quadraticCurveTo(0, -0.32 + hunch, 0.42, -0.16 + hunch)
+  ctx.quadraticCurveTo(0.95, 0.1 + hunch, 1.05, 1.4)
+  ctx.closePath()
   ctx.fill()
-  ctx.fillStyle = '#d8a878'
+  // The back of a head. No features, from this side there are none to draw.
   ctx.beginPath()
-  ctx.ellipse(0, -0.05, 0.78, 0.92, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, -0.55 + hunch, 0.42, 0.46, 0, 0, Math.PI * 2)
   ctx.fill()
-  // Hair, a moustache, and eyebrows that come down as the menace goes up.
-  ctx.fillStyle = '#3a2a20'
-  ctx.beginPath()
-  ctx.ellipse(0, -0.62, 0.8, 0.34, 0, Math.PI, 0)
-  ctx.fill()
-  ctx.fillRect(-0.34, 0.3, 0.68, 0.14)
-  const brow = lerp(-0.34, -0.22, menace)
-  for (const side of [-1, 1]) {
-    ctx.fillStyle = '#3a2a20'
-    ctx.save()
-    ctx.translate(side * 0.34, brow)
-    ctx.rotate(side * lerp(0, 0.45, menace))
-    ctx.fillRect(-0.22, -0.05, 0.44, 0.1)
-    ctx.restore()
-    ctx.fillStyle = '#ffffff'
-    ctx.beginPath()
-    ctx.ellipse(side * 0.34, -0.12, 0.19, 0.16, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = '#1a1410'
-    ctx.beginPath()
-    ctx.ellipse(side * 0.34 + 0.03, -0.12, 0.08, 0.1, 0, 0, Math.PI * 2)
-    ctx.fill()
-  }
-  // A grin that widens with the menace, because that is all a villain needs.
-  ctx.strokeStyle = '#8a4a3a'
-  ctx.lineWidth = 0.07
+  // An arm out over the bench, reaching for whatever he is about to release.
+  ctx.lineWidth = 0.3
   ctx.lineCap = 'round'
+  ctx.strokeStyle = '#080a0f'
   ctx.beginPath()
-  ctx.arc(0, 0.28, lerp(0.2, 0.36, menace), 0.2, Math.PI - 0.2)
+  ctx.moveTo(0.6, 0.25 + hunch)
+  ctx.lineTo(lerp(0.95, 1.22, menace), lerp(0.5, 0.15, menace))
   ctx.stroke()
   ctx.restore()
 }
 
-/** A wall of masonry, for the dungeon scenes. */
+/** A wall of masonry, for anything that needs a backdrop rather than a room. */
 function stone(ctx: Ctx, w: number, h: number, s: number, shade: string, lit: string): void {
   for (let y = 0; y < h + s; y += s * 0.6) {
     const offset = Math.round(y / (s * 0.6)) % 2 === 0 ? 0 : s * 0.5
@@ -103,14 +132,211 @@ function stone(ctx: Ctx, w: number, h: number, s: number, shade: string, lit: st
   }
 }
 
-const PRINCE: Look = {
-  body: '#efe7d6', legs: '#e4dbc6', trim: '#c0392b', skin: '#e0a878',
-  hair: '#2b1d14', band: '#2f5f9e', sleeveless: true, barefoot: true, loose: true,
+/**
+ * The surface under a column, starting the search at `from` and going down.
+ *
+ * Every one of these levels is a room with a border, so searching from the top
+ * finds the ceiling and stands whoever it is on the roof. Searching down from
+ * where they start finds the floor they are actually on.
+ *
+ * Over a pit there is no answer, and the honest thing is to keep the last one:
+ * a walker crossing a gap in a cutscene is mid-jump, not falling out of shot.
+ */
+export function floorUnder(
+  rows: readonly string[],
+  col: number,
+  from: number,
+  solid: (tile: string) => boolean,
+): number | null {
+  const x = Math.round(col)
+  for (let y = Math.max(0, Math.floor(from)); y < rows.length; y++) {
+    const line = rows[y]
+    if (x < 0 || x >= line.length) return null
+    if (solid(line[x])) return y
+  }
+  return null
 }
-const GUARD: Look = {
-  body: '#a83232', legs: '#6b3a86', trim: '#e0b13c', skin: '#c99a6a',
-  hair: '#1f1611', band: '#e0b13c', turban: true, coat: true, loose: true, curved: true,
+
+/**
+ * A walker's height over a level, smoothed between columns.
+ *
+ * Taking the floor under the nearest column alone makes them climb steps like
+ * a lift. Blending the two columns they are between, and arcing over anything
+ * with no floor at all, is a walk.
+ */
+function walkHeight(
+  rows: readonly string[],
+  col: number,
+  from: number,
+  solid: (tile: string) => boolean,
+  fallback: number,
+): number {
+  const left = floorUnder(rows, Math.floor(col), from, solid)
+  const right = floorUnder(rows, Math.floor(col) + 1, from, solid)
+  if (left === null && right === null) return fallback
+  if (left === null) return right!
+  if (right === null) return left
+  /*
+   * The higher of the two, not a blend between them.
+   *
+   * Blending looks like a smooth walk up a slope right until the step is a
+   * stack of blocks, and then he is drawn halfway inside it. Standing on
+   * whichever surface is higher means he is always on top of something.
+   */
+  return Math.min(left, right)
 }
+
+/*
+ * Levels are built once and kept. They are plain data and nothing here changes
+ * them, and rebuilding a hundred-column level sixty times a second to draw one
+ * frame of a cutscene is work for nothing.
+ */
+const CAVE = caveLevel(1)
+const PIPE_RUN = newRun(pipeLevel(1), 1)
+const DUNGEON = dungeonLevel(1)
+
+/**
+ * One step, ignoring the tunnel.
+ *
+ * Walking out of one side and back in the other is a legal move and it
+ * teleports whoever does it clean across the frame, which reads as a glitch
+ * rather than as a tunnel when there is no time to explain it.
+ */
+function stepsFrom(board: Board, cell: Cell): Cell[] {
+  return neighbours(board, cell).filter(
+    (n) => Math.abs(n.x - cell.x) <= 1 && Math.abs(n.y - cell.y) <= 1,
+  )
+}
+
+/** The shortest way from `from` to the nearest cell that `wanted` accepts. */
+function routeTo(board: Board, from: Cell, wanted: (cell: Cell) => boolean): Cell[] {
+  const came = new Map<string, Cell | null>([[cellKey(from), null]])
+  const queue: Cell[] = [from]
+
+  while (queue.length > 0) {
+    const at = queue.shift()!
+    if (wanted(at) && cellKey(at) !== cellKey(from)) {
+      const back: Cell[] = []
+      let cursor: Cell | null = at
+      while (cursor && cellKey(cursor) !== cellKey(from)) {
+        back.unshift(cursor)
+        cursor = came.get(cellKey(cursor)) ?? null
+      }
+      return back
+    }
+    for (const next of stepsFrom(board, at)) {
+      if (came.has(cellKey(next))) continue
+      came.set(cellKey(next), at)
+      queue.push(next)
+    }
+  }
+  return []
+}
+
+/**
+ * A run round a board, worked out once: head for the nearest dot, eat it,
+ * head for the next.
+ *
+ * The first version of this carried straight on and turned where it could not,
+ * which is roughly how the board is played right up until it walks into a dead
+ * end — and then it ping-ponged on the spot for the rest of the cutscene while
+ * four Machines piled on top of it. Rendering the scene is the only thing that
+ * showed that; every number involved was perfectly reasonable.
+ */
+const TOURS = new Map<string, Cell[]>()
+function tourOf(board: Board): Cell[] {
+  const cached = TOURS.get(board.name)
+  if (cached) return cached
+
+  const left = new Set<string>()
+  for (let y = 0; y < board.height; y++) {
+    for (let x = 0; x < board.width; x++) {
+      const tile = board.rows[y][x]
+      if (tile === MAZE.DOT || tile === MAZE.POWER) left.add(cellKey({ x, y }))
+    }
+  }
+
+  const path: Cell[] = [board.playerStart]
+  left.delete(cellKey(board.playerStart))
+
+  while (left.size > 0 && path.length < 600) {
+    const leg = routeTo(board, path[path.length - 1], (cell) => left.has(cellKey(cell)))
+    if (leg.length === 0) break
+    for (const cell of leg) {
+      path.push(cell)
+      left.delete(cellKey(cell))
+    }
+  }
+
+  TOURS.set(board.name, path)
+  return path
+}
+
+/** The way one Machine comes at you: the real shortest path down real corridors. */
+const CHASES = new Map<string, Cell[]>()
+function chaseOf(board: Board, start: Cell): Cell[] {
+  const id = `${board.name}:${cellKey(start)}`
+  const cached = CHASES.get(id)
+  if (cached) return cached
+  const route = [start, ...routeTo(board, start, (cell) => cellKey(cell) === cellKey(board.playerStart))]
+  CHASES.set(id, route)
+  return route
+}
+
+/**
+ * Which floor he is on at each column of the dungeon, worked out once, with
+ * `null` for the columns that are a hole all the way down.
+ *
+ * Without this he was drawn at the row he starts on for the whole pan, and
+ * that row is empty air for most of the level — so the cutscene showed him
+ * striding along on nothing. Which is the exact thing that was reported about
+ * the game itself ("I'm standing in air"), and putting it in the trailer as
+ * well would be quite the advertisement.
+ *
+ * The search only ever looks down, because a dungeon is a thing you descend.
+ */
+export const DUNGEON_FLOORS: (number | null)[] = (() => {
+  const floors: (number | null)[] = []
+  let row = DUNGEON.start.row
+  for (let col = 0; col < levelCols(DUNGEON); col++) {
+    const found = floorUnder(DUNGEON.rows, col, row, dungeonSolid)
+    if (found !== null) row = found
+    floors.push(found)
+  }
+  return floors
+})()
+
+/**
+ * Where he is at a given column: a floor to run along, or a leap across a gap.
+ *
+ * A column with nothing under it is not a mistake in the level, it is the
+ * level — the dungeon is mostly holes. So the gap is spanned between the last
+ * floor before it and the first floor after, on an arc, which is what a
+ * running jump looks like and is the only honest way across.
+ */
+function dungeonStep(col: number): { row: number; jumping: boolean } {
+  const last = DUNGEON_FLOORS.length - 1
+  const here = clamp(Math.floor(col), 0, last)
+  if (DUNGEON_FLOORS[here] !== null && DUNGEON_FLOORS[clamp(here + 1, 0, last)] !== null) {
+    const from = DUNGEON_FLOORS[here]!
+    const to = DUNGEON_FLOORS[clamp(here + 1, 0, last)]!
+    return { row: lerp(from, to, col - Math.floor(col)), jumping: from !== to }
+  }
+
+  let before = here
+  while (before > 0 && DUNGEON_FLOORS[before] === null) before--
+  let after = here
+  while (after < last && DUNGEON_FLOORS[after] === null) after++
+  const near = DUNGEON_FLOORS[before] ?? DUNGEON_FLOORS[after] ?? DUNGEON.start.row
+  const far = DUNGEON_FLOORS[after] ?? near
+  const across = after - before
+  const f = across > 0 ? clamp((col - before) / across, 0, 1) : 0
+  // Up and over: the arc is what stops a jump reading as a lift.
+  return { row: lerp(near, far, f) - Math.sin(f * Math.PI) * 0.35, jumping: true }
+}
+
+/** The four Machines, in the colours they are on the board. */
+const MACHINES = ['#e8503a', '#f49ac1', '#5ad2e0', '#f0a04b']
 
 /** Every scene any story can name. */
 export const SCENES: Record<string, (stage: Stage) => void> = {
@@ -137,244 +363,228 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
       }
       ctx.restore()
     }
-    // And Papa rising into the middle of it.
-    // Up and settled inside the first second: he is the point of the scene,
-    // and a villain still rising into shot when his line ends is not menacing,
-    // he is late.
-    papa(ctx, w / 2, h * lerp(1.25, 0.42, ease(Math.min(1, t * 4))), s * 0.28, Math.min(1, t * 3))
+    // The bench he is hunched over, and him hunched over it.
+    ctx.fillStyle = '#141824'
+    ctx.fillRect(0, h * 0.72, w, h * 0.28)
+    villain(ctx, w / 2, h * lerp(1.15, 0.58, ease(Math.min(1, t * 4))), s * 0.3, Math.min(1, t * 3))
   },
 
-  /** The maze, filling with chasers. */
-  maze({ ctx, w, h, t }) {
+  /**
+   * The maze: the real board, the real route, the real characters.
+   *
+   * Level one's board, drawn from the same rows the game plays on — which
+   * means the corners in the cutscene are the corners you are about to turn.
+   */
+  maze({ ctx, w, h, clock }) {
     wash(ctx, w, h, '#05070c', '#0b1020')
-    const s = Math.min(w, h) * 0.075
-    ctx.strokeStyle = '#cdd6e2'
-    ctx.lineWidth = Math.max(2, s * 0.12)
-    for (let i = 0; i < 9; i++) {
-      const y = h * 0.16 + i * s * 0.9
-      ctx.globalAlpha = 0.25 + (i % 2) * 0.2
-      ctx.beginPath()
-      ctx.moveTo(w * 0.08, y)
-      ctx.lineTo(w * 0.92, y)
-      ctx.stroke()
+
+    const board = boardFor(1)
+    const s = Math.min(w / (board.width + 1), h / (board.height + 1))
+    const ox = (w - board.width * s) / 2
+    const oy = (h - board.height * s) / 2
+    const at = (cell: Cell) => ({ x: ox + (cell.x + 0.5) * s, y: oy + (cell.y + 0.5) * s })
+
+    // Walls, as the bars the board is built from.
+    ctx.fillStyle = '#f24fd6'
+    for (let y = 0; y < board.height; y++) {
+      for (let x = 0; x < board.width; x++) {
+        if (!isWall(board, { x, y })) continue
+        ctx.fillRect(ox + x * s + s * 0.12, oy + y * s + s * 0.12, s * 0.76, s * 0.76)
+      }
     }
-    ctx.globalAlpha = 1
-    // Dots, going out one by one as the runner passes them.
-    const eaten = ease(t) * 14
-    for (let i = 0; i < 14; i++) {
-      if (i < eaten) continue
-      ctx.fillStyle = '#ffe9a8'
-      ctx.beginPath()
-      ctx.arc(w * 0.12 + i * w * 0.058, h * 0.62, s * 0.11, 0, Math.PI * 2)
-      ctx.fill()
-    }
-    const runnerX = w * 0.1 + ease(t) * w * 0.8
-    const chomp = Math.abs(Math.sin(t * 22)) * 0.5 + 0.06
-    ctx.fillStyle = '#ffd23f'
-    ctx.beginPath()
-    ctx.arc(runnerX, h * 0.62, s * 0.55, chomp, Math.PI * 2 - chomp)
-    ctx.lineTo(runnerX, h * 0.62)
-    ctx.fill()
-    // Four of them, strung out behind and closing.
-    const chasers = ['#e8433a', '#f0a13c', '#6ad0e8', '#f28ac8']
-    chasers.forEach((colour, i) => {
-      const x = runnerX - w * (0.16 + i * 0.09) * (1.3 - ease(t) * 0.5)
-      ctx.fillStyle = colour
-      ctx.beginPath()
-      ctx.arc(x, h * 0.62, s * 0.5, Math.PI, 0)
-      ctx.lineTo(x + s * 0.5, h * 0.62 + s * 0.42)
-      ctx.lineTo(x - s * 0.5, h * 0.62 + s * 0.42)
-      ctx.fill()
-      ctx.fillStyle = '#ffffff'
-      for (const side of [-1, 1]) {
+
+    const tour = tourOf(board)
+    /** Where along a route something is by now, never off the end of it. */
+    const alongOf = (route: Cell[], speed: number) =>
+      Math.min(clock * speed, Math.max(0, route.length - 1.001))
+    // Six cells a second: quick enough to cover ground in a beat, slow enough
+    // to watch.
+    const along = alongOf(tour, 6)
+    const eaten = new Set(tour.slice(0, Math.floor(along) + 1).map(cellKey))
+
+    // Dots, going out as the route passes over them.
+    const pulse = 0.5 + Math.sin(clock * 6) * 0.5
+    for (let y = 0; y < board.height; y++) {
+      for (let x = 0; x < board.width; x++) {
+        const tile = board.rows[y][x]
+        if (tile !== MAZE.DOT && tile !== MAZE.POWER) continue
+        if (eaten.has(cellKey({ x, y }))) continue
+        const p = at({ x, y })
+        ctx.fillStyle = '#ffe9a8'
         ctx.beginPath()
-        ctx.arc(x + side * s * 0.19, h * 0.62 - s * 0.1, s * 0.15, 0, Math.PI * 2)
+        ctx.arc(p.x, p.y, tile === MAZE.POWER ? s * (0.24 + pulse * 0.06) : s * 0.09, 0, Math.PI * 2)
         ctx.fill()
       }
+    }
+
+    /** Where something is between two cells of its route, and which way. */
+    const rideOn = (route: Cell[], along: number) => {
+      const i = Math.floor(along)
+      const from = at(route[i])
+      const to = at(route[Math.min(i + 1, route.length - 1)])
+      const f = along - i
+      return {
+        x: lerp(from.x, to.x, f),
+        y: lerp(from.y, to.y, f),
+        // Canvas y runs down the screen; a heading is measured the other way up.
+        heading: Math.atan2(-(to.y - from.y), to.x - from.x),
+        dx: Math.sign(to.x - from.x),
+        dy: Math.sign(to.y - from.y),
+      }
+    }
+
+    const runner = rideOn(tour, along)
+
+    // The Machines, coming down real corridors on the real shortest path. They
+    // stop a few cells short: the intro is a chase, not a mauling.
+    board.ghostStarts.forEach((start, n) => {
+      const route = chaseOf(board, start)
+      // Each stops a different distance out, or all four arrive on the same
+      // cell and read as one Machine.
+      const reach = Math.max(0, route.length - 3 - n * 3)
+      const machine = rideOn(route, Math.min(clamp(clock - 1 - n * 0.4, 0, 99) * 2.4, reach))
+      drawMachine(
+        ctx, machine.x, machine.y, s * 0.46,
+        machine.dx, machine.dy,
+        (clock * 1.4 + n * 0.25) % 1,
+        MACHINE_INK(MACHINES[n % MACHINES.length]),
+      )
     })
+
+    drawRunner(ctx, runner.x, runner.y, s * 0.46, runner.heading, clock * 4)
   },
 
-  /** A cave, a trophy, and a very long way down. */
   /**
-   * Dave's caves, drawn with Dave's own code.
+   * Dave's caves: level one, drawn by the game, panned end to end.
    *
-   * This used to be coloured rectangles — a blue box for him, a peach square
-   * for his head, a triangle for the trophy — on a brown background that
-   * matched nothing in the game. Reported as looking "so weird and nothing
-   * like the game", which was fair: the caves are red brick on black with
-   * cyan diamonds in them, and the figure is a specific person.
-   *
-   * So the bricks use the game's palette and the figure is the game's own
-   * `drawDave`, which means the person in the intro is literally the person
-   * you play.
+   * This used to be coloured rectangles on a brown background that matched
+   * nothing — reported as "so weird and nothing like the game", which was
+   * fair. Now it is `drawLevel` and `drawDave` off the real level, so the
+   * bricks, the diamonds, the trophy and the man are the ones in the game
+   * because they are literally the same code.
    */
-  cave({ ctx, w, h, t }) {
+  cave({ ctx, w, h, clock }) {
     ctx.fillStyle = DAVE_EGA.black
     ctx.fillRect(0, 0, w, h)
 
-    const s = Math.min(w, h) * 0.13
-    const floor = h * 0.74
+    // The screen's own rule, so the cutscene is framed like the game rather
+    // than cropped into a close-up of three bricks.
+    const size = Math.min(w / VIEW_TILES_X, h / VIEW_TILES_Y)
+    const span = w / size
+    const world = CAVE.rows[0].length
+    const camera = sweep(clock, 22) * Math.max(0, world - span)
 
-    /** One red brick with the speckles the game gives them. */
-    const brick = (bx: number, by: number) => {
-      ctx.fillStyle = DAVE_EGA.red
-      ctx.fillRect(bx, by, s - 1, s - 1)
-      ctx.fillStyle = DAVE_EGA.white
-      for (let i = 0; i < 4; i++) {
-        const seed = Math.sin(bx * 12.9 + by * 78.2 + i * 37.7) * 43758.5
-        const fx = seed - Math.floor(seed)
-        const fy = Math.sin(seed) * 0.5 + 0.5
-        ctx.fillRect(bx + fx * (s - 3), by + fy * (s - 3), 2, 2)
-      }
-    }
+    // Letterboxed into the middle, as the screen does it. Drawn from the top
+    // of the frame the level sits in a band with the whole bottom half black.
+    ctx.save()
+    ctx.translate(0, Math.max(0, (h - size * VIEW_TILES_Y) / 2))
 
-    // Floor, ceiling and the two walls: a cave is a room with a border.
-    for (let x = 0; x < w + s; x += s) {
-      brick(x, floor)
-      brick(x, h * 0.1)
-    }
-    for (let y = h * 0.1; y < floor; y += s) {
-      brick(0, y)
-      brick(w - s, y)
-    }
-    // A ledge to cross, which is what the game is actually made of.
-    for (let i = 0; i < 3; i++) brick(w * 0.42 + i * s, floor - s * 2.1)
+    drawCave(ctx, CAVE, { camera, size, clock }, new Set(), false, w)
 
-    // Diamonds, which are everywhere in this game and are the point of it.
-    const gem = (gx: number, gy: number, glint: number) => {
-      ctx.fillStyle = DAVE_EGA.brightCyan
-      ctx.beginPath()
-      ctx.moveTo(gx, gy - s * 0.3)
-      ctx.lineTo(gx + s * 0.22, gy)
-      ctx.lineTo(gx, gy + s * 0.3)
-      ctx.lineTo(gx - s * 0.22, gy)
-      ctx.closePath()
-      ctx.fill()
-      ctx.fillStyle = `rgba(255,255,255,${0.2 + glint * 0.5})`
-      ctx.fillRect(gx - s * 0.06, gy - s * 0.16, s * 0.08, s * 0.16)
-    }
-    const twinkle = 0.5 + Math.sin(t * 7) * 0.5
-    gem(w * 0.47, floor - s * 2.7, twinkle)
-    gem(w * 0.57, floor - s * 2.7, 1 - twinkle)
-    gem(w * 0.3, floor - s * 0.5, twinkle)
-
-    // The trophy, which is the whole of what the game wants from you.
-    const tx = w * 0.8
-    const ty = floor - s * 0.2
-    ctx.fillStyle = DAVE_EGA.yellow
-    ctx.beginPath()
-    ctx.moveTo(tx - s * 0.3, ty - s * 0.9)
-    ctx.lineTo(tx + s * 0.3, ty - s * 0.9)
-    ctx.lineTo(tx + s * 0.12, ty - s * 0.3)
-    ctx.lineTo(tx - s * 0.12, ty - s * 0.3)
-    ctx.closePath()
-    ctx.fill()
-    ctx.fillRect(tx - s * 0.22, ty - s * 0.3, s * 0.44, s * 0.1)
-    ctx.strokeStyle = DAVE_EGA.yellow
-    ctx.lineWidth = Math.max(2, s * 0.07)
-    for (const side of [-1, 1]) {
-      ctx.beginPath()
-      ctx.arc(tx + side * s * 0.3, ty - s * 0.72, s * 0.15, -Math.PI / 2, Math.PI / 2, side < 0)
-      ctx.stroke()
-    }
-    ctx.fillStyle = `rgba(255,255,255,${0.2 + twinkle * 0.45})`
-    ctx.beginPath()
-    ctx.arc(tx, ty - s * 1.1, s * (0.16 + twinkle * 0.1), 0, Math.PI * 2)
-    ctx.fill()
-
-    // And him, walking towards it, drawn by the game itself.
-    const x = lerp(w * 0.12, w * 0.6, ease(t))
+    // Him, a third in from the left so there is always level ahead of him.
+    const x = camera + span * 0.3
+    const ground = walkHeight(CAVE.rows, x, CAVE.start.y, caveSolid, CAVE.start.y)
     drawDave(
       ctx,
-      { ...newDave({ x: 0, y: 0 }), x: x / s, y: floor / s, onGround: true, vx: 1, facing: 1 },
-      { camera: 0, size: s, clock: t * 6 },
+      { ...newDave({ x: 0, y: 0 }), x, y: ground, onGround: true, vx: 1, facing: 1 },
+      { camera, size, clock },
     )
+    ctx.restore()
   },
 
-  /** Torchlight, stone, and a clock running down. */
-  dungeon({ ctx, w, h, t, clock }) {
+  /**
+   * The dungeon: level one, drawn by the game, panned along.
+   *
+   * Three floors on screen, which is what the game shows, so the drop the
+   * cutscene walks past is the drop you will be looking down.
+   */
+  dungeon({ ctx, w, h, clock }) {
     wash(ctx, w, h, '#12151a', '#080a0e')
-    stone(ctx, w, h * 0.55, Math.min(w, h) * 0.12, '#232a33', '#2f3842')
-    ctx.fillStyle = 'rgba(0,0,0,0.5)'
-    ctx.fillRect(0, h * 0.55, w, h * 0.45)
-    // A torch, with the pool of light a flame actually makes.
-    const flick = Math.sin(clock * 11) * 0.5 + 0.5
-    const s = Math.min(w, h)
-    const glow = ctx.createRadialGradient(w * 0.78, h * 0.3, s * 0.02, w * 0.78, h * 0.3, s * (0.3 + flick * 0.04))
-    glow.addColorStop(0, 'rgba(255,190,90,0.5)')
-    glow.addColorStop(1, 'rgba(255,150,50,0)')
-    ctx.fillStyle = glow
-    ctx.fillRect(0, 0, w, h)
-    ctx.fillStyle = '#ff9a1f'
-    ctx.beginPath()
-    ctx.ellipse(w * 0.78, h * 0.3, s * 0.022, s * (0.05 + flick * 0.02), 0, 0, Math.PI * 2)
-    ctx.fill()
-    // The floor he is running along, and him running along it.
-    ctx.fillStyle = '#79838f'
-    ctx.fillRect(0, h * 0.74, w, h * 0.03)
-    const size = s * 0.2
-    const frame = Math.floor(t * 14) % 4
-    drawFigure(
-      ctx, lerp(w * 0.12, w * 0.6, ease(t)), h * 0.74, size, 1,
-      poseFor('run', frame, 'none'), PRINCE, 'warrior', false,
+
+    // The screen's own rule: the tile decides the floor, and as many floors as
+    // fit are shown, which is how you can see what is under a ledge.
+    const size = Math.min(w / ROOM_COLS, (h / (ROOM_ROWS + FLOOR_DEPTH)) * 0.78)
+    const floorHeight = size / 0.78
+    const fits = Math.floor(h / floorHeight - FLOOR_DEPTH)
+    const rows = Math.max(ROOM_ROWS, Math.min(fits, DUNGEON.rows.length))
+    const world = levelCols(DUNGEON)
+    const camera = sweep(clock, 20) * Math.max(0, world - ROOM_COLS)
+    // Him, a third in from the left, on whichever floor is actually under him.
+    const col = camera + ROOM_COLS * 0.3
+    const { row, jumping } = dungeonStep(col)
+
+    const top = clamp(Math.round(row) - 1, 0, Math.max(0, DUNGEON.rows.length - rows))
+    const view = { col: camera, row: top, rows, size, floorHeight, clock }
+
+    const boardH = floorHeight * (rows + FLOOR_DEPTH)
+    ctx.save()
+    ctx.translate(0, Math.max(0, (h - boardH) / 2))
+
+    drawRoom(ctx, DUNGEON, view, w, boardH, false, [])
+
+    /*
+     * No guard is drawn in. Level one has none, and the point of this scene is
+     * that it is level one — inventing a guard for the cutscene is the exact
+     * thing that made these scenes worth rewriting.
+     */
+    drawPrince(
+      ctx,
+      {
+        ...newPrince(DUNGEON),
+        col,
+        row,
+        facing: 1,
+        // A change of floor, or no floor at all, is a gap — and the only
+        // honest way across a gap in this game is a running jump.
+        action: jumping ? 'runJump' : 'run',
+        frame: Math.floor(clock * 14) % 8,
+      },
+      view,
+      false,
     )
-    drawFigure(
-      ctx, lerp(w * 1.15, w * 0.85, ease(t)), h * 0.74, size, -1,
-      poseFor('stand', 0, 'ready'), GUARD, 'warrior', true,
-    )
+    ctx.restore()
   },
 
-  /** Blue sky, green pipes, and something marching towards you. */
-  pipes({ ctx, w, h, t }) {
+  /**
+   * The pipes: level one, drawn by the game, panned to the flag.
+   *
+   * The pan ends on the pole, because the pole is the answer to the only
+   * question a first-time player has.
+   */
+  pipes({ ctx, w, h, clock }) {
     wash(ctx, w, h, PIPE_INK.skyDeep, PIPE_INK.sky)
-    const s = Math.min(w, h) * 0.15
-    // The ground sits high enough that the caption along the bottom never
-    // covers the thing the caption is talking about.
-    const floor = h * 0.62
-    ctx.fillStyle = PIPE_INK.earth
-    ctx.fillRect(0, floor, w, h)
-    ctx.fillStyle = PIPE_INK.grass
-    ctx.fillRect(0, floor, w, s * 0.28)
-    for (const [px, height] of [[0.58, 1.5], [0.86, 2.2]] as const) {
-      ctx.fillStyle = PIPE_INK.pipe
-      ctx.fillRect(w * px, floor - s * height, s * 1.3, s * height)
-      ctx.fillStyle = PIPE_INK.pipeLight
-      ctx.fillRect(w * px + s * 0.2, floor - s * height, s * 0.25, s * height)
-      ctx.fillStyle = PIPE_INK.pipe
-      ctx.fillRect(w * px - s * 0.12, floor - s * height, s * 1.54, s * 0.34)
-    }
-    // A wind-up machine plodding the other way.
-    const gx = lerp(w * 0.98, w * 0.46, ease(t))
-    ctx.fillStyle = PIPE_INK.grubDark
-    ctx.fillRect(gx - s * 0.28, floor - s * 0.14, s * 0.22, s * 0.14)
-    ctx.fillRect(gx + s * 0.06, floor - s * 0.14, s * 0.22, s * 0.14)
-    ctx.fillStyle = PIPE_INK.grub
-    ctx.beginPath()
-    ctx.roundRect(gx - s * 0.38, floor - s * 0.76, s * 0.76, s * 0.62, s * 0.22)
-    ctx.fill()
-    for (const side of [-1, 1]) {
-      ctx.fillStyle = '#ffffff'
-      ctx.beginPath()
-      ctx.ellipse(gx + side * s * 0.16, floor - s * 0.54, s * 0.11, s * 0.13, 0, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = '#1a1410'
-      ctx.beginPath()
-      ctx.ellipse(gx + side * s * 0.16 - s * 0.03, floor - s * 0.54, s * 0.05, s * 0.07, 0, 0, Math.PI * 2)
-      ctx.fill()
-    }
-    // And the apprentice, jumping clean over it. Drawn with the game's own
-    // code, which measures rows from the top of the *visible* level rather
-    // than from the top of the screen — so his feet have to be converted, not
-    // guessed. Guessing put him off the top of the picture entirely.
-    const hop = ease(Math.min(1, t * 1.15))
-    const feet = VIEW_TOP + (floor - Math.sin(hop * Math.PI) * s * 2.2) / s
+
+    const level = PIPE_RUN.level
+    // The screen's own rule again: never fewer than ten tiles across.
+    const size = Math.min(h / VIEW_ROWS, w / 10)
+    const span = w / size
+    const world = level.rows[0].length
+    const camera = sweep(clock, 24) * Math.max(0, world - span)
+    const view = { col: camera, size, clock }
+
+    const boardH = size * VIEW_ROWS
+    ctx.save()
+    ctx.translate(0, Math.max(0, (h - boardH) / 2))
+
+    drawBackdrop(ctx, view, boardH)
+    drawPipes(ctx, PIPE_RUN, view, w)
+    drawItems(ctx, PIPE_RUN, view)
+    drawEnemies(ctx, PIPE_RUN, view)
+    drawFlag(ctx, level, view, false, clock)
+
+    // The apprentice, running along in front of the camera with a hop in him,
+    // because a level in this game is read through what he can clear.
+    const x = camera + span * 0.28
+    const ground = walkHeight(level.rows, x, VIEW_TOP, pipeSolid, PIPE_RUN.body.y)
+    const hop = Math.max(0, Math.sin(clock * 2.4)) * 1.8
     drawHero(
       ctx,
-      { ...newBody(0, 0), x: lerp(w * 0.08, w * 0.62, hop) / s, y: feet, facing: 1, onGround: false },
-      { col: 0, size: s, clock: t },
+      { ...newBody(x, ground - hop), facing: 1, onGround: hop < 0.05, vx: 4 },
+      view,
       0,
-      t,
+      clock,
     )
+    ctx.restore()
   },
 
   /** The maths door, which is the point of the whole app. */
@@ -411,9 +621,10 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
   },
 
   /** The title card each story lands on. */
-  title({ ctx, w, h, t }) {
+  title({ ctx, w, h, t, clock }) {
     wash(ctx, w, h, '#0e1118', '#05070b')
     const s = Math.min(w, h)
+    stone(ctx, w, h, s * 0.16, 'rgba(30,36,46,0.5)', 'rgba(52,62,76,0.5)')
     const grow = ease(Math.min(1, t * 2))
     ctx.save()
     ctx.translate(w / 2, h / 2)
@@ -424,5 +635,6 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     ctx.strokeRect(-w * 0.42, -h * 0.16, w * 0.84, h * 0.32)
     ctx.restore()
     ctx.globalAlpha = 1
+    void clock
   },
 }

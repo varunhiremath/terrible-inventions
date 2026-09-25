@@ -1,35 +1,47 @@
 /**
- * The player and the chasers, drawn the way the arcade drew them.
+ * The Runner and the Machines, as they appear on the board.
  *
- * The procedural voxel bodies that were here before were good at being little
- * Minecraft creatures and bad at being these: from overhead they read as
- * coloured blobs, and no amount of colour-picking makes a blob look like a
- * character everybody already has a picture of in their head.
+ * These are our own characters, and they are built from the same point lists
+ * the intro draws with (`./silhouettes`), so the thing chasing you in the
+ * cutscene is the thing chasing you in the game.
  *
- * These are the actual shapes. A disc with a wedge bitten out of it, opening
- * and closing as it goes; and a dome on a scalloped skirt with two eyes that
- * look the way it is travelling. Both are flat, because the board is seen from
- * straight above and flat is what the original is.
+ * Both are flat, because the board is seen from straight above, and both are
+ * built as geometry rather than drawn as pictures so they stay sharp at any
+ * size — the board scales to whatever screen it lands on.
  *
- * They are built as geometry rather than drawn as pictures so they stay sharp
- * at any size — the board scales to whatever screen it lands on.
+ * What each has to do at twenty pixels across:
+ *  - the Runner must show which way it is pointing, which the visor does;
+ *  - a Machine must show which way it is about to turn without ever turning
+ *    itself, which the scanner bead does.
+ * Everything else is decoration.
  */
 import * as THREE from 'three'
+import {
+  BEAD_THROW,
+  MACHINE_HULL,
+  MACHINE_ROUND,
+  RUNNER_HULL,
+  RUNNER_ROUND,
+  SKID_THROW,
+  tracePolygon,
+  triangle,
+  type Point,
+} from './silhouettes'
 
 /** A character is a little under a tile across, so it never touches the walls. */
 export const BODY = 0.82
 
 export interface Character {
   group: THREE.Group
-  /** @param t 0 to 1 through the chomp, or the wobble of the skirt */
+  /** @param t 0 to 1 through the shuffle, or the sway of the aerial */
   animate: (t: number) => void
   dispose: () => void
 }
 
 export interface Ghost extends Character {
   /**
-   * Point the eyes. In the original this is the only way to tell which way a
-   * chaser is about to turn, and it is the whole tell.
+   * Point the scanner. A Machine never turns to face its way, so this is the
+   * only warning of which way it is about to go, and it is the whole tell.
    *
    * @param dx -1, 0 or 1
    * @param dy -1, 0 or 1, positive being down the screen
@@ -41,40 +53,61 @@ function flat(colour: number) {
   return new THREE.MeshBasicMaterial({ color: colour, side: THREE.DoubleSide })
 }
 
-/**
- * How wide the mouth opens, in radians, at its widest. The original's mouth
- * shuts completely and opens to about a right angle.
- */
-const MOUTH = Math.PI * 0.62
+/** A rounded polygon from `silhouettes`, in units of half a body width. */
+function slab(points: readonly Point[], round: number, r: number): THREE.ShapeGeometry {
+  const shape = new THREE.Shape()
+  tracePolygon(shape, points, round, r)
+  return new THREE.ShapeGeometry(shape)
+}
 
 /**
- * The player: a disc with a wedge taken out of it.
+ * The Runner: a wedge-nosed hull with a lit visor and two shuffling skids.
  *
- * The wedge is rebuilt every frame rather than swapped between a few fixed
- * poses. It is a handful of triangles, and a mouth that moves continuously is
- * the difference between a character and a flickering sprite.
+ * The skids are separate meshes that slide rather than geometry rebuilt every
+ * frame. A shuffle is a translation; rebuilding a hull sixty times a second to
+ * move two bars is work for nothing.
  */
 export function buildPlayer(colour = 0xffe14d): Character {
-  const material = flat(colour)
-  const mesh = new THREE.Mesh(new THREE.CircleGeometry(BODY / 2, 28), material)
-  mesh.rotation.x = -Math.PI / 2
+  const r = BODY / 2
+  const hullMaterial = flat(colour)
+  const visorMaterial = flat(0x8ff0ff)
+  const skidMaterial = flat(0x4a3a12)
+
+  const hull = new THREE.Mesh(slab(RUNNER_HULL, RUNNER_ROUND, r), hullMaterial)
+  const visor = new THREE.Mesh(
+    slab([[0.3, 0.42], [0.72, 0.2], [0.72, -0.2], [0.3, -0.42]], 0.14, r),
+    visorMaterial,
+  )
+  visor.position.z = 0.004
+
+  const skids = [-1, 1].map((side) => {
+    const mesh = new THREE.Mesh(
+      slab(
+        [[-0.2, side * 0.62], [0.5, side * 0.62], [0.5, side * 0.94], [-0.2, side * 0.94]],
+        0.12,
+        r,
+      ),
+      skidMaterial,
+    )
+    mesh.position.z = -0.004
+    return mesh
+  })
+
+  // Built facing the screen and laid flat all together, so the visor cannot
+  // drift off the nose.
+  const inner = new THREE.Group()
+  inner.add(hull)
+  inner.add(visor)
+  for (const skid of skids) inner.add(skid)
+  inner.rotation.x = -Math.PI / 2
 
   const group = new THREE.Group()
-  group.add(mesh)
+  group.add(inner)
 
   const animate = (t: number) => {
-    // Open, shut, open: a triangle wave, not a sine, because the arcade mouth
-    // moves at a constant rate rather than easing at the ends.
-    const phase = Math.abs(((t % 1) * 2) - 1)
-    const open = MOUTH * phase
-    mesh.geometry.dispose()
-    // The gap is centred on the way it is facing; the group does the turning.
-    mesh.geometry = new THREE.CircleGeometry(
-      BODY / 2,
-      28,
-      open / 2,
-      Math.PI * 2 - open,
-    )
+    const throwBy = triangle(t) * SKID_THROW * r
+    skids[0].position.x = throwBy
+    skids[1].position.x = -throwBy
   }
   animate(0)
 
@@ -82,82 +115,88 @@ export function buildPlayer(colour = 0xffe14d): Character {
     group,
     animate,
     dispose: () => {
-      mesh.geometry.dispose()
-      material.dispose()
+      hull.geometry.dispose()
+      visor.geometry.dispose()
+      for (const skid of skids) skid.geometry.dispose()
+      hullMaterial.dispose()
+      visorMaterial.dispose()
+      skidMaterial.dispose()
     },
   }
 }
 
-/** The skirt: a row of scallops along the bottom, as in the original. */
-function ghostOutline(wobble: number): THREE.Shape {
+/**
+ * A Machine: a boxy chassis on two treads, with a scanner slot and an aerial.
+ *
+ * The aerial and the treads carry the sway; the bead in the slot carries the
+ * direction. Keeping those two apart matters — if the tell moved with the
+ * animation you could not read it while the thing was walking.
+ */
+export function buildGhost(colour: number, lens = 0xffffff): Ghost {
   const r = BODY / 2
-  const shape = new THREE.Shape()
+  const chassisMaterial = flat(colour)
+  const slotMaterial = flat(0x12162c)
+  const beadMaterial = flat(lens)
 
-  // Domed head, drawn from the left shoulder over the top to the right.
-  // Clockwise: counterclockwise from pi to zero goes round underneath, which
-  // leaves a ghost with no head and a pair of floating eyes.
-  shape.absarc(0, 0, r, Math.PI, 0, true)
+  const chassis = new THREE.Mesh(slab(MACHINE_HULL, MACHINE_ROUND, r), chassisMaterial)
 
-  const skirt = -r * 0.62
-  const bumps = 3
-  const span = (r * 2) / bumps
-  shape.lineTo(r, skirt)
+  const slot = new THREE.Mesh(
+    slab([[-0.78, -0.1], [0.78, -0.1], [0.78, 0.36], [-0.78, 0.36]], 0.12, r),
+    slotMaterial,
+  )
+  slot.position.z = 0.004
 
-  for (let i = 0; i < bumps; i++) {
-    const from = r - i * span
-    const to = from - span
-    // Alternate bumps rise and fall as the wobble runs, which is how the
-    // original's feet appear to move without any legs being drawn.
-    const lift = (i % 2 === 0 ? wobble : -wobble) * r * 0.22
-    shape.quadraticCurveTo((from + to) / 2, skirt - span * 0.75 + lift, to, skirt)
-  }
+  const bead = new THREE.Mesh(new THREE.CircleGeometry(r * 0.17, 14), beadMaterial)
+  bead.position.set(0, r * 0.13, 0.008)
 
-  shape.lineTo(-r, 0)
-  return shape
-}
+  const treads = [-1, 1].map((side) => {
+    const mesh = new THREE.Mesh(
+      slab(
+        [
+          [side * 0.22, -0.66], [side * 0.96, -0.66],
+          [side * 0.96, -1.02], [side * 0.22, -1.02],
+        ],
+        0.1,
+        r,
+      ),
+      slotMaterial,
+    )
+    mesh.position.z = -0.004
+    return mesh
+  })
 
-export function buildGhost(colour: number, eyeWhite = 0xffffff): Ghost {
-  const body = flat(colour)
-  const mesh = new THREE.Mesh(new THREE.ShapeGeometry(ghostOutline(0)), body)
+  // The aerial leans from its base, so the rod and the bead stay joined.
+  const aerial = new THREE.Group()
+  const rod = new THREE.Mesh(slab([[-0.06, 0], [0.06, 0], [0.06, 0.26], [-0.06, 0.26]], 0.04, r), chassisMaterial)
+  const tip = new THREE.Mesh(new THREE.CircleGeometry(r * 0.12, 12), beadMaterial)
+  tip.position.set(0, r * 0.26, 0.004)
+  aerial.add(rod)
+  aerial.add(tip)
+  aerial.position.y = r * 0.6
 
-  const white = flat(eyeWhite)
-  const dark = flat(0x1a1a3a)
-  const eyes = new THREE.Group()
-  const pupils: THREE.Mesh[] = []
-
-  for (const side of [-1, 1]) {
-    const sclera = new THREE.Mesh(new THREE.CircleGeometry(BODY * 0.17, 14), white)
-    sclera.position.set(side * BODY * 0.2, BODY * 0.12, 0.01)
-    const pupil = new THREE.Mesh(new THREE.CircleGeometry(BODY * 0.09, 12), dark)
-    pupil.position.set(side * BODY * 0.2, BODY * 0.12, 0.02)
-    eyes.add(sclera)
-    eyes.add(pupil)
-    pupils.push(pupil)
-  }
-
-  // Everything is built facing the screen and then laid flat together, so the
-  // eyes cannot drift off the face.
   const inner = new THREE.Group()
-  inner.add(mesh)
-  inner.add(eyes)
+  inner.add(chassis)
+  for (const tread of treads) inner.add(tread)
+  inner.add(aerial)
+  inner.add(slot)
+  inner.add(bead)
   inner.rotation.x = -Math.PI / 2
 
   const group = new THREE.Group()
   group.add(inner)
 
   const animate = (t: number) => {
-    const wobble = Math.sin(t * Math.PI * 2)
-    mesh.geometry.dispose()
-    mesh.geometry = new THREE.ShapeGeometry(ghostOutline(wobble))
+    const sway = Math.sin(t * Math.PI * 2)
+    aerial.rotation.z = -sway * 0.3
+    treads.forEach((tread, i) => {
+      tread.position.y = (i === 0 ? sway : -sway) * r * 0.06
+    })
   }
   animate(0)
 
   const look = (dx: number, dy: number) => {
-    pupils.forEach((pupil, i) => {
-      const side = i === 0 ? -1 : 1
-      pupil.position.x = side * BODY * 0.2 + dx * BODY * 0.07
-      pupil.position.y = BODY * 0.12 - dy * BODY * 0.07
-    })
+    bead.position.x = dx * BEAD_THROW * r
+    bead.position.y = (0.13 - dy * 0.08) * r
   }
 
   return {
@@ -165,11 +204,15 @@ export function buildGhost(colour: number, eyeWhite = 0xffffff): Ghost {
     animate,
     look,
     dispose: () => {
-      mesh.geometry.dispose()
-      for (const child of eyes.children) (child as THREE.Mesh).geometry.dispose()
-      body.dispose()
-      white.dispose()
-      dark.dispose()
+      chassis.geometry.dispose()
+      slot.geometry.dispose()
+      bead.geometry.dispose()
+      rod.geometry.dispose()
+      tip.geometry.dispose()
+      for (const tread of treads) tread.geometry.dispose()
+      chassisMaterial.dispose()
+      slotMaterial.dispose()
+      beadMaterial.dispose()
     },
   }
 }
