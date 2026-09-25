@@ -35,6 +35,7 @@ import { createPacer } from '../arcade/pacing'
 import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
 import { say, silence } from '../voice'
+import { LABELS, hintAlpha } from '../ui/padHints'
 import { useStore } from '../store'
 import { Interlude } from './Interlude'
 
@@ -60,6 +61,10 @@ export function Prince() {
   const wasDuel = useRef(false)
   const padRef = useRef<Key[]>([])
   const clock = useRef(0)
+  /** The pad as it was last frame, so a change of buttons re-announces them. */
+  const padShape = useRef('')
+  /** When the labels last started, for the fade. */
+  const hintsFrom = useRef(0)
   /** Where the view sat last frame; the band only works if it can stay put. */
   const camera = useRef(0)
   const wasStrike = useRef(false)
@@ -313,7 +318,22 @@ export function Prince() {
         }
 
         padRef.current = padLayout(w, h, duel)
-        drawPad(ctx, padRef.current, held as unknown as Record<string, boolean>)
+        /*
+         * Whenever the buttons change, say what they are again.
+         *
+         * That covers the start of a level and, in the dungeon, a duel
+         * swapping the pad for a sword and a shield — which is the pair
+         * nobody could find, because they only appear once a fight starts.
+         */
+        const shape = padRef.current.map((k) => k.id).join(',')
+        if (shape !== padShape.current) {
+          padShape.current = shape
+          hintsFrom.current = clock.current
+        }
+        drawPad(ctx, padRef.current, held as unknown as Record<string, boolean>, {
+          alpha: hintAlpha(clock.current - hintsFrom.current),
+          labels: LABELS.dungeon,
+        })
       }
 
       frame = requestAnimationFrame(loop)

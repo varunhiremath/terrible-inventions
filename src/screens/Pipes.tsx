@@ -16,6 +16,7 @@ import { scrollTo } from '../camera'
 import { createPacer } from '../arcade/pacing'
 import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
+import { LABELS, hintAlpha } from '../ui/padHints'
 import { useStore } from '../store'
 import { Interlude } from './Interlude'
 
@@ -87,6 +88,10 @@ export function Pipes() {
   const buttons = useRef(createLatch())
   const padRef = useRef<Key[]>([])
   const clock = useRef(0)
+  /** The pad as it was last frame, so a change of buttons re-announces them. */
+  const padShape = useRef('')
+  /** When the labels last started, for the fade. */
+  const hintsFrom = useRef(0)
   /** Where the screen is looking, which lags the player and never goes back. */
   const camera = useRef(0)
 
@@ -278,7 +283,22 @@ export function Pipes() {
         ctx.fillText(remaining, w - gap, capH / 2)
 
         padRef.current = padLayout(w, h)
-        drawPad(ctx, padRef.current, held as unknown as Record<string, boolean>)
+        /*
+         * Whenever the buttons change, say what they are again.
+         *
+         * That covers the start of a level and, in the dungeon, a duel
+         * swapping the pad for a sword and a shield — which is the pair
+         * nobody could find, because they only appear once a fight starts.
+         */
+        const shape = padRef.current.map((k) => k.id).join(',')
+        if (shape !== padShape.current) {
+          padShape.current = shape
+          hintsFrom.current = clock.current
+        }
+        drawPad(ctx, padRef.current, held as unknown as Record<string, boolean>, {
+          alpha: hintAlpha(clock.current - hintsFrom.current),
+          labels: LABELS.pipes,
+        })
       }
 
       frame = requestAnimationFrame(loop)

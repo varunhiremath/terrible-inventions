@@ -8,6 +8,7 @@
  * dungarees, and Papa's little wind-up machines wandering about getting in the
  * way — the same genre, not the same people.
  */
+import { drawHint } from '../ui/padHints'
 import { TILE, VIEW_TOP, type Level } from './level'
 import { BODY_W, bodyHeight, type Body } from './physics'
 import type { Bumped, Enemy, Item, Run } from './run'
@@ -376,6 +377,7 @@ export function drawPad(
   ctx: Ctx,
   keys: { id: string; cx: number; cy: number; r: number; glyph: string }[],
   pressed: Record<string, boolean>,
+  hints?: { alpha: number; labels: Record<string, string> },
 ): void {
   for (const key of keys) {
     const down = pressed[key.id]
@@ -409,6 +411,19 @@ export function drawPad(
       ctx.fillText(key.glyph === 'jump' ? 'JUMP' : 'RUN', key.cx, key.cy)
     }
     ctx.globalAlpha = 1
+  }
+
+  /*
+   * The labels, last, so no button is drawn over its own name. They sit above
+   * the pad rather than inside the circles: a word small enough to fit inside
+   * one of these is a word too small to read on a phone.
+   */
+  if (hints && hints.alpha > 0) {
+    for (const key of keys) {
+      const text = hints.labels[key.id]
+      if (!text) continue
+      drawHint(ctx, key.cx, key.cy - key.r * 1.45, text, Math.max(9, key.r * 0.3), hints.alpha)
+    }
   }
 }
 

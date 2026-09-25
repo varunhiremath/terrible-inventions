@@ -10,6 +10,7 @@
  * coloured robes — drawn from primitives like everything else in this project,
  * so they stay sharp at any size and cost nothing to ship.
  */
+import { drawHint } from '../../ui/padHints'
 import { ROOM_COLS, ROOM_ROWS, TILE, tileAt, type Level } from './level'
 import type { Prince } from './prince'
 import type { Guard } from './run'
@@ -1011,6 +1012,8 @@ export function drawPad(
   ctx: Ctx,
   keys: { id: string; cx: number; cy: number; r: number; glyph: string }[],
   pressed: Record<string, boolean>,
+  /** What each button is called, and how strongly to say so. Fades to nothing. */
+  hints?: { alpha: number; labels: Record<string, string> },
 ): void {
   for (const key of keys) {
     const down = pressed[key.id]
@@ -1026,5 +1029,18 @@ export function drawPad(
 
     glyphFor(ctx, key.glyph, key.cx, key.cy, key.r * 0.42, down ? INK.flameHot : '#e2e6ee')
     ctx.globalAlpha = 1
+  }
+
+  /*
+   * The labels, last, so no button is drawn over its own name. They sit above
+   * the pad rather than inside the circles: a word small enough to fit inside
+   * one of these is a word too small to read on a phone.
+   */
+  if (hints && hints.alpha > 0) {
+    for (const key of keys) {
+      const text = hints.labels[key.id]
+      if (!text) continue
+      drawHint(ctx, key.cx, key.cy - key.r * 1.45, text, Math.max(9, key.r * 0.3), hints.alpha)
+    }
   }
 }

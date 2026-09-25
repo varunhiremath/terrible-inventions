@@ -14,6 +14,7 @@
  * diamonds are not tasteful choices, they are the only choices, and anything
  * more sophisticated would look like a tribute rather than the thing.
  */
+import { drawHint } from '../ui/padHints'
 import { TILE, type Level, type Theme } from './level'
 import type { Bullet, Monster } from './game'
 import type { Dave } from './physics'
@@ -495,6 +496,7 @@ export function drawPad(
   ctx: Ctx,
   keys: { id: string; cx: number; cy: number; r: number }[],
   pressed: Record<string, boolean>,
+  hints?: { alpha: number; labels: Record<string, string> },
 ): void {
   for (const key of keys) {
     const down = pressed[key.id]
@@ -528,5 +530,18 @@ export function drawPad(
     }
     ctx.fill()
     ctx.globalAlpha = 1
+  }
+
+  /*
+   * The labels, last, so no button is drawn over its own name. They sit above
+   * the pad rather than inside the circles: a word small enough to fit inside
+   * one of these is a word too small to read on a phone.
+   */
+  if (hints && hints.alpha > 0) {
+    for (const key of keys) {
+      const text = hints.labels[key.id]
+      if (!text) continue
+      drawHint(ctx, key.cx, key.cy - key.r * 1.45, text, Math.max(9, key.r * 0.3), hints.alpha)
+    }
   }
 }

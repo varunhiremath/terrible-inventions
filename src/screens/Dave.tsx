@@ -21,6 +21,7 @@ import {
 import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
 import { say, silence } from '../voice'
+import { LABELS, hintAlpha } from '../ui/padHints'
 import { useStore } from '../store'
 import { Interlude } from './Interlude'
 
@@ -47,6 +48,10 @@ export function Dave() {
   const wasUp = useRef(false)
   const wasFire = useRef(false)
   const clock = useRef(0)
+  /** The pad as it was last frame, so a change of buttons re-announces them. */
+  const padShape = useRef('')
+  /** When the labels last started, for the fade. */
+  const hintsFrom = useRef(0)
 
   const [hud, setHud] = useState({
     score: 0, lives: 3, level: 1, fuel: 0, gun: false, trophy: false,
@@ -216,7 +221,22 @@ export function Dave() {
           gun: next.dave.hasGun,
           jetpack: next.dave.hasJetpack && next.dave.fuel > 0,
         })
-        drawPad(ctx, padRef.current, held as unknown as Record<string, boolean>)
+        /*
+         * Whenever the buttons change, say what they are again.
+         *
+         * That covers the start of a level and, in the dungeon, a duel
+         * swapping the pad for a sword and a shield — which is the pair
+         * nobody could find, because they only appear once a fight starts.
+         */
+        const shape = padRef.current.map((k) => k.id).join(',')
+        if (shape !== padShape.current) {
+          padShape.current = shape
+          hintsFrom.current = clock.current
+        }
+        drawPad(ctx, padRef.current, held as unknown as Record<string, boolean>, {
+          alpha: hintAlpha(clock.current - hintsFrom.current),
+          labels: LABELS.dave,
+        })
 
         if (next.dave.hasJetpack && next.dave.fuel > 0) {
           // Just under the room, above the buttons.
