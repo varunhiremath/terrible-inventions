@@ -135,3 +135,47 @@ export function solve(level: Level, budget = 400000): Solution {
     gaveUp: explored >= budget,
   }
 }
+
+/**
+ * Every tile Dave's body can occupy, playing the level for real.
+ *
+ * `solve` answers one question — can the trophy and then the door be reached —
+ * and says nothing about anything else in the level. So ninety of the pickups
+ * across the ten levels sat where nobody could ever touch them, and the only
+ * way anyone found out was by trying: "some diamonds are unreachable. That gap
+ * is too small for him to enter?"
+ *
+ * Same caveat as `solve`: the search is coarsened, so a tile turning up here
+ * means it can be reached, and a tile missing means only that this search did
+ * not find a way at this resolution.
+ */
+export function reachableTiles(level: Level, budget = 500_000): Set<string> {
+  const start = newDave(level.start)
+  const seen = new Set<string>([keyOf(start, false)])
+  let frontier: Dave[] = [start]
+  const tiles = new Set<string>()
+  let explored = 0
+
+  while (frontier.length > 0 && explored < budget) {
+    const next: Dave[] = []
+    for (const node of frontier) {
+      for (const move of MOVES) {
+        let dave = node
+        for (let t = 0; t < DECISION - 1e-9; t += TICK) {
+          dave = step(level, dave, move, TICK)
+          if (!dave.alive) break
+        }
+        if (!dave.alive) continue
+        for (const tile of bodyTiles(dave)) tiles.add(`${tile.x},${tile.y}`)
+
+        const key = keyOf(dave, false)
+        if (seen.has(key)) continue
+        seen.add(key)
+        explored += 1
+        next.push(dave)
+      }
+    }
+    frontier = next
+  }
+  return tiles
+}

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { LEVEL_TILES_X, LEVEL_TILES_Y, TILE, normalise, tileAt } from './level'
 import { floorIsHonest } from './physics'
 import { LEVELS, levelFor } from './levels'
-import { solve } from './solve'
+import { reachableTiles, solve } from './solve'
 
 const all = LEVELS.map((lv) => normalise(lv))
 
@@ -67,6 +67,26 @@ describe('the ten levels', () => {
           expect(tileAt(level, m.at.x, m.at.y)).toBe(TILE.EMPTY)
         }
       })
+
+      it('has no treasure nobody can get to', () => {
+        /*
+         * `solve` only ever asked whether the trophy and the door could be
+         * reached, so a diamond walled into a gap too narrow to enter was
+         * invisible to it. Ninety of them across these ten levels were exactly
+         * that, and it took somebody playing level three to notice.
+         */
+        const loot = new Set<string>([
+          TILE.SPHERE, TILE.GEM, TILE.DIAMOND, TILE.RING, TILE.RUBY, TILE.CROWN,
+        ])
+        const reach = reachableTiles(level)
+        const stranded: string[] = []
+        level.rows.forEach((row, y) =>
+          [...row].forEach((tile, x) => {
+            if (loot.has(tile) && !reach.has(`${x},${y}`)) stranded.push(`${tile} at ${x},${y}`)
+          }),
+        )
+        expect(stranded).toEqual([])
+      }, 120_000)
 
       it('can be finished', () => {
         /*
