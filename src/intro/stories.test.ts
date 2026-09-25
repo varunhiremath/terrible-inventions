@@ -10,6 +10,9 @@ import { totalSeconds } from './timeline'
  * it: the cutscene plays through in silence over a black screen, which looks
  * like a loading bug rather than a missing picture.
  */
+/** The scenes that are a real level being played. */
+const LEVELS = ['maze', 'cave', 'dungeon', 'pipes']
+
 describe('the stories', () => {
   it('has one for every game', () => {
     for (const id of STORY_ORDER) expect(STORIES[id], id).toBeDefined()
@@ -52,9 +55,29 @@ describe('the stories', () => {
     }
   })
 
-  it('ends on the title card', () => {
+  it('shows the game in every beat', () => {
+    /*
+     * There used to be a workshop scene with a villain looming in it and a
+     * title card on a black plate, and the verdict on both was that it "still
+     * looks dark and weird... just use snapshots from the game itself if
+     * nothing else works". So every beat is a level now, bar the question card
+     * — which earns its place by being the one thing in the app that is not in
+     * a level.
+     */
     for (const story of Object.values(STORIES)) {
-      expect(story.beats[story.beats.length - 1].scene, story.id).toBe('title')
+      for (const beat of story.beats) {
+        expect([...LEVELS, 'question'], `${story.id} shows ${beat.scene}`).toContain(beat.scene)
+      }
+    }
+  })
+
+  it('lands its title over the game rather than a black plate', () => {
+    // The title is drawn over the last beat instead of having a scene of its
+    // own, so the last beat has to be a level for there to be anything behind
+    // it.
+    for (const story of Object.values(STORIES)) {
+      const last = story.beats[story.beats.length - 1].scene
+      expect(LEVELS, `${story.id} ends on ${last}`).toContain(last)
       expect(story.title.length, story.id).toBeGreaterThan(2)
     }
   })

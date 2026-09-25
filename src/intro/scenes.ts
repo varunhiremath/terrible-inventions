@@ -74,65 +74,6 @@ function wash(ctx: Ctx, w: number, h: number, top: string, bottom: string): void
 }
 
 /**
- * The villain, at his bench, in silhouette.
- *
- * This was a face — a big cartoon head that rose into the middle of the frame
- * and grinned. It was asked about as "not sure if that big face is supposed to
- * be me?", which is the answer on its own: a face invites you to read it as
- * somebody's face, and nobody in this app has one. A hunched shape seen from
- * behind at a workbench says villain without saying whose.
- */
-function villain(ctx: Ctx, cx: number, cy: number, s: number, menace: number): void {
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.scale(s, s)
-
-  // The bench light behind him, which is what makes him a silhouette at all.
-  const lamp = ctx.createRadialGradient(0, -0.2, 0.05, 0, -0.2, 1.7)
-  lamp.addColorStop(0, `rgba(255,210,120,${0.36 + menace * 0.2})`)
-  lamp.addColorStop(1, 'rgba(255,170,60,0)')
-  ctx.fillStyle = lamp
-  ctx.fillRect(-2.6, -2.2, 5.2, 4.4)
-
-  ctx.fillStyle = '#080a0f'
-  // Shoulders, rounded and rising as the menace goes up: a hunch is a mood.
-  const hunch = lerp(0.1, 0.28, menace)
-  ctx.beginPath()
-  ctx.moveTo(-1.05, 1.4)
-  ctx.quadraticCurveTo(-0.95, 0.1 + hunch, -0.42, -0.16 + hunch)
-  ctx.quadraticCurveTo(0, -0.32 + hunch, 0.42, -0.16 + hunch)
-  ctx.quadraticCurveTo(0.95, 0.1 + hunch, 1.05, 1.4)
-  ctx.closePath()
-  ctx.fill()
-  // The back of a head. No features, from this side there are none to draw.
-  ctx.beginPath()
-  ctx.ellipse(0, -0.55 + hunch, 0.42, 0.46, 0, 0, Math.PI * 2)
-  ctx.fill()
-  // An arm out over the bench, reaching for whatever he is about to release.
-  ctx.lineWidth = 0.3
-  ctx.lineCap = 'round'
-  ctx.strokeStyle = '#080a0f'
-  ctx.beginPath()
-  ctx.moveTo(0.6, 0.25 + hunch)
-  ctx.lineTo(lerp(0.95, 1.22, menace), lerp(0.5, 0.15, menace))
-  ctx.stroke()
-  ctx.restore()
-}
-
-/** A wall of masonry, for anything that needs a backdrop rather than a room. */
-function stone(ctx: Ctx, w: number, h: number, s: number, shade: string, lit: string): void {
-  for (let y = 0; y < h + s; y += s * 0.6) {
-    const offset = Math.round(y / (s * 0.6)) % 2 === 0 ? 0 : s * 0.5
-    for (let x = -s; x < w + s; x += s) {
-      ctx.fillStyle = shade
-      ctx.fillRect(x + offset + 2, y + 2, s - 4, s * 0.6 - 4)
-      ctx.fillStyle = lit
-      ctx.fillRect(x + offset + 2, y + 2, s - 4, s * 0.06)
-    }
-  }
-}
-
-/**
  * The surface under a column, starting the search at `from` and going down.
  *
  * Every one of these levels is a room with a border, so searching from the top
@@ -340,35 +281,6 @@ const MACHINES = ['#e8503a', '#f49ac1', '#5ad2e0', '#f0a04b']
 
 /** Every scene any story can name. */
 export const SCENES: Record<string, (stage: Stage) => void> = {
-  /** A workshop at night: this is where all four of these start. */
-  workshop({ ctx, w, h, t }) {
-    wash(ctx, w, h, '#161a24', '#0a0c12')
-    const s = Math.min(w, h)
-    // Cogs turning behind him, at different rates so it reads as machinery.
-    for (const [cx, cy, r, speed] of [[0.2, 0.3, 0.16, 1], [0.34, 0.2, 0.1, -1.6], [0.8, 0.72, 0.2, 0.7]] as const) {
-      ctx.save()
-      ctx.translate(cx * w, cy * h)
-      ctx.rotate(t * speed * 4)
-      ctx.strokeStyle = 'rgba(180,150,90,0.3)'
-      ctx.lineWidth = s * 0.02
-      ctx.beginPath()
-      ctx.arc(0, 0, r * s, 0, Math.PI * 2)
-      ctx.stroke()
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2
-        ctx.beginPath()
-        ctx.moveTo(Math.cos(a) * r * s, Math.sin(a) * r * s)
-        ctx.lineTo(Math.cos(a) * r * s * 1.22, Math.sin(a) * r * s * 1.22)
-        ctx.stroke()
-      }
-      ctx.restore()
-    }
-    // The bench he is hunched over, and him hunched over it.
-    ctx.fillStyle = '#141824'
-    ctx.fillRect(0, h * 0.72, w, h * 0.28)
-    villain(ctx, w / 2, h * lerp(1.15, 0.58, ease(Math.min(1, t * 4))), s * 0.3, Math.min(1, t * 3))
-  },
-
   /**
    * The maze: the real board, the real route, the real characters.
    *
@@ -587,54 +499,75 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     ctx.restore()
   },
 
-  /** The maths door, which is the point of the whole app. */
-  workshopDoor({ ctx, w, h, t }) {
-    wash(ctx, w, h, '#1a1f2b', '#0c0f16')
+  /**
+   * The maths door: the card the app actually puts in front of you.
+   *
+   * This was a dark room with a glowing crack in it, which looked like a
+   * horror game and told you nothing. It is the question card now, in the
+   * app's own colours and at the app's own size, because the honest thing to
+   * show somebody about the maths door is the maths.
+   */
+  question({ ctx, w, h, t, clock }) {
+    // Bright. The whole intro was reported as "dark and weird", and this is
+    // the one beat that was never a dark place to begin with.
+    wash(ctx, w, h, '#2b3350', '#1d2030')
     const s = Math.min(w, h)
-    // A door standing open, with light coming through it.
-    const open = ease(Math.min(1, t * 1.4))
-    ctx.fillStyle = '#f2d98a'
-    ctx.globalAlpha = 0.14 + open * 0.2
-    ctx.beginPath()
-    ctx.moveTo(w * 0.5, h * 0.2)
-    ctx.lineTo(w * 1.1, h * 1.1)
-    ctx.lineTo(w * -0.1, h * 1.1)
-    ctx.closePath()
-    ctx.fill()
-    ctx.globalAlpha = 1
-    ctx.fillStyle = '#e8c88a'
-    ctx.fillRect(w * 0.5 - s * 0.14, h * 0.2, s * 0.28 * open, h * 0.6)
-    ctx.strokeStyle = '#8a6a3a'
-    ctx.lineWidth = Math.max(2, s * 0.012)
-    ctx.strokeRect(w * 0.5 - s * 0.14, h * 0.2, s * 0.28, h * 0.6)
-    // Sums drifting up out of it.
-    ctx.fillStyle = '#ffe9a8'
-    ctx.font = `bold ${s * 0.07}px ui-monospace, monospace`
-    ctx.textAlign = 'center'
-    const sums = ['7 × 8', '144 ÷ 12', '96 + 47', '15²']
-    sums.forEach((sum, i) => {
-      const lift = ((t * 0.4 + i * 0.25) % 1)
-      ctx.globalAlpha = Math.sin(lift * Math.PI) * 0.9
-      ctx.fillText(sum, w * (0.5 + Math.sin(i * 2 + lift * 2) * 0.22), h * (0.8 - lift * 0.55))
-    })
-    ctx.globalAlpha = 1
-  },
 
-  /** The title card each story lands on. */
-  title({ ctx, w, h, t, clock }) {
-    wash(ctx, w, h, '#0e1118', '#05070b')
-    const s = Math.min(w, h)
-    stone(ctx, w, h, s * 0.16, 'rgba(30,36,46,0.5)', 'rgba(52,62,76,0.5)')
-    const grow = ease(Math.min(1, t * 2))
+    const cardW = Math.min(w * 0.86, s * 1.1)
+    const cardH = Math.min(h * 0.72, cardW * 0.95)
+    const x = (w - cardW) / 2
+    const y = (h - cardH) / 2
+    const grow = ease(Math.min(1, t * 3))
+
     ctx.save()
     ctx.translate(w / 2, h / 2)
-    ctx.scale(lerp(0.7, 1, grow), lerp(0.7, 1, grow))
-    ctx.globalAlpha = grow
-    ctx.strokeStyle = '#f4c430'
-    ctx.lineWidth = Math.max(2, s * 0.008)
-    ctx.strokeRect(-w * 0.42, -h * 0.16, w * 0.84, h * 0.32)
+    ctx.scale(lerp(0.9, 1, grow), lerp(0.9, 1, grow))
+    ctx.translate(-w / 2, -h / 2)
+
+    ctx.fillStyle = '#e8ebf5'
+    ctx.beginPath()
+    ctx.roundRect(x, y, cardW, cardH, s * 0.05)
+    ctx.fill()
+
+    // The sum, big and dark on white, which is how it looks when it matters.
+    // Shrunk to fit rather than set at a fixed size: "144 ÷ 12" is twice the
+    // width of "15²" and ran off both edges of the card at the size that
+    // suited the short one.
+    const sums = ['7 × 8', '144 ÷ 12', '96 + 47', '15²']
+    const sum = sums[Math.floor(clock / 3) % sums.length]
+    const room = cardW * 0.82
+    let type = cardH * 0.2
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    for (let tries = 0; tries < 12; tries++) {
+      ctx.font = `bold ${type}px ui-monospace, monospace`
+      if (ctx.measureText(sum).width <= room) break
+      type *= 0.9
+    }
+    ctx.fillStyle = '#14161f'
+    ctx.fillText(sum, w / 2, y + cardH * 0.2)
+
+    // A keypad under it, with one key lit the way a pressed key lights. Three
+    // rows have to fit between the sum and the bottom of the card, so the key
+    // height comes out of what is left rather than being picked.
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+    const pad = cardW * 0.05
+    const keyW = (cardW - pad * 4) / 3
+    const top = y + cardH * 0.38
+    const keyH = (y + cardH - pad * 1.5 - top - pad * 1.6) / 3
+    const lit = Math.floor(clock * 1.6) % keys.length
+    keys.forEach((key, i) => {
+      const kx = x + pad * 1.5 + (i % 3) * (keyW + pad)
+      const ky = top + Math.floor(i / 3) * (keyH + pad * 0.8)
+      ctx.fillStyle = i === lit ? '#ffc84a' : '#2c3145'
+      ctx.beginPath()
+      ctx.roundRect(kx, ky, keyW, keyH, s * 0.02)
+      ctx.fill()
+      ctx.fillStyle = i === lit ? '#14161f' : '#e8ebf5'
+      ctx.font = `bold ${keyH * 0.6}px ui-monospace, monospace`
+      ctx.fillText(key, kx + keyW / 2, ky + keyH / 2)
+    })
     ctx.restore()
-    ctx.globalAlpha = 1
-    void clock
   },
+
 }

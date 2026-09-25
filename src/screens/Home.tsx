@@ -123,7 +123,7 @@ const TILES: Tile[] = [
   },
   {
     id: 'dave',
-    title: 'Dangerous Dave',
+    title: 'The Caves',
     blurb: 'Ten caves. Take the trophy, find the door.',
     tint: '#2b1810',
     emblem(ctx, w, h) {

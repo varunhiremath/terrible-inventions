@@ -26,7 +26,7 @@ import { useStore } from '../store'
 import { Interlude } from './Interlude'
 
 /**
- * Dangerous Dave.
+ * The caves.
  *
  * The simulation is pure and lives in `dave/`; this is the loop that drives
  * it, the canvas it is drawn on, and the glass it is played through.

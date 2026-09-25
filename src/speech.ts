@@ -24,13 +24,13 @@ export interface VoiceProfile {
  * heavier in a male voice". Dropping the pitch weights any voice downwards,
  * which is the half of this that works whatever the device has installed.
  */
-export const NARRATOR: VoiceProfile = { pitch: 0.76, rate: 0.94 }
+export const NARRATOR: VoiceProfile = { pitch: 0.7, rate: 0.92 }
 
 /**
  * {papa}'s delivery. Low, because he is a large man doing a villain voice, and
  * brisk, because the lines are jokes and a joke read slowly is not one.
  */
-export const PAPA: VoiceProfile = { pitch: 0.72, rate: 1.08 }
+export const PAPA: VoiceProfile = { pitch: 0.62, rate: 1.02 }
 
 /** Same character, same voice, every time. */
 export function profileFor(seed: number): VoiceProfile {
@@ -99,13 +99,32 @@ const MALE_VOICES = [
 ]
 
 /** Names that turn up on some platform or other and are not male. */
-const NOT_MALE = /samantha|karen|moira|tessa|fiona|victoria|serena|martha|susan|catherine|zira|hazel|female|amy|joanna/i
+const NOT_MALE = /samantha|karen|moira|tessa|fiona|victoria|serena|martha|susan|catherine|zira|hazel|female|amy|joanna|salli|kimberly|ivy|kendra|nicole|emma|olivia|ava/i
+
+/**
+ * Every name a voice goes by.
+ *
+ * Android names its voices for the person reading them — "English (United
+ * Kingdom)" for four different people — and hides the only thing that says who
+ * it is in the URI. Matching on the name alone therefore misses every Android
+ * male voice, which is most of the phones this runs on, and the first pass at
+ * this did exactly that.
+ */
+function labels(voice: SpeechSynthesisVoice): string {
+  return `${voice.name} ${voice.voiceURI ?? ''}`
+}
 
 export function pickVoice(all: readonly SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
   if (all.length === 0) return undefined
 
+  const asked = preferred()
+  if (asked) {
+    const hit = all.find((v) => v.name === asked || v.voiceURI === asked)
+    if (hit) return hit
+  }
+
   for (const name of MALE_VOICES) {
-    const hit = all.find((v) => v.name === name)
+    const hit = all.find((v) => v.name === name || v.voiceURI === name)
     if (hit) return hit
   }
 
@@ -113,10 +132,10 @@ export function pickVoice(all: readonly SpeechSynthesisVoice[]): SpeechSynthesis
   const pool = english.length > 0 ? english : all
 
   // Some platforms say so outright in the name.
-  const declared = pool.find((v) => /male/i.test(v.name) && !/female/i.test(v.name))
+  const declared = pool.find((v) => /male/i.test(labels(v)) && !/female/i.test(labels(v)))
   if (declared) return declared
 
-  const notFemale = pool.find((v) => !NOT_MALE.test(v.name))
+  const notFemale = pool.find((v) => !NOT_MALE.test(labels(v)))
   if (notFemale) return notFemale
 
   return pool.find((v) => v.lang?.startsWith('en-GB')) ?? pool[0]
@@ -124,6 +143,51 @@ export function pickVoice(all: readonly SpeechSynthesisVoice[]): SpeechSynthesis
 
 function bestVoice(): SpeechSynthesisVoice | undefined {
   return pickVoice(voices())
+}
+
+/*
+ * Which voice this device should use, if somebody has said.
+ *
+ * Kept out of the save file on purpose. A save is carried between devices and
+ * a voice is not: the name that sounds right on a phone may not exist on the
+ * tablet, and restoring a backup should not leave the app silent or shrill.
+ */
+const CHOSEN = 'terrible-inventions:voice'
+
+function preferred(): string | null {
+  try {
+    return localStorage.getItem(CHOSEN)
+  } catch {
+    return null
+  }
+}
+
+/** Every voice the device actually has, English first. */
+export function availableVoices(): SpeechSynthesisVoice[] {
+  const all = [...voices()]
+  return all.sort((a, b) => {
+    const english = (v: SpeechSynthesisVoice) => (v.lang?.toLowerCase().startsWith('en') ? 0 : 1)
+    return english(a) - english(b) || a.name.localeCompare(b.name)
+  })
+}
+
+/** The one being used right now, whether chosen or worked out. */
+export function currentVoiceName(): string {
+  return bestVoice()?.name ?? 'the device default'
+}
+
+export function chosenVoice(): string | null {
+  return preferred()
+}
+
+/** Pick one by name, or pass null to go back to working it out. */
+export function chooseVoice(name: string | null): void {
+  try {
+    if (name === null) localStorage.removeItem(CHOSEN)
+    else localStorage.setItem(CHOSEN, name)
+  } catch {
+    // Private browsing, or storage full. The auto-pick still works.
+  }
 }
 
 export function speechAvailable(): boolean {

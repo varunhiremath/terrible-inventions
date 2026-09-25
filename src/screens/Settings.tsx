@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fill, getProfile } from '../config/profile'
 import { STORIES, STORY_ORDER } from '../intro/stories'
 import { Btn, Panel, Screen } from '../ui/bits'
 import { exportSave, importSave } from '../engine/storage'
 import { useStore } from '../store'
+import { availableVoices, chooseVoice, chosenVoice, currentVoiceName } from '../speech'
+import { say } from '../voice'
 
 /**
  * {papa}'s corner. Not hidden behind a passcode — an eight-year-old who goes
@@ -19,6 +21,30 @@ export function Settings() {
   const [rewards, setRewardText] = useState(save.rewards.join('\n'))
   const [status, setStatus] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+
+  /*
+   * The device's own voices, which arrive late on some browsers and not at all
+   * until something has spoken on others — so the list is re-read when the
+   * synthesiser says it has them, rather than read once and trusted.
+   */
+  const [voices, setVoices] = useState(availableVoices())
+  const [picked, setPicked] = useState(chosenVoice())
+  useEffect(() => {
+    const refresh = () => setVoices(availableVoices())
+    refresh()
+    speechSynthesis?.addEventListener?.('voiceschanged', refresh)
+    const timer = window.setTimeout(refresh, 400)
+    return () => {
+      speechSynthesis?.removeEventListener?.('voiceschanged', refresh)
+      window.clearTimeout(timer)
+    }
+  }, [])
+
+  const tryVoice = (name: string | null) => {
+    chooseVoice(name)
+    setPicked(name)
+    say(fill('Right then. {kid} versus {papa}. Off we go.'), { as: 'papa' })
+  }
 
   const field =
     'w-full rounded-xl border-2 border-ink-line bg-ink px-4 py-3 text-lg text-chalk outline-none focus:border-sky'
@@ -144,6 +170,52 @@ export function Settings() {
             ),
           )}
         </div>
+
+        {/*
+          * Which voice, chosen here rather than guessed.
+          *
+          * The app picks the deepest male voice it can recognise, but what a
+          * phone actually has installed is not something it can be told from
+          * here — Android names four different readers "English (United
+          * Kingdom)" — and the guess came out as a woman's voice once already.
+          * Tapping one says a line in it, so it can be chosen by ear in about
+          * ten seconds, which beats any amount of cleverness.
+          *
+          * Kept on the device, not in the save: a backup restored on the
+          * tablet should not name a voice the tablet does not have.
+          */}
+        {save.voice === 'computer' && (
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-bold">Which voice</h3>
+            <p className="text-xs leading-relaxed text-dim">
+              Tap one to hear it. Using {currentVoiceName()} right now.
+            </p>
+            <div className="flex max-h-56 flex-col gap-1 overflow-y-auto">
+              <Btn
+                tone={picked === null ? 'chosen' : 'plain'}
+                onClick={() => tryVoice(null)}
+                className="px-3 py-2 text-left text-sm"
+              >
+                Pick the deepest one automatically
+              </Btn>
+              {voices.map((voice) => (
+                <Btn
+                  key={voice.voiceURI}
+                  tone={picked === voice.name ? 'chosen' : 'plain'}
+                  onClick={() => tryVoice(voice.name)}
+                  className="px-3 py-2 text-left text-sm"
+                >
+                  {voice.name} <span className="text-dim">{voice.lang}</span>
+                </Btn>
+              ))}
+              {voices.length === 0 && (
+                <p className="text-xs text-dim">
+                  This device has not handed over its voice list yet. Play a game and come back.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </Panel>
 
       <Panel className="flex flex-col gap-3">
@@ -154,7 +226,7 @@ export function Settings() {
         </p>
         <div className="grid grid-cols-2 gap-2">
           <Btn onClick={() => go('home')} className="px-3 py-3 text-sm">Papa Panic</Btn>
-          <Btn onClick={() => go('dave')} className="px-3 py-3 text-sm">Dangerous Dave</Btn>
+          <Btn onClick={() => go('dave')} className="px-3 py-3 text-sm">The Caves</Btn>
           <Btn onClick={() => go('prince')} className="px-3 py-3 text-sm">The Dungeon</Btn>
           <Btn onClick={() => go('pipes')} className="px-3 py-3 text-sm">The Pipes</Btn>
         </div>

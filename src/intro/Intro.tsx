@@ -62,13 +62,26 @@ export function Intro({ story, onDone }: { story: Story; onDone: () => void }) {
       const scene = SCENES[now.beat.scene]
       if (scene) scene({ ctx, w, h, t: now.t, clock })
 
-      if (now.beat.scene === 'title') {
-        ctx.fillStyle = '#f4c430'
+      /*
+       * The title goes over the last beat, whatever that beat is showing.
+       *
+       * It used to have a scene of its own: a gold rectangle on a black plate,
+       * which is a title card and is also thirty seconds of game followed by
+       * five seconds of nothing. Over the game it needs a band behind it or
+       * the letters land on whatever masonry happens to be there.
+       */
+      if (now.index === story.beats.length - 1) {
         const size = Math.min(w * 0.11, h * 0.16)
+        const show = Math.min(1, now.t * 3)
+        ctx.globalAlpha = show
+        ctx.fillStyle = 'rgba(8,10,16,0.72)'
+        ctx.fillRect(0, h / 2 - size, w, size * 2)
+        ctx.fillStyle = '#ffc84a'
         ctx.font = `bold ${size}px ui-monospace, monospace`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(story.title, w / 2, h / 2)
+        ctx.globalAlpha = 1
       }
 
       // The line is said once, on the frame the beat turns over, and shown for
@@ -123,10 +136,18 @@ export function Intro({ story, onDone }: { story: Story; onDone: () => void }) {
       <div ref={wrapRef} className="relative min-h-0 flex-1" onClick={skipBeat}>
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-4 pt-12">
+        {/*
+          * The caption, on a solid band rather than a fade.
+          *
+          * It was coral over a gradient, which on a phone in daylight over a
+          * dark level is two low-contrast things fighting. {papa} keeps a
+          * colour of his own because whose line it is matters, but it is the
+          * warm one now, and both sit on something opaque.
+          */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/80 px-4 pb-5 pt-4">
           <p
-            className={`mx-auto max-w-2xl text-center text-lg leading-snug sm:text-xl ${
-              voice === 'papa' ? 'font-bold text-rust' : 'text-paper'
+            className={`mx-auto max-w-2xl text-center text-xl font-semibold leading-snug sm:text-2xl ${
+              voice === 'papa' ? 'text-bolt' : 'text-chalk'
             }`}
           >
             {caption}

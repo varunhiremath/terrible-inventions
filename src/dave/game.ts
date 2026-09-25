@@ -1,5 +1,5 @@
 /**
- * A level of Dangerous Dave, being played.
+ * A level of the caves, being played.
  *
  * `physics.ts` moves Dave and knows nothing else. This is everything that
  * changes the world around him: what he has picked up, what is chasing him,

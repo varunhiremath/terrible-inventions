@@ -100,7 +100,7 @@ const scoreNow = async () => Number((await hud()).match(/1up (\d+)/i)?.[1] ?? -1
 await page.goto(URL, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1500)
 
-const GAMES = ['Papa Panic', 'Dangerous Dave', 'The Dungeon', 'The Pipes']
+const GAMES = ['Papa Panic', 'The Caves', 'The Dungeon', 'The Pipes']
 const homeText = await page.innerText('body')
 for (const game of GAMES) {
   if (!new RegExp(game, 'i').test(homeText)) problems.push(`${game} is not on the front screen`)
@@ -298,10 +298,10 @@ if (!died) {
   }
 }
 
-// --- Dangerous Dave: the board is the controller here too -----------------
+// --- The Caves: the board is the controller here too -----------------
 // Reachable without having to lose a life first, which is how a grown-up
 // setting the thing up will look for it.
-if (await enter('Dangerous Dave')) {
+if (await enter('The Caves')) {
   await page.waitForTimeout(1200)
 
   // textContent, not innerText: Dave's score bar is drawn into the picture and
