@@ -18,6 +18,7 @@ import { directionFromGesture, directionFromSwipe, toScreen } from '../arcade/st
 import { wallBars } from '../render/mazeGeometry'
 import { buildFruit, fruitForLevel } from '../render/fruit'
 import { buildGhost, buildPlayer, type Ghost } from '../render/characters'
+import { RUNNER_HULL, RUNNER_ROUND, svgPath } from '../render/silhouettes'
 import { fill } from '../config/profile'
 import { Btn } from '../ui/bits'
 import { say, silence } from '../voice'
@@ -71,20 +72,20 @@ export function Arcade() {
   const [hud, setHud] = useState({ lives: 0, score: 0, status: 'playing' as Game['status'], freezes: 0 })
   /** Lets other effects ask the camera to re-measure when the layout shifts. */
   const refitRef = useRef<(() => void) | null>(null)
-  /** The player, small, for the lives row. */
+  /**
+ * The Runner, small, for the lives row.
+ *
+ * Built from the same outline the board is, because a lives row showing a
+ * different character from the one you are playing is a lives row showing
+ * somebody else. It was its own hand-written clip-path before, and it drifted
+ * exactly that way.
+ */
 function PlayerIcon() {
   return (
-    <span
-      aria-hidden
-      className="inline-block h-3.5 w-3.5 bg-bolt"
-      style={{
-        // A disc with a wedge out of it, in one clip path: the lives row is
-        // the same character as the one on the board.
-        clipPath:
-          'polygon(100% 28%, 50% 50%, 100% 72%, 84% 90%, 58% 100%, 25% 92%, 4% 65%, 4% 35%, 25% 8%, 58% 0%, 84% 10%)',
-        borderRadius: '50%',
-      }}
-    />
+    <svg aria-hidden viewBox="-1.05 -1.05 2.1 2.1" className="inline-block h-3.5 w-3.5">
+      <path d={svgPath(RUNNER_HULL, RUNNER_ROUND)} fill="#ffd23f" />
+      <path d={svgPath([[0.3, 0.42], [0.72, 0.2], [0.72, -0.2], [0.3, -0.42]], 0.14)} fill="#8ff0ff" />
+    </svg>
   )
 }
 

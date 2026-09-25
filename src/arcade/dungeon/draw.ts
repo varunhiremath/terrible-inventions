@@ -893,16 +893,30 @@ const STYLE: Style = 'warrior'
  * Cream on purpose. These rooms are dark and every guard is darker than he is,
  * so the lightest thing on the screen is always him.
  */
+/**
+ * The one you play: a soldier, in his own colours.
+ *
+ * He was a barefoot acrobat in a pale tunic, which read as a robot at the size
+ * a phone draws him and was asked to be changed — "I think the player looks
+ * more like a robot, but I liked the look of soldiers. It looks more classic."
+ * So he is built like the guards now: coat to the knee, wrapped headdress,
+ * boots, curved blade.
+ *
+ * Blue and gold against their red and purple, because the one thing this
+ * figure has to do above all else is not be mistaken for the man walking
+ * towards it with a sword.
+ */
 const PRINCE_LOOK: Look = {
-  body: '#efe7d6',
-  legs: '#e4dbc6',
-  trim: '#c0392b',
+  body: '#3f7fc4',
+  legs: '#24406b',
+  trim: '#f0c419',
   skin: '#e0a878',
   hair: '#2b1d14',
-  band: '#2f5f9e',
-  sleeveless: true,
-  barefoot: true,
+  band: '#f0c419',
+  turban: true,
+  coat: true,
   loose: true,
+  curved: true,
 }
 
 /**

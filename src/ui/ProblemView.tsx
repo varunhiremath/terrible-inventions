@@ -25,12 +25,22 @@ export function ProblemView({
   onAnswer: (given: string, correct: boolean) => void
 }) {
   return (
-    <>
-      <p className="text-xl leading-snug text-chalk sm:text-2xl">{fill(problem.prompt)}</p>
-      <div className="mt-4">
+    /*
+     * Side by side on a phone held sideways.
+     *
+     * Stacked, a question and a keypad are about 400 pixels of height and the
+     * screen is 360, so the bottom row of keys was simply gone. Landscape has
+     * width going spare and no height at all, which is the one shape where
+     * putting the question next to the answer is the obvious thing to do.
+     */
+    <div className="short:grid short:grid-cols-[1fr_1.15fr] short:items-start short:gap-4">
+      <p className="text-xl leading-snug text-chalk sm:text-2xl short:self-center short:text-base">
+        {fill(problem.prompt)}
+      </p>
+      <div className="mt-4 short:mt-0">
         <ProblemBody problem={problem} locked={locked} onAnswer={onAnswer} />
       </div>
-    </>
+    </div>
   )
 }
 
@@ -106,14 +116,15 @@ function StepPicker({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    // Two across on a phone held sideways, or the last answer falls off.
+    <div className="grid grid-cols-1 gap-2 short:grid-cols-2">
       {lines.map((line, i) => (
         <button
           key={line}
           type="button"
           disabled={locked}
           onClick={() => choose(i)}
-          className={`block-btn text-left font-mono text-lg sm:text-xl ${
+          className={`block-btn text-left font-mono text-lg sm:text-xl short:text-sm ${
             picked === i ? 'border-sky bg-sky text-ink' : ''
           } ${locked && answer.type === 'choice' && i === answer.correctIndex ? 'border-moss' : ''}`}
         >
@@ -209,7 +220,7 @@ function FractionPicker({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 short:gap-2">
       {answer.options.map((option, i) => {
         const [top, bottom] = option.split('/')
         return (
@@ -218,13 +229,13 @@ function FractionPicker({
             type="button"
             disabled={locked}
             onClick={() => choose(i)}
-            className={`block-btn flex flex-col items-center justify-center gap-1 py-8 ${
+            className={`block-btn flex flex-col items-center justify-center gap-1 py-8 short:py-3 ${
               picked === i ? 'border-sky bg-sky text-ink' : ''
             } ${locked && i === answer.correctIndex ? 'border-moss' : ''}`}
           >
-            <span className="font-mono text-5xl leading-none">{top}</span>
+            <span className="font-mono text-5xl leading-none short:text-3xl">{top}</span>
             <span className="h-[3px] w-14 rounded bg-current" />
-            <span className="font-mono text-5xl leading-none">{bottom}</span>
+            <span className="font-mono text-5xl leading-none short:text-3xl">{bottom}</span>
           </button>
         )
       })}

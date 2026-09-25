@@ -92,6 +92,31 @@ export const BEAD_THROW = 0.4
 /** Open, shut, open: a triangle wave, so a step runs at a constant rate. */
 export const triangle = (t: number) => Math.abs(((t % 1) * 2) - 1) * 2 - 1
 
+/**
+ * The same outline as an SVG path.
+ *
+ * For the places a character has to appear that are not a canvas — the row of
+ * lives along the bottom of the maze, say. That row used to be its own hand-
+ * written clip-path, which is how it ended up being a different character from
+ * the one on the board.
+ */
+export function svgPath(points: readonly Point[], round: number, scale = 1): string {
+  const at = (n: number) => n.toFixed(3)
+  let d = ''
+  tracePolygon(
+    {
+      moveTo: (x, y) => { d += `M${at(x)} ${at(y)}` },
+      lineTo: (x, y) => { d += `L${at(x)} ${at(y)}` },
+      quadraticCurveTo: (cx, cy, x, y) => { d += `Q${at(cx)} ${at(cy)} ${at(x)} ${at(y)}` },
+      closePath: () => { d += 'Z' },
+    },
+    points,
+    round,
+    scale,
+  )
+  return d
+}
+
 type Ctx = CanvasRenderingContext2D
 
 export interface RunnerInk {

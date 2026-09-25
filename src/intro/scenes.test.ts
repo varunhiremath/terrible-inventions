@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DUNGEON_FLOORS, floorUnder, SCENES } from './scenes'
+import { DUNGEON_PATH, floorUnder, SCENES } from './scenes'
 import { isSolid as dungeonSolid } from '../arcade/dungeon/level'
 import { levelFor as dungeonLevel } from '../arcade/dungeon/levels'
 
@@ -92,33 +92,41 @@ describe('every scene', () => {
 })
 
 describe('the dungeon walk', () => {
+  const level = dungeonLevel(1)
+
   it('only ever stands him on something solid', () => {
     /*
-     * The bug: he was drawn at the row he starts on for the whole pan, and
-     * that row is empty air for most of the level. The trailer showed him
-     * walking along on nothing, which is the one complaint the game itself had
-     * already had.
+     * The bug this replaced: he was drawn at the row he starts on for the
+     * whole pan, and that row is empty air for most of the level, so the
+     * trailer showed him striding along on nothing — the one complaint the
+     * game itself had already had.
      */
-    const level = dungeonLevel(1)
-    DUNGEON_FLOORS.forEach((row, col) => {
-      if (row === null) return
+    for (const { col, row } of DUNGEON_PATH) {
       const line = level.rows[row]
       expect(line, `column ${col} sends him to row ${row}, which is off the level`).toBeDefined()
       expect(
         dungeonSolid(line[col] ?? ' '),
         `column ${col}: row ${row} is '${line?.[col]}', which is not something to stand on`,
       ).toBe(true)
-    })
+    }
   })
 
-  it('covers every column of the level', () => {
-    expect(DUNGEON_FLOORS.length).toBe(Math.max(...dungeonLevel(1).rows.map((r) => r.length)))
+  it('leaves the holes out instead of floating him over them', () => {
+    /*
+     * The bug after that one: every column got an answer, and the columns with
+     * no floor were spanned on an arc — which over a level that is mostly hole
+     * is a man bouncing through the air, and was reported as exactly that.
+     * A hole has no entry now, so a jump is one step wide.
+     */
+    const width = Math.max(...level.rows.map((r) => r.length))
+    expect(DUNGEON_PATH.length).toBeGreaterThan(4)
+    expect(DUNGEON_PATH.length, 'every column has a floor, so nothing is being skipped').toBeLessThan(width)
   })
 
-  it('knows a hole when it sees one', () => {
-    // If this ever comes back all-floors, the jump handling above is dead code
-    // and something has quietly changed about how levels are written.
-    expect(DUNGEON_FLOORS.some((row) => row === null)).toBe(true)
+  it('goes forwards, one column at a time', () => {
+    for (let i = 1; i < DUNGEON_PATH.length; i++) {
+      expect(DUNGEON_PATH[i].col).toBeGreaterThan(DUNGEON_PATH[i - 1].col)
+    }
   })
 })
 

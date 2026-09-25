@@ -225,56 +225,38 @@ function chaseOf(board: Board, start: Cell): Cell[] {
 }
 
 /**
- * Which floor he is on at each column of the dungeon, worked out once, with
- * `null` for the columns that are a hole all the way down.
+ * The columns of the dungeon he can actually stand on, worked out once.
  *
- * Without this he was drawn at the row he starts on for the whole pan, and
- * that row is empty air for most of the level — so the cutscene showed him
- * striding along on nothing. Which is the exact thing that was reported about
- * the game itself ("I'm standing in air"), and putting it in the trailer as
- * well would be quite the advertisement.
+ * Holes are left out rather than spanned. The version before this gave every
+ * column an answer and arced him across whatever had no floor under it — and
+ * since most of this level is hole, the result was a man bouncing through the
+ * air for most of the pan, reported as exactly that. A column with nothing
+ * under it is not a place he is. It is a place he jumps over, and a jump
+ * belongs between two columns rather than across twelve.
  *
  * The search only ever looks down, because a dungeon is a thing you descend.
  */
-export const DUNGEON_FLOORS: (number | null)[] = (() => {
-  const floors: (number | null)[] = []
+export const DUNGEON_PATH: { col: number; row: number }[] = (() => {
+  const steps: { col: number; row: number }[] = []
   let row = DUNGEON.start.row
   for (let col = 0; col < levelCols(DUNGEON); col++) {
     const found = floorUnder(DUNGEON.rows, col, row, dungeonSolid)
-    if (found !== null) row = found
-    floors.push(found)
+    if (found === null) continue
+    row = found
+    steps.push({ col, row })
   }
-  return floors
+  return steps
 })()
 
 /**
- * Where he is at a given column: a floor to run along, or a leap across a gap.
+ * How fast he goes through it, in columns a second.
  *
- * A column with nothing under it is not a mistake in the level, it is the
- * level — the dungeon is mostly holes. So the gap is spanned between the last
- * floor before it and the first floor after, on an arc, which is what a
- * running jump looks like and is the only honest way across.
+ * A man running in this game covers about two tiles a second, and the camera
+ * has to agree with his legs or he moonwalks. The clock drove the animation
+ * and a separate clock drove the camera before, which is why it came back as
+ * running weirdly fast.
  */
-function dungeonStep(col: number): { row: number; jumping: boolean } {
-  const last = DUNGEON_FLOORS.length - 1
-  const here = clamp(Math.floor(col), 0, last)
-  if (DUNGEON_FLOORS[here] !== null && DUNGEON_FLOORS[clamp(here + 1, 0, last)] !== null) {
-    const from = DUNGEON_FLOORS[here]!
-    const to = DUNGEON_FLOORS[clamp(here + 1, 0, last)]!
-    return { row: lerp(from, to, col - Math.floor(col)), jumping: from !== to }
-  }
-
-  let before = here
-  while (before > 0 && DUNGEON_FLOORS[before] === null) before--
-  let after = here
-  while (after < last && DUNGEON_FLOORS[after] === null) after++
-  const near = DUNGEON_FLOORS[before] ?? DUNGEON_FLOORS[after] ?? DUNGEON.start.row
-  const far = DUNGEON_FLOORS[after] ?? near
-  const across = after - before
-  const f = across > 0 ? clamp((col - before) / across, 0, 1) : 0
-  // Up and over: the arc is what stops a jump reading as a lift.
-  return { row: lerp(near, far, f) - Math.sin(f * Math.PI) * 0.35, jumping: true }
-}
+const DUNGEON_PACE = 1.8
 
 /** The four Machines, in the colours they are on the board. */
 const MACHINES = ['#e8503a', '#f49ac1', '#5ad2e0', '#f0a04b']
@@ -420,10 +402,23 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     const fits = Math.floor(h / floorHeight - FLOOR_DEPTH)
     const rows = Math.max(ROOM_ROWS, Math.min(fits, DUNGEON.rows.length))
     const world = levelCols(DUNGEON)
-    const camera = sweep(clock, 20) * Math.max(0, world - ROOM_COLS)
-    // Him, a third in from the left, on whichever floor is actually under him.
-    const col = camera + ROOM_COLS * 0.3
-    const { row, jumping } = dungeonStep(col)
+
+    /*
+     * He leads and the camera follows, rather than the two being driven off
+     * the clock independently. That is the whole of the fix for a man who ran
+     * at one speed while the stonework slid past at another.
+     */
+    const along = Math.min(clock * DUNGEON_PACE, DUNGEON_PATH.length - 1.001)
+    const step = Math.floor(along)
+    const f = along - step
+    const from = DUNGEON_PATH[step]
+    const to = DUNGEON_PATH[Math.min(step + 1, DUNGEON_PATH.length - 1)]
+    // A gap in the columns, or a change of floor, is a jump. Anything else is
+    // one pace of a run.
+    const jumping = to.col - from.col > 1 || to.row !== from.row
+    const col = lerp(from.col, to.col, f)
+    const row = lerp(from.row, to.row, f) - (jumping ? Math.sin(f * Math.PI) * 0.3 : 0)
+    const camera = clamp(col - ROOM_COLS * 0.3, 0, Math.max(0, world - ROOM_COLS))
 
     const top = clamp(Math.round(row) - 1, 0, Math.max(0, DUNGEON.rows.length - rows))
     const view = { col: camera, row: top, rows, size, floorHeight, clock }
@@ -449,7 +444,9 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
         // A change of floor, or no floor at all, is a gap — and the only
         // honest way across a gap in this game is a running jump.
         action: jumping ? 'runJump' : 'run',
-        frame: Math.floor(clock * 14) % 8,
+        // Off distance covered, not off the clock. Legs that keep time with
+        // the wall rather than with the ground are legs running on the spot.
+        frame: Math.floor(along * 3) % 8,
       },
       view,
       false,

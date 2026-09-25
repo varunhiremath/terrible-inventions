@@ -73,8 +73,8 @@ export function Interlude({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="fade-in absolute inset-0 z-40 flex items-center justify-center bg-ink/90 p-3 backdrop-blur-sm">
-      <div className="rise-in block-panel max-h-full w-full max-w-xl overflow-y-auto p-5 sm:p-6">
+    <div className="fade-in absolute inset-0 z-40 flex items-center justify-center bg-ink/90 p-3 backdrop-blur-sm short:p-1.5">
+      <div className="rise-in block-panel max-h-full w-full max-w-xl overflow-y-auto p-5 sm:p-6 short:max-w-3xl short:p-3">
         {/* The topic, as a colour first and a word second. */}
         <div className="flex items-center gap-2.5">
           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: topic.tint }} />
@@ -93,19 +93,30 @@ export function Interlude({ onDone }: { onDone: () => void }) {
         ) : (
           <>
             {question.item.flag && (
-              <div className="mt-4 overflow-hidden rounded-xl border-2 border-ink-line shadow-block">
+              <div className="mx-auto mt-4 overflow-hidden rounded-xl border-2 border-ink-line shadow-block short:mt-2 short:max-w-[12rem]">
                 <div className="aspect-[3/2] w-full">
                   <FlagBox name={question.item.flag} className="rounded-none" />
                 </div>
               </div>
             )}
 
-            <p className="mt-4 text-xl leading-snug text-chalk sm:text-2xl">
+            <p className="mt-4 text-xl leading-snug text-chalk sm:text-2xl short:mt-2 short:text-base">
               {fill(question.item.prompt)}
             </p>
 
             <div
-              className={`mt-5 grid gap-2.5 ${question.item.showFlags ? 'grid-cols-2' : 'grid-cols-1'}`}
+              /*
+               * Two columns when the screen is short.
+               *
+               * One column of four full-width answers is 360 pixels of height
+               * on its own, so on a phone held sideways the fourth answer was
+               * cut off by the bottom edge and `skip` was below it, off the
+               * screen entirely. Nobody mid-game is going to scroll a question
+               * to find out there was a fourth option.
+               */
+              className={`mt-5 grid gap-2.5 short:mt-2.5 short:gap-2 ${
+                question.item.showFlags ? 'grid-cols-2' : 'grid-cols-1 short:grid-cols-2'
+              }`}
             >
               {question.options.map((option, i) => {
                 const picked = verdict?.given === option
@@ -125,10 +136,10 @@ export function Interlude({ onDone }: { onDone: () => void }) {
                     // than a block appearing.
                     style={{ animationDelay: `${60 + i * 45}ms` }}
                     className={`rise-in block-btn flex items-center gap-3 px-4 py-3.5 text-left text-base
-                                transition-colors disabled:opacity-100 ${mark}`}
+                                transition-colors disabled:opacity-100 short:py-2 short:text-sm ${mark}`}
                   >
                     {question.item.showFlags ? (
-                      <span className="h-14 w-full overflow-hidden rounded-lg border-2 border-ink-line sm:h-16">
+                      <span className="h-14 w-full overflow-hidden rounded-lg border-2 border-ink-line sm:h-16 short:h-9">
                         <FlagBox name={FLAG_OF[option]} className="rounded-none" />
                       </span>
                     ) : (
@@ -142,7 +153,7 @@ export function Interlude({ onDone }: { onDone: () => void }) {
         )}
 
         {verdict && (
-          <div className="fade-in mt-5 border-t-2 border-ink-line pt-4">
+          <div className="fade-in mt-5 border-t-2 border-ink-line pt-4 short:mt-3 short:pt-2">
             <p
               className={`font-mono text-xs font-bold uppercase tracking-[0.2em] ${
                 verdict.correct ? 'text-moss' : 'text-rust'
@@ -150,13 +161,13 @@ export function Interlude({ onDone }: { onDone: () => void }) {
             >
               {verdict.correct ? 'Got it' : 'Not that one'}
             </p>
-            <p className="mt-2 text-[0.95rem] leading-relaxed text-chalk/90">
+            <p className="mt-2 text-[0.95rem] leading-relaxed text-chalk/90 short:mt-1 short:text-sm">
               {fill(question.kind === 'maths' ? question.problem.explain : question.item.explain)}
             </p>
             <button
               type="button"
               onClick={onDone}
-              className="block-btn mt-5 w-full bg-bolt py-4 text-lg text-ink"
+              className="block-btn mt-5 w-full bg-bolt py-4 text-lg text-ink short:mt-3 short:py-2.5 short:text-base"
             >
               Back to it
             </button>
@@ -167,7 +178,7 @@ export function Interlude({ onDone }: { onDone: () => void }) {
           <button
             type="button"
             onClick={onDone}
-            className="mt-5 w-full px-2 py-2 font-mono text-[0.7rem] uppercase tracking-[0.2em] text-dim/50 transition-colors hover:text-dim"
+            className="mt-5 w-full px-2 py-2 font-mono text-[0.7rem] uppercase tracking-[0.2em] text-dim/50 transition-colors hover:text-dim short:mt-2 short:py-1"
           >
             skip
           </button>

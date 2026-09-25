@@ -43,8 +43,8 @@ interface Tile {
  */
 /** What he wears, matching the figure the dungeon draws. */
 const PRINCE_LOOK: Look = {
-  body: '#efe7d6', legs: '#e4dbc6', trim: '#c0392b', skin: '#e0a878',
-  hair: '#2b1d14', band: '#2f5f9e', sleeveless: true, barefoot: true, loose: true,
+  body: '#3f7fc4', legs: '#24406b', trim: '#f0c419', skin: '#e0a878',
+  hair: '#2b1d14', band: '#f0c419', turban: true, coat: true, loose: true, curved: true,
 }
 
 const TILES: Tile[] = [
