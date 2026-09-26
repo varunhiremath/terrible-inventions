@@ -51,15 +51,27 @@ const MOVES: Input[] = [
 ]
 
 /**
- * Two states that round to the same key are treated as the same. Half a tile
- * of position, two tiles a second of fall, two seconds of fuel: fine enough to
- * tell one ledge from the next, coarse enough to finish.
+ * Two states that round to the same key are treated as the same.
+ *
+ * Two resolutions, because the two searches want different things.
+ *
+ * `solve` only has to find one route to the door, so it can be coarse and
+ * quick: half a tile, and horizontal speed ignored entirely.
+ *
+ * `reachableTiles` has to be believed when it says a diamond cannot be got,
+ * and at that resolution it could not be. Merging a standing Dave with a
+ * sprinting one made its answers move around: adding a single platform in one
+ * corner of level three changed the reported reachability of three diamonds
+ * fifteen tiles away, in both directions. A check whose answer depends on what
+ * you edited somewhere else is not a check. So it gets a third of a tile and
+ * real speeds, and costs a few seconds a level for it.
  */
-function keyOf(dave: Dave, trophy: boolean): string {
+function keyOf(dave: Dave, trophy: boolean, fine = false): string {
   return [
-    Math.round(dave.x * 2),
-    Math.round(dave.y * 2),
-    Math.round(dave.vy / 2),
+    Math.round(dave.x * (fine ? 3 : 2)),
+    Math.round(dave.y * (fine ? 3 : 2)),
+    fine ? Math.round(dave.vx) : 0,
+    Math.round(dave.vy / (fine ? 1 : 2)),
     dave.onGround ? 1 : 0,
     dave.hasJetpack ? Math.round(dave.fuel / 2) : -1,
     trophy ? 1 : 0,
@@ -149,9 +161,13 @@ export function solve(level: Level, budget = 400000): Solution {
  * means it can be reached, and a tile missing means only that this search did
  * not find a way at this resolution.
  */
-export function reachableTiles(level: Level, budget = 500_000): Set<string> {
+export function reachableTiles(
+  level: Level,
+  budget = 500_000,
+  decision = DECISION,
+): Set<string> {
   const start = newDave(level.start)
-  const seen = new Set<string>([keyOf(start, false)])
+  const seen = new Set<string>([keyOf(start, false, true)])
   let frontier: Dave[] = [start]
   const tiles = new Set<string>()
   let explored = 0
@@ -161,14 +177,14 @@ export function reachableTiles(level: Level, budget = 500_000): Set<string> {
     for (const node of frontier) {
       for (const move of MOVES) {
         let dave = node
-        for (let t = 0; t < DECISION - 1e-9; t += TICK) {
+        for (let t = 0; t < decision - 1e-9; t += TICK) {
           dave = step(level, dave, move, TICK)
           if (!dave.alive) break
         }
         if (!dave.alive) continue
         for (const tile of bodyTiles(dave)) tiles.add(`${tile.x},${tile.y}`)
 
-        const key = keyOf(dave, false)
+        const key = keyOf(dave, false, true)
         if (seen.has(key)) continue
         seen.add(key)
         explored += 1
