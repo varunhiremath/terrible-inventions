@@ -654,11 +654,123 @@ export const LOST: Track = {
   ],
 }
 
+/*
+ * The road, in cues.
+ *
+ * E natural minor — E F# G A B C D — which is what the driving loop is built
+ * from, so a cue interrupts the tune rather than arriving from somewhere else.
+ *
+ * The overtake is the hard one, as the chomp was in the maze: you pass a car
+ * every couple of seconds for the length of a stage, so it is two notes and
+ * gone before it is noticed.
+ */
+
+/** The road itself: four bars that go round and do not ask to be listened to. */
+const ROAD_LEAD = [
+  'E4 .  G4 .  B4 .  G4 . ',
+  'D4 .  F#4 . A4 .  F#4 .',
+  'C4 .  E4 .  G4 .  E4 . ',
+  'B3 .  D4 .  F#4 . B4 . ',
+  'E5 .  D5 .  B4 .  G4 . ',
+  'A4 .  .  F#4 D4 .  A3 . ',
+  'C5 .  B4 .  G4 .  E4 . ',
+  'F#4 . B4 .  E4 .  .  . ',
+].join(' ')
+const ROAD_BASS = [
+  'E2 .  E3 .  E2 .  B2 . ',
+  'D2 .  D3 .  D2 .  A2 . ',
+  'C2 .  C3 .  C2 .  G2 . ',
+  'B1 .  B2 .  F#2 . B2 . ',
+  'E2 .  E3 .  E2 .  B2 . ',
+  'D2 .  D3 .  A2 .  D3 . ',
+  'C2 .  C3 .  G2 .  C3 . ',
+  'B1 .  F#2 . B2 .  B1 . ',
+].join(' ')
+/*
+ * The third voice: root, fifth, octave flicked inside every note, which is how
+ * one oscillator carried a whole chord. Without it the road is a line and a
+ * bass and nothing holding them together — and a tune played under a whole
+ * game needs something to sit on.
+ */
+const ROAD_PAD = [
+  'E3 .  .  .  E3 .  .  . ',
+  'D3 .  .  .  D3 .  .  . ',
+  'C3 .  .  .  C3 .  .  . ',
+  'B2 .  .  .  F#3 . .  . ',
+  'E3 .  .  .  E3 .  .  . ',
+  'D3 .  .  .  A2 .  .  . ',
+  'C3 .  .  .  G2 .  .  . ',
+  'B2 .  .  .  B2 .  .  . ',
+].join(' ')
+
+export const ROAD: Track = {
+  name: 'The Road',
+  beatsPerMinute: 148,
+  parts: [
+    {
+      wave: 'pulse',
+      duty: 0.25,
+      gain: 0.12,
+      sustain: 0.8,
+      vibrato: { cents: 18, hz: 5, delay: 0.12 },
+      pattern: ROAD_LEAD,
+    },
+    { wave: 'triangle', gain: 0.26, sustain: 0.55, pattern: ROAD_BASS },
+    {
+      wave: 'pulse',
+      duty: 0.125,
+      gain: 0.06,
+      sustain: 0.95,
+      arp: [0, 7, 12],
+      arpRate: 18,
+      pattern: ROAD_PAD,
+    },
+  ],
+}
+
+/** Getting past one of his. Two notes, because it happens all game long. */
+export const OVERTAKE: Track = {
+  name: 'Overtake',
+  beatsPerMinute: 260,
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.05, sustain: 0.3, pattern: 'B5 E6' }],
+}
+
+/** A can of fuel. */
+export const REFUEL: Track = {
+  name: 'Refuel',
+  beatsPerMinute: 190,
+  parts: [
+    { wave: 'pulse', duty: 0.25, gain: 0.12, sustain: 0.55, pattern: 'E4 G4 B4 E5 .  . ' },
+    { wave: 'triangle', gain: 0.15, sustain: 0.8, pattern: 'E2 .  .  B2 .  . ' },
+  ],
+}
+
+/** Hitting something, or running the tank dry. Down, and not pleasant. */
+export const PRANG: Track = {
+  name: 'Prang',
+  beatsPerMinute: 115,
+  parts: [
+    { wave: 'sawtooth', gain: 0.14, sustain: 0.8, pattern: 'E4 D4 C4 B3 A3 G3 E3 .  . ' },
+    { wave: 'sine', gain: 0.1, sustain: 1, pattern: 'E2 .  .  B1 .  .  E1 .  . ' },
+  ],
+}
+
+/** The end of a stage. */
+export const ARRIVE: Track = {
+  name: 'Arrive',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'pulse', duty: 0.25, gain: 0.14, sustain: 0.7, pattern: 'E4 G4 B4 E5 .  D5 F#5 B5 .  .  .  . ' },
+    { wave: 'triangle', gain: 0.18, sustain: 0.8, pattern: 'E2 .  .  .  B2 .  .  E3 .  .  .  . ' },
+  ],
+}
+
 export const TRACKS = {
   chase: CHASE,
   thinking: THINKING,
   pipes: PIPES,
   cavern: CAVERN,
+  road: ROAD,
 } as const
 export type TrackName = keyof typeof TRACKS
 
@@ -693,6 +805,14 @@ export const CAVE_CUES = {
   lost: LOST,
 } as const
 
+/** The road's own set, all in E natural minor, like the driving loop. */
+export const ROAD_CUES = {
+  overtake: OVERTAKE,
+  refuel: REFUEL,
+  prang: PRANG,
+  arrive: ARRIVE,
+} as const
+
 /** The pipes' own set, all in plain C major. */
 export const PIPE_CUES = {
   coin: COIN,
@@ -703,8 +823,10 @@ export const PIPE_CUES = {
   flag: FLAG,
 } as const
 
-// Four sets, because each is held to its own scale — and each scale is the
+// Five sets, because each is held to its own scale — and each scale is the
 // one its game's own loop is built from, so a cue sounds like the tune it
 // interrupts. Mixing them would mean holding none of them to anything.
-export const CUES = { ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES } as const
+export const CUES = {
+  ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES,
+} as const
 export type CueName = keyof typeof CUES

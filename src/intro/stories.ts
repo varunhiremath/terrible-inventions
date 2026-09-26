@@ -73,6 +73,20 @@ export const STORIES: Record<string, Story> = {
       { seconds: 5.1, scene: 'pipes', voice: 'papa', line: 'The flag is at the far end. Good luck getting there.' },
     ],
   },
+
+  road: {
+    id: 'road',
+    title: 'THE ROAD',
+    beats: [
+      { seconds: 6.6, scene: 'road', voice: 'narrator', line: 'Four lanes out of town, and {papa} has filled every one of them.' },
+      { seconds: 6.9, scene: 'road', voice: 'papa', line: 'They only go one speed! Straight down the middle! No brains at all!' },
+      { seconds: 6.0, scene: 'road', voice: 'narrator', line: 'Hold GO to move. Steer with your left thumb. That is all.' },
+      { seconds: 7.0, scene: 'road', voice: 'narrator', line: 'There is always a way through. Always. Find it before you get there.' },
+      { seconds: 6.5, scene: 'road', voice: 'narrator', line: 'Watch the tank. Run it dry and it costs a car, same as a prang.' },
+      { seconds: 5.8, scene: 'question', voice: 'narrator', line: 'Pranged? The maths door opens. Sums buy you another go.' },
+      { seconds: 4.5, scene: 'road', voice: 'papa', line: 'Six stages. I built them all. Off you go.' },
+    ],
+  },
 }
 
-export const STORY_ORDER = ['arcade', 'dave', 'prince', 'pipes'] as const
+export const STORY_ORDER = ['arcade', 'dave', 'prince', 'pipes', 'road'] as const

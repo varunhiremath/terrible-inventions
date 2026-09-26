@@ -36,6 +36,9 @@ import { levelFor as pipeLevel } from '../pipes/levels'
 import { newBody } from '../pipes/physics'
 import { newRun } from '../pipes/run'
 import { drawMachine, drawRunner, MACHINE_INK } from '../render/silhouettes'
+import { LANES as ROAD_LANES, SIGHT as ROAD_SIGHT, TANK } from '../road/level'
+import { drawRun as drawRoadRun } from '../road/draw'
+import { FIXED as ROAD_FIXED, NO_INPUT as ROAD_STILL, newRun as newDrive, step as driveOn, type Run as Drive } from '../road/run'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -257,6 +260,58 @@ export const DUNGEON_PATH: { col: number; row: number }[] = (() => {
  * running weirdly fast.
  */
 const DUNGEON_PACE = 1.8
+
+/**
+ * Half a minute of the road, driven once and kept.
+ *
+ * A scene has to be a pure function of the clock so it can be scrubbed and
+ * replayed, and the road is a simulation — so it is played through once, in
+ * advance, and the cutscene reads off the recording. Driven by something no
+ * cleverer than a person: hold the pedal, move to whichever lane is clear.
+ */
+const FOOTAGE: Drive[] = (() => {
+  const frames: Drive[] = []
+  let run = newDrive(1, 99, 0, 12)
+  let target: number | null = null
+
+  for (let t = 0; t < 40; t += ROAD_FIXED) {
+    const gapIn = (lane: number) => {
+      let soonest = Infinity
+      for (const car of run.cars) {
+        if (Math.abs(car.lane - lane) >= 0.9) continue
+        const ahead = car.y - run.distance
+        if (ahead < 0) continue
+        const closing = run.speed - car.speed
+        if (closing > 0.5) soonest = Math.min(soonest, ahead / closing)
+      }
+      return soonest
+    }
+
+    const here = Math.round(run.lane)
+    let input = { ...ROAD_STILL, go: true }
+    if (target !== null && Math.abs(run.lane - target) > 0.12) {
+      input = { ...input, left: target < run.lane, right: target > run.lane }
+    } else {
+      target = null
+      if (gapIn(here) < 3) {
+        for (let reach = 1; reach < ROAD_LANES && target === null; reach++) {
+          for (const lane of [here - reach, here + reach]) {
+            if (lane < 0 || lane > ROAD_LANES - 1 || gapIn(lane) < 3) continue
+            target = lane
+            input = { ...input, left: lane < run.lane, right: lane > run.lane }
+            break
+          }
+        }
+      }
+    }
+
+    run = driveOn(run, input, ROAD_FIXED)
+    if (run.status !== 'driving') run = { ...run, status: 'driving', fuel: TANK, stunned: 0 }
+    // Every sixth step, which is plenty to read back at any frame rate.
+    if (frames.length < 400 && Math.round(t / ROAD_FIXED) % 6 === 0) frames.push(run)
+  }
+  return frames
+})()
 
 /** The four Machines, in the colours they are on the board. */
 const MACHINES = ['#e8503a', '#f49ac1', '#5ad2e0', '#f0a04b']
@@ -494,6 +549,25 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
       clock,
     )
     ctx.restore()
+  },
+
+  /**
+   * The road: a real drive, recorded once and played back.
+   *
+   * Same rule as every other scene in here — it is the game, drawn by the
+   * game's own code, rather than a picture of the game.
+   */
+  road({ ctx, w, h, clock }) {
+    const frame = FOOTAGE[Math.min(FOOTAGE.length - 1, Math.floor(clock * 10))]
+    const lane = Math.min(w / (ROAD_LANES + 1.6), h / (ROAD_SIGHT * 0.55))
+    drawRoadRun(ctx, frame, frame.lane, {
+      lane,
+      depth: h / ROAD_SIGHT,
+      left: (w - lane * ROAD_LANES) / 2,
+      line: h * 0.82,
+      distance: frame.distance,
+      clock,
+    }, w, h)
   },
 
   /**

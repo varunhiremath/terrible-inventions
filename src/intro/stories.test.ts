@@ -11,7 +11,7 @@ import { totalSeconds } from './timeline'
  * like a loading bug rather than a missing picture.
  */
 /** The scenes that are a real level being played. */
-const LEVELS = ['maze', 'cave', 'dungeon', 'pipes']
+const LEVELS = ['maze', 'cave', 'dungeon', 'pipes', 'road']
 
 describe('the stories', () => {
   it('has one for every game', () => {

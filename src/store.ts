@@ -12,7 +12,7 @@ import { setMusicEnabled } from './music/player'
 import { emptyPowerUps, type PowerUps } from './arcade/maze/game'
 import type { Attempt, Problem } from './engine/types'
 
-export type Screen = 'home' | 'arcade' | 'dave' | 'prince' | 'pipes' | 'coop' | 'note' | 'settings'
+export type Screen = 'home' | 'arcade' | 'dave' | 'prince' | 'pipes' | 'road' | 'coop' | 'note' | 'settings'
 
 /** How far above his solo level a two-player puzzle is pitched. */
 export const COOP_BONUS = 200
@@ -23,6 +23,7 @@ const INTRO_FOR: Partial<Record<Screen, string>> = {
   dave: 'dave',
   prince: 'prince',
   pipes: 'pipes',
+  road: 'road',
 }
 
 

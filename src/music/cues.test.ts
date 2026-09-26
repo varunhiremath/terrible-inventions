@@ -5,6 +5,7 @@ import {
   DUNGEON_CUES,
   MAZE_CUES,
   PIPE_CUES,
+  ROAD_CUES,
   eighthSeconds,
   loopLength,
   noteFrequency,
@@ -70,7 +71,7 @@ describe('the dungeon cues', () => {
  * next dot, and there are four of those a second — at three tenths of a second
  * they would overlap each other all the way round the board.
  */
-const TICKS: CueName[] = ['chomp', 'gem', 'leap']
+const TICKS: CueName[] = ['chomp', 'gem', 'leap', 'overtake']
 
   it('are short enough to be cues rather than tunes', () => {
     // Anything much past this stops being a cue and starts being music playing
@@ -227,7 +228,7 @@ describe('every cue', () => {
   it('belongs to exactly one set', () => {
     // Four sets merge into CUES, and a name in two of them would have one
     // quietly win. Nothing would fail; the wrong sound would just play.
-    const sets = [DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES]
+    const sets = [DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES]
     const seen = new Set<string>()
     for (const set of sets) {
       for (const name of Object.keys(set)) {
@@ -236,5 +237,27 @@ describe('every cue', () => {
       }
     }
     expect(seen.size).toBe(Object.keys(CUES).length)
+  })
+})
+
+/** E natural minor — E F# G A B C D — which is where the driving loop lives. */
+const ROAD_SCALE = [4, 6, 7, 9, 11, 0, 2]
+
+describe('the road cues', () => {
+  it('stay inside the scale the driving loop is built from', () => {
+    for (const name of Object.keys(ROAD_CUES) as CueName[]) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          expect(ROAD_SCALE, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain(pitchClass(note.frequency))
+        }
+      }
+    }
+  })
+
+  it('keeps the overtake out of the way, because it fires all stage long', () => {
+    // You get past a car every couple of seconds for the length of a stage.
+    expect(loopLength(CUES.overtake) * eighthSeconds(CUES.overtake)).toBeLessThan(0.25)
+    for (const part of CUES.overtake.parts) expect(part.gain ?? 1).toBeLessThan(0.08)
   })
 })

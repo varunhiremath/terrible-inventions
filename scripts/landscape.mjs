@@ -66,7 +66,7 @@ for (const size of SIZES) {
   await page.waitForTimeout(1200)
   await audit(page, 'home', size.tag)
 
-  for (const game of ['Papa Panic', 'The Caves', 'The Dungeon', 'The Pipes']) {
+  for (const game of ['Papa Panic', 'The Caves', 'The Dungeon', 'The Pipes', 'The Road']) {
     await page.goto(URL, { waitUntil: 'networkidle' })
     await page.waitForTimeout(900)
     const b = page.getByRole('button', { name: new RegExp(game, 'i') })

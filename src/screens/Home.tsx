@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { drawCan, drawCar, drawMine, drawRoad } from '../road/draw'
 import { useStore } from '../store'
 import type { Screen } from '../store'
 import { drawFigure, type Look } from '../arcade/dungeon/figure'
@@ -264,6 +265,30 @@ const TILES: Tile[] = [
         0,
         0,
       )
+    },
+  },
+  {
+    id: 'road',
+    title: 'The Road',
+    blurb: 'Four lanes, no brakes worth speaking of. Mind the fuel.',
+    tint: '#2f4a2e',
+    emblem(ctx, w, h) {
+      const lane = w / 5.6
+      const view = {
+        lane,
+        depth: h / 5,
+        left: (w - lane * 4) / 2,
+        line: h * 0.78,
+        distance: 0,
+        clock: 0,
+      }
+      drawRoad(ctx, view, w, h)
+      // Two of his and one of yours, drawn by the game's own code so the tile
+      // is the game rather than a picture of it.
+      drawCar(ctx, { id: 1, y: 3.4, lane: 0, speed: 0, kind: 0 }, view)
+      drawCar(ctx, { id: 2, y: 2.6, lane: 2, speed: 0, kind: 1 }, view)
+      drawCan(ctx, { id: 3, y: 1.6, lane: 3, taken: false }, view)
+      drawMine(ctx, 1, view, 0)
     },
   },
 ]

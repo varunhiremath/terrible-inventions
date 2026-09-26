@@ -5,6 +5,7 @@ import { Home } from './screens/Home'
 import { Intro } from './intro/Intro'
 import { STORIES } from './intro/stories'
 import { Pipes } from './screens/Pipes'
+import { Road } from './screens/Road'
 import { Prince } from './screens/Prince'
 import { Note } from './screens/Note'
 import { Settings } from './screens/Settings'
@@ -55,7 +56,7 @@ export default function App() {
     // running underneath would take that away, and for a while one was: the
     // chase tune from the maze was playing over the whole thing.
     const tune =
-      screen === 'arcade' ? 'chase' : screen === 'dave' ? 'cavern' : screen === 'pipes' ? 'pipes' : null
+      screen === 'arcade' ? 'chase' : screen === 'dave' ? 'cavern' : screen === 'pipes' ? 'pipes' : screen === 'road' ? 'road' : null
     if (tune) startMusic(tune)
     else stopMusic()
     // `save.music` is in here so switching it back on in settings starts the
@@ -79,6 +80,8 @@ export default function App() {
       return <Prince />
     case 'pipes':
       return <Pipes />
+    case 'road':
+      return <Road />
     case 'note':
       return <Note />
     case 'settings':
