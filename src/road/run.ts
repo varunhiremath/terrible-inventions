@@ -13,7 +13,7 @@
 import { makeRng, type Rng } from '../engine/rng'
 import {
   ACCELERATION, BRAKING, BURN_PER_SECOND, CAN_EVERY, CAN_WORTH, CAR_LONG, CAR_WIDE,
-  DRAG, LANES, LENGTH_OF, MISSION_BONUS, REACT, SIGHT, STEER_RATE, TANK,
+  DRAG, LANES, LENGTH_OF, MISSION_BONUS, REACT, SIGHT, SIGNAL_FOR, STEER_RATE, TANK,
   TOP_SPEED, WANDERS, WIDTH_OF, stageFor, topSpeedOn, type CarKind, type Stage,
 } from './level'
 
@@ -41,6 +41,14 @@ export interface Car {
   kind: CarKind
   /** A swerver's chosen lane. It only ever moves towards this. */
   wants: number
+  /**
+   * Which way it is indicating, and for how much longer.
+   *
+   * A vehicle decides, indicates, and only then pulls out. Nothing moves
+   * sideways without having signalled first.
+   */
+  signal: -1 | 0 | 1
+  signalFor: number
   /** A patrol that has been overtaken gets its dander up for a moment. */
   roused: number
 }
@@ -222,6 +230,8 @@ function spawnWave(run: Run, rng: Rng): void {
       speed: topSpeedOn(run.stage) * run.stage.pace,
       kind,
       wants: lane,
+      signal: 0,
+      signalFor: 0,
       roused: 0,
     })
   }
@@ -261,28 +271,92 @@ function spawnCan(run: Run, rng: Rng): void {
  */
 function moveOver(run: Run, car: Car, dt: number, rng: Rng): void {
   const ahead = car.y - run.distance
-  if (ahead <= REACT) return
 
-  /** Would putting this one in `lane` leave its stretch with no way through? */
-  const shuts = (lane: number): boolean => {
-    const others = run.cars.filter((c) => c.id !== car.id)
-    const blocked = blockedLanes(others, car.y - REACT, car.y + longOf(car) + REACT)
-    blocked.add(lane)
-    return blocked.size >= LANES
+  const moving = Math.abs(car.wants - car.lane) >= 0.01
+
+  /*
+   * Inside the stretch he is arriving in, nothing *starts* a manoeuvre.
+   *
+   * One that is already under way finishes it, and that is deliberate: the
+   * indicator has been on for most of a second and the thing is visibly
+   * halfway across, so completing is the readable outcome. Freezing it instead
+   * — which is what this did first — leaves a vehicle straddling two lanes and
+   * blocking both, and the road-is-never-blocked test caught exactly that on
+   * the opening stage.
+   */
+  if (ahead <= REACT && !moving) {
+    car.signal = 0
+    car.signalFor = 0
+    return
   }
 
-  if (Math.abs(car.wants - car.lane) < 0.01 && rng.next() < WANDERS[car.kind] * dt) {
+  /**
+   * Would putting this one in `lane` leave its stretch with no way through?
+   *
+   * Counting the lane it is leaving as well as the one it is joining: for the
+   * second or so of the manoeuvre it is across both, and a check that only
+   * looked at the destination was quietly allowing the road to close while the
+   * move was in progress.
+   */
+  const shuts = (lane: number): boolean => {
+    /*
+     * The promise is about every window the driver might arrive in, and his
+     * window slides — so checking one window is not enough, and checking one
+     * twice the size refuses everything. This samples the run of windows that
+     * overlap this vehicle and requires a way through in all of them.
+     *
+     * Getting this wrong went both ways in one sitting: too wide and the
+     * traffic stopped changing lanes at all (caught by the indicator test
+     * having nothing to watch), too narrow and the road closed (caught by the
+     * blocked-road test).
+     */
+    const others = run.cars.filter((c) => c.id !== car.id)
+    const mine = new Set([lane, Math.round(car.lane)])
+    const first = car.y + longOf(car) - REACT
+    const last = car.y
+    for (let i = 0; i <= 4; i++) {
+      const from = first + ((last - first) * i) / 4
+      const blocked = blockedLanes(others, from, from + REACT)
+      for (const own of mine) blocked.add(own)
+      if (blocked.size >= LANES) return true
+    }
+    return false
+  }
+
+  const settled = !moving
+
+  // Indicating: count it down, and pull out when it has run.
+  if (settled && car.signalFor > 0) {
+    car.signalFor -= dt
+    if (car.signalFor <= 0) {
+      const want = Math.min(LANES - 1, Math.max(0, Math.round(car.lane) + car.signal))
+      // Checked again at the moment of moving, not only when it was decided:
+      // the road has had most of a second to change since then.
+      if (want !== Math.round(car.lane) && !shuts(want)) car.wants = want
+      else car.signal = 0
+      car.signalFor = 0
+    }
+    return
+  }
+
+  // Deciding: a swerver goes looking for the lane you are in, the rest pull
+  // out for reasons of their own. Either way it indicates first.
+  if (settled && car.signal === 0 && rng.next() < WANDERS[car.kind] * dt) {
     const target = car.kind === 'swerver'
       ? Math.round(run.lane)
       : Math.round(car.lane) + (rng.next() < 0.5 ? -1 : 1)
     const want = Math.min(LANES - 1, Math.max(0, target))
-    if (want !== Math.round(car.lane) && !shuts(want)) car.wants = want
+    if (want !== Math.round(car.lane) && !shuts(want)) {
+      car.signal = want > car.lane ? 1 : -1
+      car.signalFor = SIGNAL_FOR
+    }
   }
 
-  if (Math.abs(car.wants - car.lane) > 0.01) {
+  if (moving) {
     const way = Math.sign(car.wants - car.lane)
     const moved = car.lane + way * STEER_RATE * 0.5 * dt
     car.lane = way > 0 ? Math.min(car.wants, moved) : Math.max(car.wants, moved)
+    if (Math.abs(car.wants - car.lane) < 0.01) car.signal = 0
   }
 }
 

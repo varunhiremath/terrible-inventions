@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { LEVEL_TILES_X, VIEW_TILES_X, VIEW_TILES_Y } from '../dave/level'
 import { JET_SECONDS, NO_INPUT, cameraFor, type Input } from '../dave/physics'
 import { STARTING_LIVES, newGame, respawn, shoot, step, type CaveEvent, type Game } from '../dave/game'
-import { playCue } from '../music/player'
+import { playCue, setHeat } from '../music/player'
 import type { CueName } from '../music/score'
-import { levelFor } from '../dave/levels'
+import { LEVELS, levelFor } from '../dave/levels'
 import { createPacer } from '../arcade/pacing'
 import { blendDave, blendMonster } from '../dave/blend'
 import { combine, keyAt, padHeight, padLayout, type Button, type Key } from '../dave/controls'
@@ -164,6 +164,19 @@ export function Dave() {
         }
         gameRef.current = next
 
+        /*
+         * How tense the music is.
+         *
+         * Being deep in the caves, being down to your last Dave, and carrying
+         * the trophy — the last one because once you have it the only thing
+         * left to do is get out, and getting out is the part that kills you.
+         * The caves have no drum track until this passes halfway, which is
+         * the loudest thing the heat does anywhere in the app.
+         */
+        const deep = (next.number - 1) / Math.max(1, LEVELS.length - 1)
+        const thin = 1 - (next.lives - 1) / 2
+        setHeat(Math.max(deep * 0.5 + (next.dave.hasTrophy ? 0.35 : 0), thin * 0.85))
+
         if (
           next.score !== shown.score || next.lives !== shown.lives ||
           next.status !== shown.status || next.message !== shown.message ||
@@ -304,6 +317,7 @@ export function Dave() {
 
     return () => {
       cancelAnimationFrame(frame)
+      setHeat(0)
       observer.disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

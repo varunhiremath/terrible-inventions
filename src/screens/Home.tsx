@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { drawCan, drawCar, drawMine, drawRoad } from '../road/draw'
+import { drawRubble, drawShip, drawSky, drawWorld } from '../space/draw'
+import { worldFor } from '../space/level'
 import { useStore } from '../store'
 import type { Screen } from '../store'
 import { drawFigure, type Look } from '../arcade/dungeon/figure'
@@ -12,7 +14,7 @@ import { fill } from '../config/profile'
 /**
  * The front door.
  *
- * Four games, and nothing else on the screen. The app used to open straight
+ * Six games, and nothing else on the screen. The app used to open straight
  * into the maze, which quietly made that one the game and the other three
  * things you had to know were hidden in the settings.
  *
@@ -30,7 +32,7 @@ interface Tile {
 }
 
 /**
- * The four tiles.
+ * The six tiles.
  *
  * Each one shows the character you will actually be, drawn with that game's
  * own code wherever there is any — the dungeon's figure and the pipes'
@@ -285,10 +287,28 @@ const TILES: Tile[] = [
       drawRoad(ctx, view, w, h)
       // Two of his and one of yours, drawn by the game's own code so the tile
       // is the game rather than a picture of it.
-      drawCar(ctx, { id: 1, y: 3.4, lane: 0, speed: 0, kind: 'patrol', wants: 0, roused: 0 }, view)
-      drawCar(ctx, { id: 2, y: 2.6, lane: 2, speed: 0, kind: 'swerver', wants: 2, roused: 0 }, view)
+      drawCar(ctx, { id: 1, y: 3.4, lane: 0, speed: 0, kind: 'patrol', wants: 0, signal: 0, signalFor: 0, roused: 0 }, view)
+      drawCar(ctx, { id: 2, y: 2.6, lane: 2, speed: 0, kind: 'swerver', wants: 2, signal: 1, signalFor: 0.5, roused: 0 }, view)
       drawCan(ctx, { id: 3, y: 1.6, lane: 3, taken: false }, view)
       drawMine(ctx, 1, view, 0)
+    },
+  },
+  {
+    id: 'space',
+    title: 'The Long Way Out',
+    blurb: 'Eight worlds, and everything in between wants a word.',
+    tint: '#0b1024',
+    emblem(ctx, w, h) {
+      // Saturn, because it is the one everybody recognises with the sound off.
+      const view = { w, h, clock: 0 }
+      drawSky(ctx, view, 0)
+      drawWorld(ctx, worldFor(6), 0.62, view)
+      const rock = (id: number, x: number, y: number, kind: 'rock' | 'shard' | 'drone') =>
+        drawRubble(ctx, { id, kind, x, y, drift: 0, health: 3, flash: 0 }, view)
+      rock(3, 0.22, 0.52, 'rock')
+      rock(7, 0.74, 0.44, 'drone')
+      rock(5, 0.52, 0.66, 'shard')
+      drawShip(ctx, 0.4, view, 0, 0)
     },
   },
 ]
@@ -337,11 +357,19 @@ export function Home() {
       </div>
 
       <p className="text-sm text-dim">
-        {fill('{papa}')} built four terrible machines. Pick one.
+        {fill('{papa}')} built six terrible machines. Pick one.
       </p>
 
-      {/* Two by two, and each tile is a whole thumb's worth of target. */}
-      <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-3">
+      {/*
+        * Six tiles, all the same size.
+        *
+        * It was two rows of two with six games in it, so the grid grew a third
+        * row that the row heights knew nothing about and the last tiles came
+        * out shorter than the rest. Rows are declared now: two across and
+        * three down held upright, three across and two down on a screen with
+        * no height to spare.
+        */}
+      <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-3 gap-3 short:grid-cols-3 short:grid-rows-2">
         {TILES.map((tile) => (
           <button
             key={tile.id}

@@ -217,8 +217,8 @@ describe('the road', () => {
     const hit = {
       ...run,
       cars: [
-        { id: 1, y: run.distance + 0.2, lane: 1.5, speed: 0, kind: 'cruiser' as const, wants: 1.5, roused: 0 },
-        { id: 2, y: run.distance + SIGHT * 2, lane: 0, speed: 0, kind: 'cruiser' as const, wants: 0, roused: 0 },
+        { id: 1, y: run.distance + 0.2, lane: 1.5, speed: 0, kind: 'cruiser' as const, wants: 1.5, signal: 0 as const, signalFor: 0, roused: 0 },
+        { id: 2, y: run.distance + SIGHT * 2, lane: 0, speed: 0, kind: 'cruiser' as const, wants: 0, signal: 0 as const, signalFor: 0, roused: 0 },
       ],
     }
     const back = resume(hit)
@@ -263,32 +263,75 @@ describe('the missions', () => {
 })
 
 describe('the vehicles', () => {
-  it('never changes lane inside the stretch he is arriving in', () => {
+  it('never starts a manoeuvre inside the stretch he is arriving in', () => {
     /*
-     * The swervers are the whole point of this one. A car that moves after you
-     * have committed to a gap is not a hazard, it is a trick — so everything
-     * is locked once it is inside the reaction window, and this drives the
-     * busiest stages watching for one that is not.
+     * The rule, precisely: nothing *begins* moving once it is inside the
+     * window. One already under way finishes — it has been indicating for most
+     * of a second and is visibly halfway across, so completing is the readable
+     * outcome, and freezing it instead leaves it straddling two lanes and
+     * blocking both.
+     *
+     * What would be a trick is a vehicle sitting still in its lane and then
+     * stepping sideways as you arrive. That is what this watches for.
      */
     for (const number of [4, 5, 6]) {
       for (let seed = 1; seed <= 4; seed++) {
         let run = newRun(number, 99, 0, seed * 5)
         const drive = makeDriver()
-        let before = new Map(run.cars.map((c) => [c.id, c.lane]))
-        for (let t = 0; t < 60 && run.status === 'driving'; t += FIXED) {
+        let settledBefore = new Map(
+          run.cars.map((c) => [c.id, Math.abs(c.wants - c.lane) < 0.01]),
+        )
+        for (let t = 0; t < 60; t += FIXED) {
           run = step(run, drive(run), FIXED)
+          // Carrying on through prangs. Stopping at the first one meant
+          // watching about four seconds of road and concluding that traffic
+          // never changes lane.
+          if (run.status !== 'driving') run = resume(run)
           for (const car of run.cars) {
-            const was = before.get(car.id)
-            const close = car.y - run.distance <= REACT
-            if (was !== undefined && close) {
-              expect(
-                Math.abs(car.lane - was),
-                `a ${car.kind} moved lane ${car.y - run.distance} ahead, inside the window`,
-              ).toBeLessThan(0.001)
+            const wasSettled = settledBefore.get(car.id)
+            const inside = car.y - run.distance <= REACT
+            const nowMoving = Math.abs(car.wants - car.lane) >= 0.01
+            if (wasSettled && inside && nowMoving) {
+              throw new Error(`a ${car.kind} set off inside the window on stage ${number}`)
             }
           }
-          before = new Map(run.cars.map((c) => [c.id, c.lane]))
+          settledBefore = new Map(
+            run.cars.map((c) => [c.id, Math.abs(c.wants - c.lane) < 0.01]),
+          )
         }
+      }
+    }
+  }, 120_000)
+
+  it('indicates before it pulls out, every time', () => {
+    /*
+     * The whole point of the indicators: no vehicle may move sideways without
+     * having had its lamp on first. Watched across the busiest stages, where
+     * every sort of vehicle is out.
+     */
+    for (const number of [4, 5, 6]) {
+      for (let seed = 1; seed <= 3; seed++) {
+        let run = newRun(number, 99, 0, seed * 11)
+        const drive = makeDriver()
+        let before = new Map(run.cars.map((c) => [c.id, { lane: c.lane, signal: c.signal }]))
+        let sawOne = false
+        for (let t = 0; t < 60; t += FIXED) {
+          run = step(run, drive(run), FIXED)
+          if (run.status !== 'driving') run = resume(run)
+          for (const car of run.cars) {
+            const was = before.get(car.id)
+            if (!was) continue
+            if (Math.abs(car.lane - was.lane) > 0.001) {
+              sawOne = true
+              expect(
+                was.signal !== 0 || car.signal !== 0,
+                `a ${car.kind} moved lane with no indicator on stage ${number}`,
+              ).toBe(true)
+            }
+          }
+          before = new Map(run.cars.map((c) => [c.id, { lane: c.lane, signal: c.signal }]))
+        }
+        expect(sawOne, `nothing changed lane at all on stage ${number}, so this proves nothing`).toBe(true)
       }
     }
   }, 120_000)

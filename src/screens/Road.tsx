@@ -8,7 +8,7 @@ import {
 } from '../road/run'
 import { createLatch, keyAt, padHeight, padLayout, type Button, type Key } from '../road/controls'
 import { drawPad, drawRun, type View } from '../road/draw'
-import { playCue } from '../music/player'
+import { playCue, setHeat } from '../music/player'
 import type { CueName } from '../music/score'
 import { createPacer } from '../arcade/pacing'
 import { fill } from '../config/profile'
@@ -131,6 +131,19 @@ export function Road() {
           const loudest = LOUDEST.find((name) => heard.includes(name))
           if (loudest) playCue(NOISE[loudest])
         }
+
+        /*
+         * How tense the music is.
+         *
+         * Three things make a drive bad: being deep into the stages, being
+         * down to your last car, and being nearly out of fuel. The worst of
+         * the three wins, so the tune answers whichever is actually happening
+         * rather than averaging them into nothing.
+         */
+        const deep = (next.number - 1) / Math.max(1, STAGES.length - 1)
+        const thin = 1 - (next.lives - 1) / Math.max(1, STARTING_LIVES - 1)
+        const dry = Math.max(0, 1 - next.fuel / (TANK * 0.35))
+        setHeat(Math.max(deep * 0.5 + (next.distance / next.stage.distance) * 0.25, thin * 0.8, dry))
 
         if (
           next.number !== hud.stage || next.status !== hud.status ||
@@ -314,6 +327,7 @@ export function Road() {
     return () => {
       cancelAnimationFrame(frame)
       observer.disconnect()
+      setHeat(0)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

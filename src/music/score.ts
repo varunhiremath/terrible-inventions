@@ -51,6 +51,16 @@ export interface Part {
   /** How fast to flick through `arp`, in steps per second. */
   arpRate?: number
   pattern: string
+  /**
+   * The heat this voice waits for, 0 to 1. Absent means it plays throughout.
+   *
+   * A game raises its own heat as things get worse — the last stage, the last
+   * life, the last stretch before the finish — and voices marked this way come
+   * in as it climbs. It is the cheapest way to make a loop that has to run for
+   * eighty seconds say something about how the run is going, and it is why the
+   * fifth stage sounds nothing like the first while still being the same tune.
+   */
+  from?: number
 }
 
 export interface Track {
@@ -59,6 +69,31 @@ export interface Track {
   parts: Part[]
   /** Per eighth: 'x' hits, anything else does not. */
   drums?: string
+  /**
+   * Beats a minute this gains at full heat.
+   *
+   * Small. Ten or so is felt rather than noticed, which is what tension is;
+   * thirty is a different tune played faster, which is a novelty.
+   */
+  hotter?: number
+  /** Drums that only arrive once the heat does. */
+  hotDrums?: string
+}
+
+/** How fast a voice has to arrive once its heat is reached. */
+const FADE_IN = 0.18
+
+/**
+ * How loud a voice is at a given heat: nothing, then a quick fade, then all.
+ *
+ * Switching a voice on at a threshold is audible as a switch. Fading it in
+ * over a little of the range above the threshold is audible as the music
+ * getting busier, which is the point.
+ */
+export function heatGain(part: Part, heat: number): number {
+  if (part.from === undefined) return 1
+  if (heat <= part.from) return 0
+  return Math.min(1, (heat - part.from) / FADE_IN)
 }
 
 const SEMITONES: Record<string, number> = {
@@ -111,9 +146,10 @@ export function loopLength(track: Track): number {
   return Math.max(0, ...parts, drums)
 }
 
-/** Seconds per eighth note. */
-export function eighthSeconds(track: Track): number {
-  return 60 / track.beatsPerMinute / 2
+/** Seconds per eighth note, hurried along by the heat if the track allows it. */
+export function eighthSeconds(track: Track, heat = 0): number {
+  const bpm = track.beatsPerMinute + (track.hotter ?? 0) * Math.max(0, Math.min(1, heat))
+  return 60 / bpm / 2
 }
 
 // --- the tunes -------------------------------------------------------------
@@ -161,10 +197,50 @@ const CHASE_PAD = [
 
 const CHASE_DRUMS = ('- x - x - x - x ').repeat(7) + '- x - x - x x x'
 
+
+/*
+ * The chase, getting worse.
+ *
+ * Two voices that are not in the tune as written. The first is an off-beat
+ * stab on the root of each chord, which does nothing to the harmony and
+ * everything to how hurried it feels. The second is the raised seventh held
+ * right up against the root — G# against A, a semitone apart — which is the
+ * interval this key was chosen for in the first place.
+ *
+ * Neither plays at the start of a board. They arrive as the last dots go and
+ * the machines speed up, and by the last life the tune is the same eight bars
+ * with three more voices in it.
+ */
+const CHASE_PUSH = [
+  '.  A3 .  A3 .  A3 .  A3',
+  '.  G3 .  G3 .  G3 .  G3',
+  '.  F3 .  F3 .  F3 .  F3',
+  '.  E3 .  E3 .  E3 .  E3',
+  '.  A3 .  A3 .  A3 .  A3',
+  '.  G3 .  G3 .  G3 .  G3',
+  '.  F3 .  F3 .  F3 .  F3',
+  '.  E3 .  E3 .  E3 E3 E3',
+].join(' ')
+
+const CHASE_DREAD = [
+  'G#5 . .  .  .  .  .  . ',
+  'A5 .  .  .  .  .  .  . ',
+  'G#5 . .  .  .  .  .  . ',
+  'A5 .  .  .  .  .  .  . ',
+  'G#5 . .  .  .  .  .  A5',
+  'G#5 . .  .  .  .  .  . ',
+  'A5 .  .  .  .  .  .  . ',
+  'G#5 . .  .  .  .  .  . ',
+].join(' ')
+
+const CHASE_HOT_DRUMS = ('x - x x - x x x ').repeat(7) + 'x - x x x x x x'
+
 export const CHASE: Track = {
   name: 'Papa Panic',
   beatsPerMinute: 126,
+  hotter: 12,
   drums: CHASE_DRUMS,
+  hotDrums: CHASE_HOT_DRUMS,
   parts: [
     {
       wave: 'pulse',
@@ -187,6 +263,8 @@ export const CHASE: Track = {
       arpRate: 20,
       pattern: CHASE_PAD,
     },
+    { wave: 'pulse', duty: 0.5, gain: 0.09, sustain: 0.28, pattern: CHASE_PUSH, from: 0.3 },
+    { wave: 'sawtooth', gain: 0.045, sustain: 1, pattern: CHASE_DREAD, from: 0.68 },
   ],
 }
 
@@ -274,10 +352,45 @@ const PIPES_PAD = [
 /** Off the beat as often as on it, which is what makes it bounce. */
 const PIPES_DRUMS = 'x - - x - - x - '.repeat(7) + 'x - x - x - x x'
 
+
+/*
+ * The pipes, with the clock running down.
+ *
+ * C major is a cheerful key and this tune is a cheerful tune, which is exactly
+ * why the last twenty seconds need help. B against C — the leading note held
+ * under the root instead of resolving to it — sours a major key faster than
+ * anything else you can do to it without changing a single note of the tune.
+ */
+const PIPES_PUSH = [
+  '.  C3 .  C3 .  C3 .  C3',
+  '.  A2 .  A2 .  A2 .  A2',
+  '.  F2 .  F2 .  F2 .  F2',
+  '.  G2 .  G2 .  G2 .  G2',
+  '.  C3 .  C3 .  C3 .  C3',
+  '.  A2 .  A2 .  A2 .  A2',
+  '.  F2 .  F2 .  F2 .  F2',
+  '.  G2 .  G2 .  G2 G2 G2',
+].join(' ')
+
+const PIPES_DREAD = [
+  'B5 .  .  .  .  .  .  . ',
+  'C6 .  .  .  .  .  .  . ',
+  'B5 .  .  .  .  .  .  . ',
+  'C6 .  .  .  .  .  .  . ',
+  'B5 .  .  .  .  .  .  C6',
+  'B5 .  .  .  .  .  .  . ',
+  'C6 .  .  .  .  .  .  . ',
+  'B5 .  .  .  .  .  .  . ',
+].join(' ')
+
+const PIPES_HOT_DRUMS = ('x - x - x - x x ').repeat(7) + 'x - x - x x x x'
+
 export const PIPES: Track = {
   name: 'The Pipes',
   beatsPerMinute: 148,
+  hotter: 11,
   drums: PIPES_DRUMS,
+  hotDrums: PIPES_HOT_DRUMS,
   parts: [
     {
       // The narrowest pulse of the three, which is the brightest and thinnest.
@@ -298,6 +411,8 @@ export const PIPES: Track = {
       arpRate: 22,
       pattern: PIPES_PAD,
     },
+    { wave: 'pulse', duty: 0.5, gain: 0.08, sustain: 0.26, pattern: PIPES_PUSH, from: 0.34 },
+    { wave: 'sawtooth', gain: 0.04, sustain: 1, pattern: PIPES_DREAD, from: 0.7 },
   ],
 }
 
@@ -345,9 +460,51 @@ const CAVERN_DRIP = [
   '-  -  -  -  -  -  A5 - ',
 ].join(' ')
 
+
+/*
+ * The caves, once the timer is against you.
+ *
+ * Bb against A: the flat sixth a semitone above the fifth, which is the
+ * oldest suspense interval there is. It sits over a tune that is otherwise
+ * quite happy to potter about underground.
+ */
+const CAVERN_PUSH = [
+  '.  D3 .  D3 .  D3 .  D3',
+  '.  C3 .  C3 .  C3 .  C3',
+  '.  Bb2 . Bb2 . Bb2 . Bb2',
+  '.  A2 .  A2 .  A2 .  A2',
+  '.  D3 .  D3 .  D3 .  D3',
+  '.  G2 .  G2 .  G2 .  G2',
+  '.  Bb2 . Bb2 . Bb2 . Bb2',
+  '.  A2 .  A2 .  A2 A2 A2',
+].join(' ')
+
+const CAVERN_DREAD = [
+  'Bb5 . .  .  .  .  .  . ',
+  'A5 .  .  .  .  .  .  . ',
+  'Bb5 . .  .  .  .  .  . ',
+  'A5 .  .  .  .  .  .  . ',
+  'Bb5 . .  .  .  .  .  A5',
+  'Bb5 . .  .  .  .  .  . ',
+  'A5 .  .  .  .  .  .  . ',
+  'Bb5 . .  .  .  .  .  . ',
+].join(' ')
+
+/*
+ * The caves have no drum track at all, on purpose: they are a slow errand
+ * underground and the pipes are a run, and a drum is most of what separates
+ * them. So the caves get only a hot pattern — silence until the timer is
+ * against you, and then a pulse that was never there before. That is a
+ * stronger effect than speeding up a beat the player has been hearing since
+ * the level began.
+ */
+const CAVERN_HOT_DRUMS = ('- - x - x - - x ').repeat(7) + '- - x - x - x x'
+
 export const CAVERN: Track = {
   name: "Dave's Caves",
   beatsPerMinute: 104,
+  hotter: 14,
+  hotDrums: CAVERN_HOT_DRUMS,
   parts: [
     {
       wave: 'pulse',
@@ -359,6 +516,8 @@ export const CAVERN: Track = {
     },
     { wave: 'triangle', gain: 0.22, sustain: 1, pattern: CAVERN_BASS },
     { wave: 'pulse', duty: 0.125, gain: 0.05, sustain: 0.3, pattern: CAVERN_DRIP },
+    { wave: 'pulse', duty: 0.5, gain: 0.08, sustain: 0.28, pattern: CAVERN_PUSH, from: 0.32 },
+    { wave: 'sawtooth', gain: 0.045, sustain: 1, pattern: CAVERN_DREAD, from: 0.7 },
   ],
 }
 
@@ -703,9 +862,45 @@ const ROAD_PAD = [
   'B2 .  .  .  B2 .  .  . ',
 ].join(' ')
 
+
+/*
+ * The road, as the traffic thickens.
+ *
+ * The push is the root on every off-beat, which on a driving tune reads as
+ * speed. The dread is C against B — the flat sixth leaning on the fifth, held
+ * high — and it is the only thing in this track that is not going anywhere.
+ */
+const ROAD_PUSH = [
+  '.  E3 .  E3 .  E3 .  E3',
+  '.  D3 .  D3 .  D3 .  D3',
+  '.  C3 .  C3 .  C3 .  C3',
+  '.  B2 .  B2 .  B2 .  B2',
+  '.  E3 .  E3 .  E3 .  E3',
+  '.  D3 .  D3 .  D3 .  D3',
+  '.  C3 .  C3 .  C3 .  C3',
+  '.  B2 .  B2 .  B2 B2 B2',
+].join(' ')
+
+const ROAD_DREAD = [
+  'C5 .  .  .  .  .  .  . ',
+  'B4 .  .  .  .  .  .  . ',
+  'C5 .  .  .  .  .  .  . ',
+  'B4 .  .  .  .  .  .  . ',
+  'C5 .  .  .  .  .  .  B4',
+  'C5 .  .  .  .  .  .  . ',
+  'B4 .  .  .  .  .  .  . ',
+  'C5 .  .  .  .  .  .  . ',
+].join(' ')
+
+const ROAD_DRUMS = '- - x - - - x - '.repeat(8)
+const ROAD_HOT_DRUMS = ('x - x - x - x x ').repeat(7) + 'x - x - x x x x'
+
 export const ROAD: Track = {
   name: 'The Road',
   beatsPerMinute: 148,
+  hotter: 12,
+  drums: ROAD_DRUMS,
+  hotDrums: ROAD_HOT_DRUMS,
   parts: [
     {
       wave: 'pulse',
@@ -725,6 +920,8 @@ export const ROAD: Track = {
       arpRate: 18,
       pattern: ROAD_PAD,
     },
+    { wave: 'pulse', duty: 0.5, gain: 0.08, sustain: 0.26, pattern: ROAD_PUSH, from: 0.3 },
+    { wave: 'sawtooth', gain: 0.045, sustain: 1, pattern: ROAD_DREAD, from: 0.68 },
   ],
 }
 
@@ -784,12 +981,185 @@ export const ARRIVE: Track = {
   ],
 }
 
+
+/*
+ * Space, in E Phrygian — E F G A B C D.
+ *
+ * The flattened second is the whole point. A semitone between the root and the
+ * note above it is the interval the ear reads as something being wrong, and it
+ * is why this sounds like a long way from home rather than a nice trip to see
+ * Saturn. Same seven notes as E minor with one changed, so it sits next to the
+ * road's tune in the collection without being it.
+ *
+ * It is also the first track written around the heat. Three voices play from
+ * the start; the pulse arrives as the sky fills up and the high rub arrives
+ * near the world, so the eighty seconds out to Neptune are not eighty seconds
+ * of the same eight bars.
+ */
+const SPACE_LEAD = [
+  'E4 .  G4 .  B4 .  .  . ',
+  'F4 .  A4 .  C5 .  .  . ',
+  'G4 .  B4 .  D5 .  .  . ',
+  'F4 .  C5 .  A4 .  .  . ',
+  'E5 .  D5 .  B4 .  G4 . ',
+  'C5 .  B4 .  A4 .  F4 . ',
+  'G4 .  A4 .  B4 .  C5 . ',
+  'B4 .  .  .  E4 .  .  . ',
+].join(' ')
+
+const SPACE_BASS = [
+  'E2 .  .  .  E2 .  .  . ',
+  'F2 .  .  .  F2 .  .  . ',
+  'G2 .  .  .  G2 .  .  . ',
+  'F2 .  .  .  C3 .  .  . ',
+  'E2 .  .  .  E2 .  .  . ',
+  'C2 .  .  .  C2 .  .  . ',
+  'G2 .  .  .  A2 .  .  . ',
+  'B2 .  .  .  E2 .  .  . ',
+].join(' ')
+
+const SPACE_PAD = [
+  'E3 .  .  .  .  .  .  . ',
+  'F3 .  .  .  .  .  .  . ',
+  'G3 .  .  .  .  .  .  . ',
+  'F3 .  .  .  .  .  .  . ',
+  'E3 .  .  .  .  .  .  . ',
+  'C3 .  .  .  .  .  .  . ',
+  'G3 .  .  .  .  .  .  . ',
+  'B2 .  .  .  .  .  .  . ',
+].join(' ')
+
+/** The heartbeat. Comes in once the sky is no longer empty. */
+const SPACE_PULSE = [
+  'E3 E3 .  .  E3 E3 .  . ',
+  'F3 F3 .  .  F3 F3 .  . ',
+  'G3 G3 .  .  G3 G3 .  . ',
+  'F3 F3 .  .  F3 F3 .  . ',
+  'E3 E3 .  .  E3 E3 .  . ',
+  'C3 C3 .  .  C3 C3 .  . ',
+  'G3 G3 .  .  G3 G3 .  . ',
+  'B2 B2 .  .  B2 B2 .  . ',
+].join(' ')
+
+/**
+ * The rub, held high, and the reason the last stretch is unpleasant.
+ *
+ * F against E: a semitone apart, an octave and a half above the bass. It is
+ * not a tune and it is not supposed to be noticed as one — it is the sound of
+ * the run going badly.
+ */
+const SPACE_DREAD = [
+  'F5 .  .  .  .  .  .  . ',
+  'E5 .  .  .  .  .  .  . ',
+  'F5 .  .  .  .  .  .  . ',
+  'E5 .  .  .  .  .  .  . ',
+  'F5 .  .  .  .  .  .  E5',
+  'F5 .  .  .  .  .  .  . ',
+  'E5 .  .  .  .  .  .  . ',
+  'F5 .  .  .  .  .  .  . ',
+].join(' ')
+
+const SPACE_DRUMS = '- - - - x - - - '.repeat(8)
+const SPACE_HOT_DRUMS = '- - x - x - x - '.repeat(7) + '- - x - x - x x'
+
+export const SPACE: Track = {
+  name: 'The Long Way Out',
+  beatsPerMinute: 104,
+  hotter: 14,
+  drums: SPACE_DRUMS,
+  hotDrums: SPACE_HOT_DRUMS,
+  parts: [
+    {
+      wave: 'pulse',
+      duty: 0.25,
+      gain: 0.12,
+      sustain: 0.9,
+      vibrato: { cents: 16, hz: 4.5, delay: 0.16 },
+      pattern: SPACE_LEAD,
+    },
+    { wave: 'triangle', gain: 0.26, sustain: 0.9, pattern: SPACE_BASS },
+    {
+      wave: 'pulse',
+      duty: 0.125,
+      gain: 0.06,
+      sustain: 0.98,
+      arp: [0, 7, 12],
+      arpRate: 16,
+      pattern: SPACE_PAD,
+    },
+    { wave: 'pulse', duty: 0.5, gain: 0.1, sustain: 0.3, pattern: SPACE_PULSE, from: 0.28 },
+    { wave: 'sawtooth', gain: 0.05, sustain: 1, pattern: SPACE_DREAD, from: 0.66 },
+  ],
+}
+
+/** A bolt going. Fires four times a second when the fire button is held. */
+export const LASER: Track = {
+  name: 'Laser',
+  beatsPerMinute: 280,
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.05, sustain: 0.3, pattern: 'B5 E5' }],
+}
+
+/** A hit that did not finish it. */
+export const PING: Track = {
+  name: 'Ping',
+  beatsPerMinute: 300,
+  parts: [{ wave: 'pulse', duty: 0.25, gain: 0.06, sustain: 0.3, pattern: 'G5 E5' }],
+}
+
+/** Something coming apart. */
+export const BURST: Track = {
+  name: 'Burst',
+  beatsPerMinute: 200,
+  parts: [
+    { wave: 'pulse', duty: 0.25, gain: 0.12, sustain: 0.5, pattern: 'E5 G5 B5 E6 .  . ' },
+    { wave: 'triangle', gain: 0.14, sustain: 0.7, pattern: 'E3 .  B3 .  .  . ' },
+  ],
+}
+
+/** Taking one on the hull. Down, and a long way down. */
+export const STRUCK: Track = {
+  name: 'Struck',
+  beatsPerMinute: 115,
+  parts: [
+    { wave: 'sawtooth', gain: 0.14, sustain: 0.8, pattern: 'E4 D4 C4 B3 A3 G3 F3 E3 .  . ' },
+    { wave: 'sine', gain: 0.1, sustain: 1, pattern: 'E2 .  .  B1 .  .  E1 .  .  . ' },
+  ],
+}
+
+/** Arriving somewhere real. */
+export const ORBIT: Track = {
+  name: 'Orbit',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'pulse', duty: 0.25, gain: 0.14, sustain: 0.7, pattern: 'E4 G4 B4 E5 .  D5 C5 B4 E5 .  .  . ' },
+    { wave: 'triangle', gain: 0.18, sustain: 0.85, pattern: 'E2 .  .  .  B2 .  .  .  E3 .  .  . ' },
+  ],
+}
+
+/** The world filling the screen. Repeats, which nothing else in the set does. */
+export const CLOSING: Track = {
+  name: 'Closing',
+  beatsPerMinute: 200,
+  parts: [{ wave: 'pulse', duty: 0.5, gain: 0.1, sustain: 0.45, pattern: 'C5 .  B4 .  C5 .  B4 . ' }],
+}
+
+/** Space's own set, all in E Phrygian, like the loop they interrupt. */
+export const SPACE_CUES = {
+  laser: LASER,
+  ping: PING,
+  burst: BURST,
+  struck: STRUCK,
+  orbit: ORBIT,
+  closing: CLOSING,
+} as const
+
 export const TRACKS = {
   chase: CHASE,
   thinking: THINKING,
   pipes: PIPES,
   cavern: CAVERN,
   road: ROAD,
+  space: SPACE,
 } as const
 export type TrackName = keyof typeof TRACKS
 
@@ -844,10 +1214,10 @@ export const PIPE_CUES = {
   flag: FLAG,
 } as const
 
-// Five sets, because each is held to its own scale — and each scale is the
+// Six sets, because each is held to its own scale — and each scale is the
 // one its game's own loop is built from, so a cue sounds like the tune it
 // interrupts. Mixing them would mean holding none of them to anything.
 export const CUES = {
-  ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES,
+  ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES, ...SPACE_CUES,
 } as const
 export type CueName = keyof typeof CUES

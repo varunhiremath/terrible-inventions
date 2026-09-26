@@ -346,6 +346,30 @@ export function drawCar(ctx: Ctx, car: Car, view: View): void {
   ctx.fillStyle = '#ff4d3d'
   ctx.fillRect(x - wide * 0.42, y + long * 0.42, wide * 0.16, long * 0.05)
   ctx.fillRect(x + wide * 0.26, y + long * 0.42, wide * 0.16, long * 0.05)
+
+  /*
+   * The indicator.
+   *
+   * Amber, blinking, on the side it is about to pull towards, and it comes on
+   * most of a second before anything moves. Traffic that changes lane without
+   * warning can only be read by knowing the road already; traffic that tells
+   * you first is a puzzle you can solve on sight.
+   *
+   * Drawn well outside the body so it is visible against the tarmac rather
+   * than lost against the paintwork.
+   */
+  if (car.signal !== 0 && Math.floor(view.clock * 5) % 2 === 0) {
+    const side = car.signal
+    ctx.fillStyle = '#ffb02e'
+    for (const end of [-0.38, 0.34]) {
+      ctx.beginPath()
+      ctx.ellipse(
+        x + side * wide * 0.62, y + long * end,
+        wide * 0.12, long * 0.05, 0, 0, Math.PI * 2,
+      )
+      ctx.fill()
+    }
+  }
 }
 
 /** A fuel can, sitting in a lane. */

@@ -80,4 +80,23 @@ await p.keyboard.up('ArrowRight')
 const cave = await p.evaluate(() => window.__notes.slice())
 // A gem is D5 then A5 — 587Hz and 880Hz.
 console.log('caves: notes', mid, '->', cave.length, '| D5 gems:', cave.filter((n) => n === 587).length)
+// And space: the laser, which is the one cue in the app that fires several
+// times a second and therefore the one most likely to be heard as a fault if
+// it is wrong.
+await p.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
+await p.waitForTimeout(900)
+await p.evaluate(() => { window.__notes.length = 0 })
+await p.getByRole('button', { name: /the long way out/i }).first().click()
+await p.waitForTimeout(600)
+const s3 = p.getByRole('button', { name: /skip/i })
+if (await s3.count()) { await s3.first().click(); await p.waitForTimeout(800) }
+const sky = await p.evaluate(() => window.__notes.length)
+await p.keyboard.down(' ')
+await p.waitForTimeout(4000)
+await p.keyboard.up(' ')
+const space = await p.evaluate(() => window.__notes.slice())
+// The laser is B5 then E5 — 988Hz and 659Hz. Four seconds of holding the
+// trigger at one shot every 0.26s is about fifteen of them.
+console.log('space: notes', sky, '->', space.length, '| B5 lasers:', space.filter((n) => n === 988).length)
+
 await b.close()

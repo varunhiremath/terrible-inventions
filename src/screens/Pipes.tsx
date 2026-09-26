@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { VIEW_ROWS } from '../pipes/level'
 import { NO_INPUT, type Input } from '../pipes/physics'
 import { EVENTS, FIXED, newRun, stepRun, type PipeEvent, type Run, type Status } from '../pipes/run'
-import { playCue } from '../music/player'
+import { playCue, setHeat } from '../music/player'
 import type { CueName } from '../music/score'
 import { LEVELS, levelFor } from '../pipes/levels'
 import {
@@ -166,6 +166,18 @@ export function Pipes() {
           if (loudest) playCue(NOISE[loudest])
         }
 
+        /*
+         * How tense the music is.
+         *
+         * The clock is the main one here, because the pipes are the only game
+         * in the app with a real countdown in them: under a hundred seconds it
+         * starts to climb, and the last twenty are unpleasant on purpose. C
+         * major is a cheerful key and it takes some souring.
+         */
+        const late = Math.max(0, 1 - next.seconds / 100)
+        const thin = 1 - (next.lives - 1) / 2
+        setHeat(Math.max(late, thin * 0.7))
+
         if (
           next.number !== shown.level || next.lives !== shown.lives ||
           next.coins !== shown.coins || next.score !== shown.score ||
@@ -307,6 +319,7 @@ export function Pipes() {
 
     return () => {
       cancelAnimationFrame(frame)
+      setHeat(0)
       observer.disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

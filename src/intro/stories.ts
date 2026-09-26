@@ -1,5 +1,5 @@
 /**
- * The four stories.
+ * The six stories.
  *
  * Every beat shows the game. There used to be a workshop scene with a villain
  * looming in it and a title card on a black plate, and the verdict on both was
@@ -87,6 +87,19 @@ export const STORIES: Record<string, Story> = {
       { seconds: 4.5, scene: 'road', voice: 'papa', line: 'Six stages. I built them all. Off you go.' },
     ],
   },
+  space: {
+    id: 'space',
+    title: 'THE LONG WAY OUT',
+    beats: [
+      { seconds: 6.4, scene: 'space', voice: 'narrator', line: 'Eight worlds, in the order you would meet them leaving the Sun.' },
+      { seconds: 6.8, scene: 'space', voice: 'papa', line: 'I filled the gaps between them! Rock, scrap, and a few things of my own!' },
+      { seconds: 6.2, scene: 'space', voice: 'narrator', line: 'Hold FIRE and it fires. Steer with your left thumb. Nothing else to learn.' },
+      { seconds: 6.6, scene: 'space', voice: 'narrator', line: 'There is always a way through. The purple mines are not one of them. Fly round those.' },
+      { seconds: 6.4, scene: 'space', voice: 'narrator', line: 'Reach a world and it tells you something true about itself. That is the prize.' },
+      { seconds: 7.0, scene: 'question', voice: 'narrator', line: 'Lose a shield and the maths door opens. Get it right and you have the shield back.' },
+      { seconds: 4.6, scene: 'space', voice: 'papa', line: 'Neptune. You will never see Neptune. Off you go.' },
+    ],
+  },
 }
 
-export const STORY_ORDER = ['arcade', 'dave', 'prince', 'pipes', 'road'] as const
+export const STORY_ORDER = ['arcade', 'dave', 'prince', 'pipes', 'road', 'space'] as const

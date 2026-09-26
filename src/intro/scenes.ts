@@ -39,6 +39,9 @@ import { drawMachine, drawRunner, MACHINE_INK } from '../render/silhouettes'
 import { LANES as ROAD_LANES, SIGHT as ROAD_SIGHT, TANK } from '../road/level'
 import { drawRun as drawRoadRun } from '../road/draw'
 import { FIXED as ROAD_FIXED, NO_INPUT as ROAD_STILL, newRun as newDrive, step as driveOn, type Run as Drive } from '../road/run'
+import { SHIP_WIDE, SIZE_OF as RUBBLE_SIZE } from '../space/level'
+import { drawRun as drawFlight } from '../space/draw'
+import { FIXED as SPACE_FIXED, newRun as newFlight, step as flyOn, type Input as Stick, type Run as Flight } from '../space/run'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -313,6 +316,54 @@ const FOOTAGE: Drive[] = (() => {
   return frames
 })()
 
+/**
+ * Half a minute of the flight out to Mars, flown once and kept.
+ *
+ * Same trick as the road, and for the same reason: a scene has to be a pure
+ * function of the clock, and the game is a simulation. So it is flown through
+ * in advance by a pilot no cleverer than a person — aim for the widest gap in
+ * the sky ahead, hold the trigger down — and the cutscene reads the recording
+ * back. What you watch is the game, played.
+ *
+ * Mars rather than Mercury because Mercury is a grey dot and Mars is red, and
+ * the beat has to say "space" in the first half second.
+ */
+const FLIGHT: Flight[] = (() => {
+  const frames: Flight[] = []
+  let run = newFlight(4, 99, 0, 7)
+
+  for (let t = 0; t < 34; t += SPACE_FIXED) {
+    const soon = run.rubble.filter((r) => r.y > 0.2 && r.y < 1)
+    const shut = soon
+      .map((r): [number, number] => {
+        const half = RUBBLE_SIZE[r.kind] / 2 + SHIP_WIDE / 2
+        return [r.x - half, r.x + half]
+      })
+      .sort((a, b) => a[0] - b[0])
+
+    let best = run.x
+    let widest = 0
+    let edge = 0
+    for (const [left, right] of shut) {
+      if (left - edge > widest) { widest = left - edge; best = (edge + left) / 2 }
+      edge = Math.max(edge, right)
+    }
+    if (1 - edge > widest) { widest = 1 - edge; best = (edge + 1) / 2 }
+    best = Math.min(1 - SHIP_WIDE / 2, Math.max(SHIP_WIDE / 2, best))
+
+    const off = best - run.x
+    const stick: Stick = { left: off < -0.01, right: off > 0.01, fire: true }
+    run = flyOn(run, stick, SPACE_FIXED)
+    // Knocked or arrived, keep flying: the beat wants thirty seconds of sky,
+    // not an ending.
+    if (run.status !== 'flying') {
+      run = { ...run, status: 'flying', shields: 3, mercy: 0, progress: Math.min(0.9, run.progress) }
+    }
+    if (frames.length < 400 && Math.round(t / SPACE_FIXED) % 6 === 0) frames.push(run)
+  }
+  return frames
+})()
+
 /** The four Machines, in the colours they are on the board. */
 const MACHINES = ['#e8503a', '#f49ac1', '#5ad2e0', '#f0a04b']
 
@@ -568,6 +619,17 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
       distance: frame.distance,
       clock,
     }, w, h)
+  },
+
+  /**
+   * Space: the recording, played back at the size of the beat.
+   *
+   * The drawing works in fractions of its own box, so the same footage fills a
+   * phone held either way round without anything being laid out twice.
+   */
+  space({ ctx, w, h, clock }) {
+    const frame = FLIGHT[Math.min(FLIGHT.length - 1, Math.floor(clock * 10))]
+    drawFlight(ctx, frame, { w, h, clock }, clock * 0.3)
   },
 
   /**

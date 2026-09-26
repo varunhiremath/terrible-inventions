@@ -126,7 +126,7 @@ const scoreNow = async () => Number((await hud()).match(/1up (\d+)/i)?.[1] ?? -1
 await page.goto(URL, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1500)
 
-const GAMES = ['Papa Panic', 'The Caves', 'The Dungeon', 'The Pipes', 'The Road']
+const GAMES = ['Papa Panic', 'The Caves', 'The Dungeon', 'The Pipes', 'The Road', 'The Long Way Out']
 const homeText = await page.innerText('body')
 for (const game of GAMES) {
   if (!new RegExp(game, 'i').test(homeText)) problems.push(`${game} is not on the front screen`)
@@ -447,6 +447,53 @@ if (await enter('The Road')) {
   if (speed === 0 && lives === 3) problems.push('the road went nowhere with the pedal held')
 }
 
+// --- space: hold the trigger and get somewhere -----------------------------
+if (await enter('The Long Way Out')) {
+  await page.waitForTimeout(1200)
+
+  const skyHud = async () => (await page.textContent('header')).replace(/\s+/g, ' ').trim()
+  const opened = await skyHud()
+  if (!/flying to mercury/i.test(opened)) problems.push('space did not set off for Mercury')
+  if (!/shields 3\b/i.test(opened)) problems.push('space did not start with three shields')
+
+  /*
+   * Hold fire, and sweep across while doing it.
+   *
+   * Sitting still in the middle and firing for three seconds was the first
+   * version of this, and it reported the game as broken when it was working
+   * perfectly: at Mercury there are three slow rocks in the whole sky, a rock
+   * takes three hits, and the odds of one of them drifting through a single
+   * fixed column in three seconds are not good. A test whose pass depends on
+   * where the rocks happened to spawn is not a test.
+   *
+   * So it sweeps the column with the trigger down, which is what a player
+   * does, and it is given long enough for the first wave to come all the way
+   * down. Anything hit, anything broken, or anything hitting you all count:
+   * the question is whether the thing runs, not whether it is generous.
+   */
+  const sky = await page.locator('canvas').boundingBox()
+  const r = Math.max(26, Math.min(58, Math.min(sky.width, sky.height) * 0.09))
+  const trigger = [sky.x + sky.width - r * 0.8 - r * 1.15, sky.y + sky.height - r * 1.8]
+  const steer = (which) => [sky.x + r * 0.8 + r * (which === 'left' ? 1 : 3.3), sky.y + sky.height - r * 1.8]
+
+  await page.mouse.move(...trigger)
+  await page.mouse.down()
+  for (const which of ['right', 'left', 'right', 'left']) {
+    await page.touchscreen?.tap?.(...steer(which)).catch(() => {})
+    await page.keyboard.down(which === 'right' ? 'ArrowRight' : 'ArrowLeft')
+    await page.waitForTimeout(2600)
+    await page.keyboard.up(which === 'right' ? 'ArrowRight' : 'ArrowLeft')
+  }
+  await page.mouse.up()
+
+  const after = await skyHud()
+  const reading = (what) => Number((after.match(new RegExp(`${what} (\\d+)`, 'i'))?.[1] ?? '0'))
+  if (reading('progress') === 0) problems.push('space never got any closer to Mercury')
+  if (reading('score') === 0 && reading('broken') === 0 && reading('shields') === 3) {
+    problems.push('space did nothing with the trigger held')
+  }
+}
+
 await browser.close()
 
 // No screen may grow a score for being right at maths. The question between
@@ -459,4 +506,4 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, went down into the dungeon, ran the pipes, and drove the road')
+console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, went down into the dungeon, ran the pipes, drove the road, and flew out towards Mercury')

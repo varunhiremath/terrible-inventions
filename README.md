@@ -15,6 +15,36 @@ The continue-loop is a gift too. These games were built around *die, insert coin
 on*. Swapping the coin for a puzzle is not a bolt-on — it is the original structure with
 the money taken out.
 
+## The six games
+
+| | What it is | Where the maths goes |
+|---|---|---|
+| **Papa Panic** | A maze, a lot of dots, four chasers | Between lives, and in the shop |
+| **The Caves** | Ten caves, a trophy in each, and a jetpack he has not tested | Between lives |
+| **The Dungeon** | Thirteen floors, one hour, every move a commitment | Between lives |
+| **The Pipes** | Run, jump, stomp, reach the flag | Between lives |
+| **The Road** | Four lanes, six stages, a fuel gauge that bites | Between lives; a right answer is half a tank and a car back |
+| **The Long Way Out** | Fly to the eight real planets, in order, through what he has left in the way | Between shields; arriving tells you something true about the world you reached |
+
+Two of them make the same promise in the model and prove it in a test: **there is always
+a way through**. A screen with no gap in it is not difficulty, it is a coin toss you lose.
+Both games got that wrong first in the same way — a guarantee made when something is
+spawned does not survive anything moving relative to anything else afterwards — and both
+are fixed the same way, by freezing the relative geometry the moment it is laid down.
+
+## The music
+
+Six chiptune loops and six sets of cues, each set pinned to the scale of the loop it
+interrupts, so a sound effect sounds like the tune it lands on rather than arriving from
+somewhere else. Everything is a handful of oscillators: no samples, no files.
+
+Every loop that plays under a game also has a **heat**: one number, raised by the game as
+things get worse — the board emptying, the clock running down, the last shield, the last
+stretch of the run. Voices marked with a threshold fade in as it climbs, the drums swap
+for a harder pattern, and the tempo creeps up by about ten beats a minute. The caves have
+no drum track at all until the heat arrives, which is the loudest thing it does anywhere.
+It is the same eight bars either way; what changes is how many things are playing them.
+
 ## Papa Panic
 
 A maze, a lot of dots, and four chasers who each think differently:
@@ -87,9 +117,16 @@ hand under **Settings > Pages > Source: GitHub Actions** — a workflow cannot d
 ```
 src/
   arcade/maze/   maze, chasers, game loop   — unit tested
+  arcade/dungeon/ movement rules, sequences — unit tested
+  dave/          caves, solver              — unit tested
+  pipes/         levels, physics            — unit tested
+  road/          traffic, fuel, missions    — unit tested
+  space/         the solar system, hazards  — unit tested
   arcade/        shop, taunts               — unit tested
   content/       problem generators         — unit tested
   engine/        rating, persistence        — unit tested
+  intro/         the six stories, drawn from real game footage
+  music/         tracker notation, scheduler, heat — unit tested
   render/        procedural sprites, voxels
-  screens/       Arcade, Shop, Coop, Settings, Studio, Note
+  screens/       one per game, plus Shop, Coop, Settings, Studio, Note
 ```

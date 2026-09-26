@@ -6,6 +6,7 @@ import {
   MAZE_CUES,
   PIPE_CUES,
   ROAD_CUES,
+  SPACE_CUES,
   eighthSeconds,
   loopLength,
   noteFrequency,
@@ -69,9 +70,11 @@ describe('the dungeon cues', () => {
  * These are a different kind of thing from the rest and the lower bound below
  * does not apply to them. A cue that answers a dot has to be gone before the
  * next dot, and there are four of those a second — at three tenths of a second
- * they would overlap each other all the way round the board.
+ * they would overlap each other all the way round the board. The laser is the
+ * worst of them: the fire button is held down, so one goes every quarter of a
+ * second for the whole run out to Neptune.
  */
-const TICKS: CueName[] = ['chomp', 'gem', 'leap', 'overtake']
+const TICKS: CueName[] = ['chomp', 'gem', 'leap', 'overtake', 'laser', 'ping']
 
   it('are short enough to be cues rather than tunes', () => {
     // Anything much past this stops being a cue and starts being music playing
@@ -226,9 +229,9 @@ describe('the cave cues', () => {
 
 describe('every cue', () => {
   it('belongs to exactly one set', () => {
-    // Four sets merge into CUES, and a name in two of them would have one
+    // Six sets merge into CUES, and a name in two of them would have one
     // quietly win. Nothing would fail; the wrong sound would just play.
-    const sets = [DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES]
+    const sets = [DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES]
     const seen = new Set<string>()
     for (const set of sets) {
       for (const name of Object.keys(set)) {
@@ -259,5 +262,42 @@ describe('the road cues', () => {
     // You get past a car every couple of seconds for the length of a stage.
     expect(loopLength(CUES.overtake) * eighthSeconds(CUES.overtake)).toBeLessThan(0.25)
     for (const part of CUES.overtake.parts) expect(part.gain ?? 1).toBeLessThan(0.08)
+  })
+})
+
+/** E Phrygian — E F G A B C D — which is where the space loop lives. */
+const SPACE_SCALE = [4, 5, 7, 9, 11, 0, 2]
+
+describe('the space cues', () => {
+  it('stay inside the scale the space loop is built from', () => {
+    for (const name of Object.keys(SPACE_CUES) as CueName[]) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          expect(SPACE_SCALE, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain(pitchClass(note.frequency))
+        }
+      }
+    }
+  })
+
+  it('keeps the laser out of the way, because the fire button is held down', () => {
+    // One every RELOAD seconds, which is a quarter of a second, for a run that
+    // lasts over a minute. Anything longer than the gap and they pile up into
+    // a drone.
+    for (const name of ['laser', 'ping'] as CueName[]) {
+      expect(loopLength(CUES[name]) * eighthSeconds(CUES[name]), name).toBeLessThan(0.25)
+      for (const part of CUES[name].parts) expect(part.gain ?? 1, name).toBeLessThan(0.08)
+    }
+  })
+
+  it('sends arriving up and being hit down', () => {
+    const ends = (name: CueName) => {
+      const notes = readPart(CUES[name].parts[0].pattern)
+      return [notes[0].frequency, notes[notes.length - 1].frequency]
+    }
+    const [upFrom, upTo] = ends('orbit')
+    expect(upTo).toBeGreaterThan(upFrom)
+    const [downFrom, downTo] = ends('struck')
+    expect(downTo).toBeLessThan(downFrom)
   })
 })

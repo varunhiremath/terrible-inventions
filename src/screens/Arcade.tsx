@@ -13,7 +13,7 @@ import {
   type Game,
   type MazeEvent,
 } from '../arcade/maze/game'
-import { playCue } from '../music/player'
+import { playCue, setHeat } from '../music/player'
 import type { CueName } from '../music/score'
 import { taunt, type TauntMoment } from '../arcade/taunts'
 import { fitBoard } from '../arcade/fit'
@@ -393,6 +393,18 @@ function PlayerIcon() {
           say(line, { as: 'papa' })
         }
 
+        /*
+         * How tense the music is.
+         *
+         * The board emptying and the lives going are the two things that make
+         * a run desperate, and the worse of them wins. On the last life at the
+         * last dozen dots the chase tune has two voices in it that were not
+         * there when the board started, which is the whole idea.
+         */
+        const eaten = 1 - next.dots.size / Math.max(1, dots.length)
+        const thin = 1 - (next.lives - 1) / Math.max(1, STARTING_LIVES - 1)
+        setHeat(Math.max(eaten * 0.7, thin * 0.85))
+
         if (
           next.lives !== shown.lives ||
           next.score !== shown.score ||
@@ -469,6 +481,7 @@ function PlayerIcon() {
     return () => {
       cancelAnimationFrame(frame)
       observer.disconnect()
+      setHeat(0)
       clearFruit()
       fruitRef.current = null
       player.dispose()

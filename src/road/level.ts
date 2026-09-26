@@ -85,6 +85,16 @@ export const SIGHT = 24
 export const REACT = SIGHT * 0.6
 
 /**
+ * How long a vehicle indicates before it actually pulls out.
+ *
+ * Long enough to be seen and acted on. Traffic that changes lane without
+ * warning is readable only by memorising the seed; traffic that tells you
+ * first is a puzzle you can actually solve, and it is what the road does in
+ * real life.
+ */
+export const SIGNAL_FOR = 0.9
+
+/**
  * What each stage asks of you beyond getting to the end.
  *
  * A distance on its own is a treadmill. A thing to *do* while covering it —
@@ -210,6 +220,13 @@ export const WANDERS: Record<CarKind, number> = {
  */
 export const STAGES: readonly Stage[] = [
 /*
+ * Traffic counts leave room to pull out.
+ *
+ * They went as high as eleven, and at that density nothing could change lane
+ * at all: every manoeuvre was refused for closing the last gap, so the
+ * indicators never came on and the road was a set of bollards again. Busy
+ * enough to be a problem, loose enough to be a road.
+ *
  * Paces rise as the stages go on, which sounds backwards and is not.
  *
  * Slower traffic is *harder*: you close on it faster, so you see it for less
@@ -229,26 +246,26 @@ export const STAGES: readonly Stage[] = [
     mission: { kind: 'pass', count: 10 }, fleet: ['cruiser', 'taxi', 'van'],
   },
   {
-    name: 'Rush Hour', traffic: 6, pace: 0.42, limit: 1.1, distance: 550,
+    name: 'Rush Hour', traffic: 5, pace: 0.42, limit: 1.1, distance: 550,
     mission: { kind: 'cans', count: 2 }, fleet: ['cruiser', 'taxi', 'van', 'bus'],
   },
   {
-    name: 'The Long Straight', traffic: 7, pace: 0.4, limit: 1.2, distance: 650,
+    name: 'The Long Straight', traffic: 6, pace: 0.4, limit: 1.2, distance: 650,
     mission: { kind: 'pass', count: 26 },
     fleet: ['cruiser', 'taxi', 'truck', 'bus', 'patrol'],
   },
   {
-    name: 'Roadworks', traffic: 8, pace: 0.38, limit: 1.28, distance: 750,
+    name: 'Roadworks', traffic: 6, pace: 0.38, limit: 1.28, distance: 750,
     mission: { kind: 'clean' },
     fleet: ['cruiser', 'van', 'truck', 'bus', 'swerver'],
   },
   {
-    name: 'Night Shift', traffic: 9, pace: 0.36, limit: 1.36, distance: 850,
+    name: 'Night Shift', traffic: 7, pace: 0.36, limit: 1.36, distance: 850,
     mission: { kind: 'cans', count: 3 },
     fleet: ['cruiser', 'taxi', 'van', 'patrol', 'ambulance', 'swerver'],
   },
   {
-    name: "Papa's Own Motorway", traffic: 11, pace: 0.34, limit: 1.45, distance: 1000,
+    name: "Papa's Own Motorway", traffic: 8, pace: 0.34, limit: 1.45, distance: 1000,
     mission: { kind: 'pass', count: 45 },
     fleet: ['cruiser', 'taxi', 'van', 'truck', 'bus', 'patrol', 'ambulance', 'swerver'],
   },

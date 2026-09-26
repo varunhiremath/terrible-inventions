@@ -17,6 +17,7 @@ import {
   CUES,
   TRACKS,
   eighthSeconds,
+  heatGain,
   loopLength,
   readPart,
   type CueName,
@@ -38,6 +39,21 @@ let playing: Track | null = null
 let cursor = 0
 let eighth = 0
 let enabled = true
+
+/**
+ * How hot things are, 0 to 1.
+ *
+ * One number, set by whichever game is running, that the loop reads on every
+ * scheduling window. Raising it brings in the voices marked with a `from`,
+ * swaps the drums for the harder pattern and nudges the tempo up.
+ *
+ * It is a property of the music, not of a game, so it is reset whenever a new
+ * track starts: a screen that never touches it gets the tune as written.
+ */
+let heat = 0
+
+/** The heat at which the harder drum pattern takes over, if a track has one. */
+const HOT_DRUMS = 0.55
 let volume = 0.55
 let noise: AudioBuffer | null = null
 
@@ -219,12 +235,25 @@ function schedule(): void {
   const track = playing
   if (!ctx || !out || !track) return
 
-  const step = eighthSeconds(track)
+  /*
+   * The heat is read here, once a scheduling window, rather than held.
+   *
+   * That means a game can move it whenever it likes and the music follows
+   * within a fraction of a second, without anything having to be restarted.
+   * The loop length is deliberately worked out over every part, including the
+   * silent ones, so the bar count does not change as voices come in — a loop
+   * that changes length mid-run goes out of phase with its own bass line.
+   */
+  const step = eighthSeconds(track, heat)
   const bars = loopLength(track)
   if (bars === 0) return
 
-  const parts = track.parts.map((part) => ({ part, notes: readPart(part.pattern) }))
-  const drums = track.drums ? track.drums.trim().split(/\s+/) : []
+  const parts = track.parts
+    .map((part) => ({ part, notes: readPart(part.pattern), level: heatGain(part, heat) }))
+    .filter((p) => p.level > 0)
+  const written = track.drums ? track.drums.trim().split(/\s+/) : []
+  const hot = track.hotDrums ? track.hotDrums.trim().split(/\s+/) : []
+  const drums = heat >= HOT_DRUMS && hot.length > 0 ? hot : written
 
   while (cursor < ctx.currentTime + HORIZON) {
     // Behind the clock after a stall: skip forward rather than dump a backlog
@@ -232,7 +261,7 @@ function schedule(): void {
     if (cursor < ctx.currentTime) cursor = ctx.currentTime + 0.01
 
     const beat = eighth % bars
-    for (const { part, notes } of parts) {
+    for (const { part, notes, level } of parts) {
       for (const note of notes) {
         if (note.at !== beat) continue
         playNote(
@@ -242,7 +271,7 @@ function schedule(): void {
           note.frequency,
           cursor,
           note.length * step * (part.sustain ?? 0.9),
-          part.gain,
+          part.gain * level,
         )
       }
     }
@@ -251,6 +280,15 @@ function schedule(): void {
     cursor += step
     eighth += 1
   }
+}
+
+/** Set by a game as things get worse. Clamped, and cheap enough to call often. */
+export function setHeat(next: number): void {
+  heat = Math.max(0, Math.min(1, next))
+}
+
+export function heatNow(): number {
+  return heat
 }
 
 export function startMusic(name: TrackName): void {
@@ -268,6 +306,9 @@ export function startMusic(name: TrackName): void {
   unlockAudio()
 
   playing = track
+  // A new track starts cold. Otherwise the tension from the stage you just
+  // failed follows you onto the menu.
+  heat = 0
   eighth = 0
   cursor = ctx.currentTime + 0.08
   try {
