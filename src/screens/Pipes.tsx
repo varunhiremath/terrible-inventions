@@ -353,12 +353,14 @@ export function Pipes() {
     }
   }, [])
 
-  const restart = () => {
+  /** A right answer buys back the life you just lost, up to three. */
+  const restart = (right: boolean) => {
     const run = runRef.current
     if (!run) return
-    runRef.current = newRun(run.level, run.number, Math.max(1, run.lives))
+    const lives = right ? Math.min(3, run.lives + 1) : run.lives
+    runRef.current = newRun(run.level, run.number, Math.max(1, lives))
     camera.current = 0
-    setHud((h) => ({ ...h, status: 'playing', seconds: 300 }))
+    setHud((h) => ({ ...h, status: 'playing', seconds: 300, lives: runRef.current?.lives ?? h.lives }))
   }
 
   const nextLevel = () => {
@@ -410,7 +412,7 @@ export function Pipes() {
 
       <BackButton onClick={() => go('home')} />
 
-      {asking && <Interlude onDone={restart} />}
+      {asking && <Interlude onDone={restart} reward="the life back" />}
 
       {overlay && (
         <div

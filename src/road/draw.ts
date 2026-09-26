@@ -13,7 +13,7 @@
  * the two details have to be the ones that say whose it is.
  */
 import { drawHint } from '../ui/padHints'
-import { CAR_LONG, CAR_WIDE, LANES, SIGHT } from './level'
+import { CAR_LONG, CAR_WIDE, LANES, LENGTH_OF, SIGHT, WIDTH_OF, type CarKind } from './level'
 import type { Can, Car, Run } from './run'
 
 type Ctx = CanvasRenderingContext2D
@@ -32,8 +32,104 @@ export const INK = {
   shadow: 'rgba(0,0,0,0.35)',
 } as const
 
-/** {papa}'s fleet. Four of them, so a glance tells one from another. */
-const FLEET = ['#e8503a', '#5ad2e0', '#f49ac1', '#b07de0'] as const
+/**
+ * How each sort of vehicle is painted.
+ *
+ * A glance has to tell them apart, so each one gets a colour and a shape
+ * rather than relying on either alone — at this size colour-blind-unfriendly
+ * pairs and similar outlines both read as "a car".
+ */
+const PAINT: Record<CarKind, { body: string; trim: string; glass: string }> = {
+  cruiser: { body: '#5ad2e0', trim: '#2a8f9c', glass: '#0d2b30' },
+  lorry: { body: '#b07de0', trim: '#7a52a0', glass: '#1a1030' },
+  swerver: { body: '#e8503a', trim: '#a82f1e', glass: '#2a0d08' },
+  patrol: { body: '#e8ebf5', trim: '#1a2a5e', glass: '#0d1630' },
+  ambulance: { body: '#f7f7f2', trim: '#e0b13c', glass: '#1a2028' },
+}
+
+type Shape = { x: number; y: number }[]
+
+/**
+ * A body, tapered.
+ *
+ * Every vehicle here is a closed outline given as a fraction of its own width
+ * and length, with the corners rounded off. That is what stops them being
+ * rectangles: a nose narrower than the shoulders, and shoulders narrower than
+ * the tail, reads as something built to go forwards.
+ */
+function body(ctx: Ctx, x: number, y: number, wide: number, long: number, shape: Shape, round: number): void {
+  const at = (p: Shape[number]) => ({ px: x + p.x * wide * 0.5, py: y + p.y * long * 0.5 })
+  ctx.beginPath()
+  for (let i = 0; i < shape.length; i++) {
+    const here = at(shape[i])
+    const next = at(shape[(i + 1) % shape.length])
+    const prev = at(shape[(i + shape.length - 1) % shape.length])
+    const pull = (from: { px: number; py: number }, to: { px: number; py: number }) => {
+      const dx = to.px - from.px
+      const dy = to.py - from.py
+      const len = Math.hypot(dx, dy) || 1
+      const step = Math.min(round, len / 2) / len
+      return { px: from.px + dx * step, py: from.py + dy * step }
+    }
+    const from = pull(here, prev)
+    const to = pull(here, next)
+    if (i === 0) ctx.moveTo(from.px, from.py)
+    else ctx.lineTo(from.px, from.py)
+    ctx.quadraticCurveTo(here.px, here.py, to.px, to.py)
+  }
+  ctx.closePath()
+}
+
+/** A single-seater silhouette: pointed nose, pinched waist, broad tail. */
+const RACER: Shape = [
+  { x: -0.22, y: -1 }, { x: 0.22, y: -1 },
+  { x: 0.42, y: -0.52 }, { x: 0.34, y: -0.1 },
+  { x: 0.5, y: 0.34 }, { x: 0.44, y: 1 },
+  { x: -0.44, y: 1 }, { x: -0.5, y: 0.34 },
+  { x: -0.34, y: -0.1 }, { x: -0.42, y: -0.52 },
+]
+
+/** A saloon: rounded nose, straight flanks, slightly tucked tail. */
+const SALOON: Shape = [
+  { x: -0.3, y: -1 }, { x: 0.3, y: -1 },
+  { x: 0.5, y: -0.55 }, { x: 0.5, y: 0.6 },
+  { x: 0.34, y: 1 }, { x: -0.34, y: 1 },
+  { x: -0.5, y: 0.6 }, { x: -0.5, y: -0.55 },
+]
+
+/** A van: blunt, square-shouldered, taller than it is clever. */
+const VAN: Shape = [
+  { x: -0.42, y: -1 }, { x: 0.42, y: -1 },
+  { x: 0.5, y: -0.78 }, { x: 0.5, y: 0.9 },
+  { x: 0.4, y: 1 }, { x: -0.4, y: 1 },
+  { x: -0.5, y: 0.9 }, { x: -0.5, y: -0.78 },
+]
+
+const SHAPE_OF: Record<CarKind, Shape> = {
+  cruiser: SALOON,
+  lorry: VAN,
+  swerver: RACER,
+  patrol: SALOON,
+  ambulance: VAN,
+}
+
+/** Four wheels, poking out at the corners, which is most of what says "car". */
+function wheels(ctx: Ctx, x: number, y: number, wide: number, long: number, out: number): void {
+  ctx.fillStyle = '#14161c'
+  const tyreW = wide * 0.17
+  const tyreL = long * 0.2
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      ctx.beginPath()
+      ctx.roundRect(
+        x + sx * (wide * 0.5 + out) - tyreW / 2,
+        y + sy * long * 0.3 - tyreL / 2,
+        tyreW, tyreL, tyreW * 0.35,
+      )
+      ctx.fill()
+    }
+  }
+}
 
 export interface View {
   /** Pixels across one lane. */
@@ -82,12 +178,11 @@ export function drawRoad(ctx: Ctx, view: View, w: number, h: number): void {
   ctx.fillStyle = INK.road
   ctx.fillRect(view.left, 0, road, h)
 
-  // Kerbs.
   ctx.fillStyle = INK.kerb
   ctx.fillRect(view.left - view.lane * 0.06, 0, view.lane * 0.06, h)
   ctx.fillRect(view.left + road, 0, view.lane * 0.06, h)
 
-  // Dashes between the lanes. Tied to the distance travelled rather than to a
+  // Dashes between the lanes, tied to the distance travelled rather than to a
   // clock, so they stand still when you do.
   ctx.fillStyle = INK.line
   const dash = 1.2
@@ -101,41 +196,98 @@ export function drawRoad(ctx: Ctx, view: View, w: number, h: number): void {
   }
 }
 
-/** One of {papa}'s: a boxy thing with an aerial and a lit strip down the back. */
+/**
+ * The line, and the banner over it.
+ *
+ * A stage used to simply stop: you were driving, and then you were reading a
+ * panel. Seeing the chequers coming from a long way off is most of what makes
+ * the last twenty lengths of a stage worth driving.
+ */
+export function drawFinish(ctx: Ctx, at: number, view: View): void {
+  const y = roadY(view, at)
+  const road = roadWidth(view)
+  const band = view.depth * 1.6
+  if (y < -band * 2 || y > view.line + band * 4) return
+
+  const squares = 8
+  const size = road / squares
+  for (let row = 0; row < 2; row++) {
+    for (let col = 0; col < squares; col++) {
+      ctx.fillStyle = (row + col) % 2 === 0 ? '#eef2f8' : '#14161c'
+      ctx.fillRect(view.left + col * size, y - band / 2 + row * (band / 2), size, band / 2)
+    }
+  }
+
+  // Posts either side, so it reads as a gantry rather than a painted stripe.
+  ctx.fillStyle = '#eef2f8'
+  ctx.fillRect(view.left - view.lane * 0.22, y - band * 1.1, view.lane * 0.16, band * 2.2)
+  ctx.fillRect(view.left + road + view.lane * 0.06, y - band * 1.1, view.lane * 0.16, band * 2.2)
+}
+
+/** One of {papa}'s, coming the other way. */
 export function drawCar(ctx: Ctx, car: Car, view: View): void {
   const x = laneX(view, car.lane)
   const y = roadY(view, car.y)
-  const wide = view.lane * CAR_WIDE
-  const long = CAR_LONG * view.depth
-  const colour = FLEET[car.kind % FLEET.length]
+  const wide = view.lane * WIDTH_OF[car.kind]
+  const long = CAR_LONG * LENGTH_OF[car.kind] * view.depth
+  const paint = PAINT[car.kind]
+  const round = wide * 0.16
 
   ctx.fillStyle = INK.shadow
-  ctx.beginPath()
-  ctx.roundRect(x - wide / 2 + wide * 0.08, y - long / 2 + long * 0.06, wide, long, wide * 0.22)
+  body(ctx, x + wide * 0.07, y + long * 0.05, wide, long, SHAPE_OF[car.kind], round)
   ctx.fill()
 
-  ctx.fillStyle = colour
-  ctx.beginPath()
-  ctx.roundRect(x - wide / 2, y - long / 2, wide, long, wide * 0.22)
+  wheels(ctx, x, y, wide * 0.92, long, -wide * 0.04)
+
+  ctx.fillStyle = paint.body
+  body(ctx, x, y, wide, long, SHAPE_OF[car.kind], round)
   ctx.fill()
 
-  // The cab, towards the back, because these are all heading away from you.
-  ctx.fillStyle = 'rgba(0,0,0,0.45)'
+  // The glass, towards the back: these are all travelling away from you.
+  ctx.fillStyle = paint.glass
   ctx.beginPath()
-  ctx.roundRect(x - wide * 0.34, y - long * 0.1, wide * 0.68, long * 0.34, wide * 0.12)
+  ctx.roundRect(x - wide * 0.3, y + long * 0.02, wide * 0.6, long * 0.3, wide * 0.1)
+  ctx.fill()
+  ctx.fillStyle = paint.trim
+  ctx.beginPath()
+  ctx.roundRect(x - wide * 0.34, y - long * 0.3, wide * 0.68, long * 0.16, wide * 0.08)
   ctx.fill()
 
-  // The aerial, which is what makes it one of his.
-  ctx.strokeStyle = colour
-  ctx.lineWidth = Math.max(1, wide * 0.08)
-  ctx.beginPath()
-  ctx.moveTo(x, y + long * 0.4)
-  ctx.lineTo(x, y + long * 0.62)
-  ctx.stroke()
-  ctx.fillStyle = '#ffffff'
-  ctx.beginPath()
-  ctx.arc(x, y + long * 0.64, wide * 0.09, 0, Math.PI * 2)
-  ctx.fill()
+  if (car.kind === 'lorry') {
+    // A container behind the cab, with ribs.
+    ctx.fillStyle = paint.trim
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(x - wide * 0.42, y + long * (0.12 + i * 0.13), wide * 0.84, long * 0.04)
+    }
+  }
+
+  if (car.kind === 'patrol') {
+    // A light bar across the roof, flashing blue and red.
+    const on = Math.floor(view.clock * 6) % 2 === 0
+    ctx.fillStyle = on ? '#3d7bff' : '#ff3d3d'
+    ctx.fillRect(x - wide * 0.4, y - long * 0.06, wide * 0.38, long * 0.07)
+    ctx.fillStyle = on ? '#ff3d3d' : '#3d7bff'
+    ctx.fillRect(x + wide * 0.02, y - long * 0.06, wide * 0.38, long * 0.07)
+  }
+
+  if (car.kind === 'ambulance') {
+    ctx.fillStyle = '#e8503a'
+    const armW = wide * 0.1
+    const armL = long * 0.2
+    ctx.fillRect(x - armW / 2, y + long * 0.22, armW, armL)
+    ctx.fillRect(x - armL / 2, y + long * 0.22 + armL / 2 - armW / 2, armL, armW)
+    const on = Math.floor(view.clock * 7) % 2 === 0
+    ctx.fillStyle = on ? '#3d7bff' : '#0d1630'
+    ctx.beginPath()
+    ctx.arc(x, y - long * 0.42, wide * 0.1, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  if (car.kind === 'swerver') {
+    // A rear wing, because the one that comes after you should look like it.
+    ctx.fillStyle = paint.trim
+    ctx.fillRect(x - wide * 0.52, y + long * 0.42, wide * 1.04, long * 0.09)
+  }
 }
 
 /** A fuel can, sitting in a lane. */
@@ -163,7 +315,14 @@ export function drawCan(ctx: Ctx, can: Can, view: View): void {
   ctx.fillText('F', x, y + bob + size * 0.04)
 }
 
-/** Yours: the light bar across the nose is the same visor the runner wears. */
+/**
+ * Yours: an open-wheel single-seater.
+ *
+ * Pointed nose, wheels outside the bodywork, a wing at each end — the shape
+ * says "fastest thing here" before anything else on screen does, which is the
+ * one thing your own car has to say. The visor is the same light bar the
+ * runner in the maze wears, because it is the same person driving.
+ */
 export function drawMine(ctx: Ctx, lane: number, view: View, stunned: number): void {
   const x = laneX(view, lane)
   const y = view.line
@@ -174,29 +333,34 @@ export function drawMine(ctx: Ctx, lane: number, view: View, stunned: number): v
   if (stunned > 0 && Math.floor(stunned * 12) % 2 === 0) return
 
   ctx.fillStyle = INK.shadow
-  ctx.beginPath()
-  ctx.roundRect(x - wide / 2 + wide * 0.08, y - long / 2 + long * 0.06, wide, long, wide * 0.22)
+  body(ctx, x + wide * 0.07, y + long * 0.05, wide, long, RACER, wide * 0.16)
   ctx.fill()
 
+  wheels(ctx, x, y, wide * 0.86, long, wide * 0.06)
+
   ctx.fillStyle = INK.mine
-  ctx.beginPath()
-  ctx.roundRect(x - wide / 2, y - long / 2, wide, long, wide * 0.22)
+  body(ctx, x, y, wide, long, RACER, wide * 0.16)
   ctx.fill()
+
+  // Front wing, cockpit, rear wing.
+  ctx.fillStyle = '#c99a1f'
+  ctx.fillRect(x - wide * 0.46, y - long * 0.52, wide * 0.92, long * 0.08)
+  ctx.fillRect(x - wide * 0.5, y + long * 0.42, wide, long * 0.1)
 
   ctx.fillStyle = INK.visor
   ctx.beginPath()
-  ctx.roundRect(x - wide * 0.36, y - long * 0.42, wide * 0.72, long * 0.22, wide * 0.1)
+  ctx.ellipse(x, y - long * 0.02, wide * 0.19, long * 0.15, 0, 0, Math.PI * 2)
   ctx.fill()
-
-  ctx.fillStyle = 'rgba(0,0,0,0.4)'
+  ctx.fillStyle = '#0d2b30'
   ctx.beginPath()
-  ctx.roundRect(x - wide * 0.3, y - long * 0.02, wide * 0.6, long * 0.3, wide * 0.1)
+  ctx.ellipse(x, y + long * 0.02, wide * 0.13, long * 0.1, 0, 0, Math.PI * 2)
   ctx.fill()
 }
 
 /** Everything on the road, in the order it has to be drawn. */
 export function drawRun(ctx: Ctx, run: Run, lane: number, view: View, w: number, h: number): void {
   drawRoad(ctx, view, w, h)
+  drawFinish(ctx, run.stage.distance, view)
   for (const can of run.cans) {
     if (can.taken) continue
     const y = can.y - view.distance
@@ -251,10 +415,10 @@ export function drawPad(
       ctx.closePath()
       ctx.fill()
     } else {
-      ctx.font = `bold ${key.r * (key.glyph === 'go' ? 0.5 : 0.38)}px system-ui, sans-serif`
+      ctx.font = `bold ${key.r * (key.glyph === 'go' ? 0.5 : 0.3)}px system-ui, sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillText(key.glyph === 'go' ? 'GO' : 'STOP', key.cx, key.cy)
+      ctx.fillText(key.glyph === 'go' ? 'GO' : 'BRAKE', key.cx, key.cy)
     }
     ctx.globalAlpha = 1
   }

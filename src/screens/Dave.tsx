@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { LEVEL_TILES_X, VIEW_TILES_X, VIEW_TILES_Y } from '../dave/level'
 import { JET_SECONDS, NO_INPUT, cameraFor, type Input } from '../dave/physics'
-import { newGame, respawn, shoot, step, type CaveEvent, type Game } from '../dave/game'
+import { STARTING_LIVES, newGame, respawn, shoot, step, type CaveEvent, type Game } from '../dave/game'
 import { playCue } from '../music/player'
 import type { CueName } from '../music/score'
 import { levelFor } from '../dave/levels'
@@ -360,12 +360,14 @@ export function Dave() {
     }
   }, [])
 
-  const again = () => {
+  /** A right answer buys back the life you just lost, up to what you started with. */
+  const again = (right: boolean) => {
     const game = gameRef.current
     if (!game) return
-    gameRef.current = respawn(game)
+    const back = respawn(game)
+    gameRef.current = right ? { ...back, lives: Math.min(STARTING_LIVES, back.lives + 1) } : back
     clock.current = 0
-    setHud((h) => ({ ...h, status: 'playing', message: null }))
+    setHud((h) => ({ ...h, status: 'playing', message: null, lives: gameRef.current!.lives }))
   }
 
   const nextLevel = () => {
@@ -415,7 +417,7 @@ export function Dave() {
 
       <BackButton onClick={() => go('home')} />
 
-      {asking && <Interlude onDone={again} />}
+      {asking && <Interlude onDone={again} reward="the life back" />}
 
       {overlay && (
         <div

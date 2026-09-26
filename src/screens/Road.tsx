@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { CAR_LONG, CAR_WIDE, LANES, SIGHT, STAGES, TANK, kmh } from '../road/level'
 import {
-  FIXED, newRun, resume, step,
+  CAR_LONG, CAR_WIDE, LANES, MISSION_BONUS, SIGHT, STAGES, TANK, kmh, missionSays, stageFor,
+} from '../road/level'
+import {
+  FIXED, STARTING_LIVES, missionMet, newRun, resume, step,
   type Input, type RoadEvent, type Run, type Status,
 } from '../road/run'
 import { createLatch, keyAt, padHeight, padLayout, type Button, type Key } from '../road/controls'
@@ -37,10 +39,12 @@ const NOISE: Record<RoadEvent, CueName> = {
   dry: 'prang',
   stageDone: 'arrive',
   skid: 'overtake',
+  warn: 'warn',
+  siren: 'siren',
 }
 
 /** Loudest thing first: one sound a frame, and never the overtake. */
-const LOUDEST: RoadEvent[] = ['stageDone', 'crash', 'dry', 'can', 'pass', 'skid']
+const LOUDEST: RoadEvent[] = ['stageDone', 'crash', 'dry', 'warn', 'can', 'siren', 'pass', 'skid']
 if (LOUDEST.length !== Object.keys(NOISE).length) {
   throw new Error('a road event with no place in the order')
 }
@@ -53,6 +57,7 @@ interface Hud {
   lives: number
   status: Status
   gone: number
+  missionDone: boolean
 }
 
 export function Road() {
@@ -67,6 +72,7 @@ export function Road() {
   const buttons = useRef(createLatch())
   const [hud, setHud] = useState<Hud>({
     stage: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0,
+    missionDone: false,
   })
 
   useEffect(() => {
@@ -139,6 +145,7 @@ export function Road() {
             lives: next.lives,
             status: next.status,
             gone: next.distance,
+            missionDone: next.missionDone,
           })
         }
 
@@ -234,21 +241,59 @@ export function Road() {
         ctx.textAlign = 'right'
         ctx.fillText(speed, w - gap, capH / 2)
 
+        /*
+         * The job, and how it is going.
+         *
+         * A stage with only a distance to it is a treadmill. Saying what is
+         * being asked, and counting it as you go, is what makes the last
+         * stretch worth driving rather than just worth surviving.
+         */
+        const mission = next.stage.mission
+        const progress =
+          mission.kind === 'pass' ? `${Math.min(next.passed, mission.count)}/${mission.count} PASSED`
+          : mission.kind === 'cans' ? `${Math.min(next.cansTaken, mission.count)}/${mission.count} CANS`
+          : next.pranged === 0 ? 'NO SCRATCHES YET' : 'SCRATCHED'
+        ctx.font = `bold ${Math.max(9, text * 0.62)}px ui-monospace, monospace`
+        ctx.textAlign = 'center'
+        ctx.fillStyle = missionMet(next) ? '#4ade80' : '#8a91ab'
+        ctx.fillText(progress, w / 2, capH + text * 0.9)
+
         // --- the fuel gauge, down the side of the road ------------------------
         const gaugeH = middle * 0.5
         const gaugeW = Math.max(6, lane * 0.16)
         const gaugeX = left + lane * LANES + lane * 0.24
         const gaugeY = capH + middle * 0.12
-        ctx.fillStyle = 'rgba(0,0,0,0.45)'
-        ctx.fillRect(gaugeX, gaugeY, gaugeW, gaugeH)
+        /*
+         * An instrument, not a stripe.
+         *
+         * It was a green bar at forty-five per cent black, sitting on the
+         * grass verge — green on green, which is to say invisible, and the one
+         * reading you cannot afford to miss. So it gets an opaque housing and
+         * a pale surround, and the needle is amber rather than green: amber
+         * reads against both the grass it sits on and the tarmac beside it.
+         */
+        ctx.fillStyle = '#14161c'
+        ctx.fillRect(gaugeX - gaugeW * 0.25, gaugeY - gaugeW * 0.25, gaugeW * 1.5, gaugeH + gaugeW * 0.5)
+        ctx.strokeStyle = '#eef2f8'
+        ctx.lineWidth = Math.max(1, gaugeW * 0.12)
+        ctx.strokeRect(gaugeX - gaugeW * 0.25, gaugeY - gaugeW * 0.25, gaugeW * 1.5, gaugeH + gaugeW * 0.5)
+
         const share = Math.max(0, Math.min(1, next.fuel / TANK))
-        // Red when it is getting serious, which is the only warning there is.
-        ctx.fillStyle = share < 0.25 ? '#ff6b53' : '#4ade80'
+        // Red when it is getting serious, which is the only warning there is
+        // besides the sound.
+        ctx.fillStyle = share < 0.25 ? '#ff6b53' : '#ffc84a'
         ctx.fillRect(gaugeX, gaugeY + gaugeH * (1 - share), gaugeW, gaugeH * share)
+
+        // A halfway mark, so the bar is a reading rather than a mood.
+        ctx.fillStyle = 'rgba(232,235,245,0.5)'
+        ctx.fillRect(gaugeX, gaugeY + gaugeH * 0.5 - gaugeW * 0.06, gaugeW, gaugeW * 0.12)
+
         ctx.fillStyle = '#eef2f8'
-        ctx.font = `bold ${Math.max(8, gaugeW * 0.9)}px ui-monospace, monospace`
+        ctx.font = `bold ${Math.max(9, gaugeW * 1.1)}px ui-monospace, monospace`
         ctx.textAlign = 'center'
-        ctx.fillText('F', gaugeX + gaugeW / 2, gaugeY - gaugeW * 0.8)
+        ctx.textBaseline = 'bottom'
+        ctx.fillText('F', gaugeX + gaugeW / 2, gaugeY - gaugeW * 0.6)
+        ctx.textBaseline = 'middle'
 
         padRef.current = padLayout(w, h)
         const shape = padRef.current.map((k) => k.id).join(',')
@@ -314,11 +359,20 @@ export function Road() {
     }
   }, [])
 
-  const carryOn = () => {
+  /**
+   * A right answer buys back the car you just lost, and fills the tank.
+   *
+   * Capped at what you started with, so answering well keeps you going without
+   * ever making the road unloseable.
+   */
+  const carryOn = (right: boolean) => {
     const run = runRef.current
     if (!run) return
-    runRef.current = resume(run)
-    setHud((h) => ({ ...h, status: 'driving' }))
+    const back = resume(run)
+    runRef.current = right
+      ? { ...back, fuel: TANK, warned: false, lives: Math.min(STARTING_LIVES, back.lives + 1) }
+      : back
+    setHud((h) => ({ ...h, status: 'driving', lives: runRef.current!.lives }))
   }
 
   const nextStage = () => {
@@ -332,7 +386,10 @@ export function Road() {
 
   const startOver = () => {
     runRef.current = newRun(1)
-    setHud({ stage: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0 })
+    setHud({
+      stage: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0,
+      missionDone: false,
+    })
   }
 
   const lastStage = hud.stage >= STAGES.length
@@ -359,7 +416,7 @@ export function Road() {
 
       <BackButton onClick={() => go('home')} />
 
-      {asking && <Interlude onDone={carryOn} />}
+      {asking && <Interlude onDone={carryOn} reward="your car back, and a full tank" />}
 
       {overlay && (
         <div
@@ -379,6 +436,16 @@ export function Road() {
                     ? 'Out of cars. Back to the start of the motorway with you.'
                     : 'A prang. I told you I built these myself.'}
             </p>
+
+            {hud.status === 'stageDone' && (
+              <p className={`mt-3 font-mono text-xs font-bold uppercase tracking-[0.2em] ${
+                hud.missionDone ? 'text-moss' : 'text-dim'
+              }`}>
+                {hud.missionDone
+                  ? `${missionSays(stageFor(hud.stage).mission)} — done. ${MISSION_BONUS} bonus.`
+                  : `${missionSays(stageFor(hud.stage).mission)} — not this time.`}
+              </p>
+            )}
 
             <div className="mt-5 flex flex-col gap-2">
               {hud.status === 'stageDone' && !lastStage && (

@@ -755,6 +755,25 @@ export const PRANG: Track = {
   ],
 }
 
+/**
+ * The tank getting low. Two notes, twice, and not pleasant to ignore.
+ *
+ * A warning has to be a different shape from everything else in the set or it
+ * reads as scenery. This one repeats, which nothing else here does.
+ */
+export const WARN: Track = {
+  name: 'Low',
+  beatsPerMinute: 200,
+  parts: [{ wave: 'pulse', duty: 0.5, gain: 0.11, sustain: 0.45, pattern: 'B4 .  G4 .  B4 .  G4 . ' }],
+}
+
+/** One of his patrols, taking your overtake personally. */
+export const SIREN: Track = {
+  name: 'Siren',
+  beatsPerMinute: 170,
+  parts: [{ wave: 'pulse', duty: 0.25, gain: 0.09, sustain: 0.6, pattern: 'B4 E5 B4 E5 .  . ' }],
+}
+
 /** The end of a stage. */
 export const ARRIVE: Track = {
   name: 'Arrive',
@@ -811,6 +830,8 @@ export const ROAD_CUES = {
   refuel: REFUEL,
   prang: PRANG,
   arrive: ARRIVE,
+  warn: WARN,
+  siren: SIREN,
 } as const
 
 /** The pipes' own set, all in plain C major. */

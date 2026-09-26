@@ -45,11 +45,37 @@ const skipIntro = async () => {
  * answer about the capital of Australia — which reads, from here, exactly like
  * a control that stopped working.
  */
+/**
+ * Answers the question, whatever shape it is, and carries on.
+ *
+ * It used to press `skip`, which no longer exists: a reward for answering is
+ * no reward at all if the answer is optional. So this does what a player now
+ * has to do — pick something, read the verdict, press on. Right or wrong does
+ * not matter here; getting past it does.
+ */
 const clearQuestion = async () => {
-  const skip = page.getByRole('button', { name: /^skip$/i })
-  if ((await skip.count()) > 0) {
-    await skip.first().click()
-    await page.waitForTimeout(1200)
+  const back = () => page.getByRole('button', { name: /back to it/i })
+  if ((await back().count()) > 0) {
+    await back().first().click()
+    await page.waitForTimeout(900)
+    return true
+  }
+
+  // A sum has a keypad and a Check; anything else has four written answers.
+  const check = page.getByRole('button', { name: /^check$/i })
+  if ((await check.count()) > 0) {
+    await page.getByRole('button', { name: /^7$/ }).first().click()
+    await check.first().click()
+  } else {
+    const options = page.locator('.rise-in.block-btn')
+    if ((await options.count()) === 0) return false
+    await options.first().click()
+  }
+
+  await page.waitForTimeout(700)
+  if ((await back().count()) > 0) {
+    await back().first().click()
+    await page.waitForTimeout(900)
     return true
   }
   return false
@@ -284,14 +310,18 @@ if (!died) {
   const choices = await page.getByRole('button').count()
   if (choices < 4) problems.push(`the question offered only ${choices} buttons`)
 
-  // Either shape of question can be got past without answering it. The skip is
-  // there so that a bad moment is never a wall.
-  const skipQuestion = page.getByRole('button', { name: /^skip$/i })
-  if ((await skipQuestion.count()) === 0) {
+  /*
+   * The question has to be answerable, and answering it has to let you out.
+   *
+   * The contract used to be that it could be skipped. It cannot any more — a
+   * reward for a right answer means nothing if the answer is optional — so
+   * what has to be true instead is that pressing an answer always leads
+   * somewhere. A question with no way out at all is still a wall.
+   */
+  if (!(await clearQuestion())) {
     problems.push('the question cannot be got past')
   } else {
-    await skipQuestion.first().click()
-    await page.waitForTimeout(1500)
+    await page.waitForTimeout(1200)
     const after = await page.innerText('body')
     if (/\b(numbers|history|geography|anything)\b/i.test(after)) problems.push('the question would not go away')
     if (!/level 1/i.test(await hud())) problems.push('the maze did not come back after the question')

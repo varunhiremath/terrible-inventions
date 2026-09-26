@@ -104,7 +104,14 @@ for (const size of SIZES) {
   let caught = false
   for (let wait = 0; wait < 40 && !caught; wait++) {
     await page.waitForTimeout(1500)
-    if ((await page.getByRole('button', { name: /^skip$/i }).count()) > 0) {
+    /*
+     * Spotted by the answers being on screen, not by a skip button. The skip
+     * is gone — a reward for answering means nothing if the answer is
+     * optional — and this went on hunting for it, so it never once noticed a
+     * question and reported that no life had been lost in ninety seconds.
+     */
+    if ((await page.locator('.rise-in.block-btn').count()) > 0
+        || (await page.getByRole('button', { name: /^check$/i }).count()) > 0) {
       await audit(page, 'question', size.tag)
       caught = true
     }

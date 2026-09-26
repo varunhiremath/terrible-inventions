@@ -436,11 +436,17 @@ export function Prince() {
     }
   }, [])
 
-  const restartLevel = () => {
+  /**
+   * A right answer buys back a minute on the clock.
+   *
+   * The clock is the whole pressure of this game and it never otherwise goes
+   * back — which makes a minute of it the only thing down here worth having.
+   */
+  const restartLevel = (right: boolean) => {
     const run = runRef.current
     if (!run) return
-    // The clock does not go back. That is the whole point of it.
-    runRef.current = newRun(run.level, run.number, run.framesLeft, run.hasSword, run.maxHealth)
+    const left = right ? run.framesLeft + FPS * 60 : run.framesLeft
+    runRef.current = newRun(run.level, run.number, left, run.hasSword, run.maxHealth)
     setHud((h) => ({ ...h, status: 'playing', message: null }))
   }
 
@@ -488,7 +494,7 @@ export function Prince() {
 
       <BackButton onClick={() => go('home')} />
 
-      {asking && <Interlude onDone={restartLevel} />}
+      {asking && <Interlude onDone={restartLevel} reward="a minute back on the clock" />}
 
       {overlay && (
         <div

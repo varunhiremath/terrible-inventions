@@ -64,6 +64,43 @@ export const CAN_WORTH = 45
  */
 export const SIGHT = 24
 
+/**
+ * The stretch a driver is about to arrive in.
+ *
+ * Two promises are made about it and both are tested. There is always a way
+ * through it, and nothing inside it changes lane. What you see when you still
+ * have time to answer it is what you get — a car that swerves after you have
+ * committed is not a hazard, it is a trick.
+ */
+export const REACT = SIGHT * 0.6
+
+/**
+ * What each stage asks of you beyond getting to the end.
+ *
+ * A distance on its own is a treadmill. A thing to *do* while covering it —
+ * get past twenty of them, take three cans, arrive without a scratch — is what
+ * turns a stretch of road into a stage, and it gives the end of one something
+ * to report other than "yes, that happened".
+ */
+export type Mission =
+  | { kind: 'pass'; count: number }
+  | { kind: 'cans'; count: number }
+  | { kind: 'clean' }
+
+export function missionSays(mission: Mission): string {
+  switch (mission.kind) {
+    case 'pass':
+      return `Get past ${mission.count} of them`
+    case 'cans':
+      return `Pick up ${mission.count} cans of fuel`
+    case 'clean':
+      return 'Arrive without a scratch'
+  }
+}
+
+/** What finishing the job is worth. */
+export const MISSION_BONUS = 1500
+
 export interface Stage {
   name: string
   /** Cars on the road at once, roughly. */
@@ -87,6 +124,47 @@ export interface Stage {
   pace: number
   /** How far you have to get to finish, in car lengths. */
   distance: number
+  /** The job, on top of getting there. */
+  mission: Mission
+  /** Which of his vehicles turn out for this one. */
+  fleet: readonly CarKind[]
+}
+
+/**
+ * What is out on the road.
+ *
+ * `swerver` is the one that changes the game: it drifts towards whichever lane
+ * you are in. It may only do that while it is still far enough away for you to
+ * answer it — see the note on the reaction window in `run.ts`. A hazard that
+ * moves after you have committed is not a hazard, it is a trick.
+ */
+export type CarKind = 'cruiser' | 'lorry' | 'swerver' | 'patrol' | 'ambulance'
+
+/** How much of a lane each one takes up. A lorry is wider than a car. */
+export const WIDTH_OF: Record<CarKind, number> = {
+  cruiser: 0.62,
+  lorry: 0.78,
+  swerver: 0.62,
+  patrol: 0.64,
+  ambulance: 0.7,
+}
+
+/** And how long. */
+export const LENGTH_OF: Record<CarKind, number> = {
+  cruiser: 1,
+  lorry: 1.55,
+  swerver: 1,
+  patrol: 1.05,
+  ambulance: 1.3,
+}
+
+/** How fast each one goes, against the stage's own pace. */
+export const PACE_OF: Record<CarKind, number> = {
+  cruiser: 1,
+  lorry: 0.78,
+  swerver: 1.05,
+  patrol: 1.1,
+  ambulance: 1.25,
 }
 
 /**
@@ -97,6 +175,13 @@ export interface Stage {
  */
 export const STAGES: readonly Stage[] = [
 /*
+ * Paces rise as the stages go on, which sounds backwards and is not.
+ *
+ * Slower traffic is *harder*: you close on it faster, so you see it for less
+ * time. The gentlest stage therefore has the traffic moving nearly half your
+ * speed, and the difficulty later comes from how much of it there is and what
+ * sort it is — a lane-changer is a different problem from a lorry.
+ *
  * Counts to suit the sight line, not the other way round.
  *
  * These were three to eight when you could see thirty-four units of road. The
@@ -104,12 +189,31 @@ export const STAGES: readonly Stage[] = [
  * third stage went from one crash to eleven. Traffic is only meaningful
  * relative to how much road you can see it on.
  */
-  { name: 'The Bypass', traffic: 2, pace: 0.34, distance: 450 },
-  { name: 'Rush Hour', traffic: 2, pace: 0.38, distance: 550 },
-  { name: 'The Long Straight', traffic: 3, pace: 0.42, distance: 650 },
-  { name: 'Roadworks', traffic: 3, pace: 0.46, distance: 750 },
-  { name: 'Night Shift', traffic: 3, pace: 0.5, distance: 850 },
-  { name: "Papa's Own Motorway", traffic: 4, pace: 0.54, distance: 1000 },
+  {
+    name: 'The Bypass', traffic: 2, pace: 0.44, distance: 450,
+    mission: { kind: 'pass', count: 6 }, fleet: ['cruiser'],
+  },
+  {
+    name: 'Rush Hour', traffic: 2, pace: 0.46, distance: 550,
+    mission: { kind: 'cans', count: 2 }, fleet: ['cruiser', 'lorry'],
+  },
+  {
+    name: 'The Long Straight', traffic: 3, pace: 0.48, distance: 650,
+    mission: { kind: 'pass', count: 14 }, fleet: ['cruiser', 'lorry', 'patrol'],
+  },
+  {
+    name: 'Roadworks', traffic: 3, pace: 0.5, distance: 750,
+    mission: { kind: 'clean' }, fleet: ['cruiser', 'lorry', 'swerver'],
+  },
+  {
+    name: 'Night Shift', traffic: 4, pace: 0.52, distance: 850,
+    mission: { kind: 'cans', count: 3 }, fleet: ['cruiser', 'patrol', 'swerver', 'ambulance'],
+  },
+  {
+    name: "Papa's Own Motorway", traffic: 5, pace: 0.54, distance: 1000,
+    mission: { kind: 'pass', count: 28 },
+    fleet: ['cruiser', 'lorry', 'patrol', 'swerver', 'ambulance'],
+  },
 ]
 
 export function stageFor(number: number): Stage {

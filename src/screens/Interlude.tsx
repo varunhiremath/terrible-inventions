@@ -22,7 +22,15 @@ import { useStore } from '../store'
  * mood to be fined, and the explanation runs either way because the point is
  * the idea rather than the mark.
  */
-export function Interlude({ onDone }: { onDone: () => void }) {
+export function Interlude({
+  onDone,
+  reward,
+}: {
+  /** Told whether it was right, so the game can pay out. */
+  onDone: (correct: boolean) => void
+  /** What a right answer is worth here, in the game's own terms. */
+  reward?: string
+}) {
   const save = useStore((s) => s.save)
   const recent = useStore((s) => s.recentQuestions)
   const lastTopic = useStore((s) => s.lastTopic)
@@ -164,9 +172,14 @@ export function Interlude({ onDone }: { onDone: () => void }) {
             <p className="mt-2 text-[0.95rem] leading-relaxed text-chalk/90 short:mt-1 short:text-sm">
               {fill(question.kind === 'maths' ? question.problem.explain : question.item.explain)}
             </p>
+            {reward && verdict.correct && (
+              <p className="mt-3 font-mono text-xs font-bold uppercase tracking-[0.2em] text-moss short:mt-2">
+                {reward}
+              </p>
+            )}
             <button
               type="button"
-              onClick={onDone}
+              onClick={() => onDone(verdict.correct)}
               className="block-btn mt-5 w-full bg-bolt py-4 text-lg text-ink short:mt-3 short:py-2.5 short:text-base"
             >
               Back to it
@@ -174,14 +187,19 @@ export function Interlude({ onDone }: { onDone: () => void }) {
           </div>
         )}
 
-        {!verdict && (
-          <button
-            type="button"
-            onClick={onDone}
-            className="mt-5 w-full px-2 py-2 font-mono text-[0.7rem] uppercase tracking-[0.2em] text-dim/50 transition-colors hover:text-dim short:mt-2 short:py-1"
-          >
-            skip
-          </button>
+        {/*
+          * No way past it.
+          *
+          * There used to be a skip, on the reasoning that being stuck on a
+          * question you cannot answer is worse than not being asked. But there
+          * are four options and a wrong answer costs nothing — so the skip was
+          * only ever a way of not playing this part, and a reward for
+          * answering is no reward at all if the answer is optional.
+          */}
+        {!verdict && reward && (
+          <p className="mt-4 text-center font-mono text-[0.7rem] uppercase tracking-[0.2em] text-moss short:mt-2">
+            right answer: {reward}
+          </p>
         )}
       </div>
     </div>

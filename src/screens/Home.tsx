@@ -285,8 +285,8 @@ const TILES: Tile[] = [
       drawRoad(ctx, view, w, h)
       // Two of his and one of yours, drawn by the game's own code so the tile
       // is the game rather than a picture of it.
-      drawCar(ctx, { id: 1, y: 3.4, lane: 0, speed: 0, kind: 0 }, view)
-      drawCar(ctx, { id: 2, y: 2.6, lane: 2, speed: 0, kind: 1 }, view)
+      drawCar(ctx, { id: 1, y: 3.4, lane: 0, speed: 0, kind: 'patrol', wants: 0, roused: 0 }, view)
+      drawCar(ctx, { id: 2, y: 2.6, lane: 2, speed: 0, kind: 'swerver', wants: 2, roused: 0 }, view)
       drawCan(ctx, { id: 3, y: 1.6, lane: 3, taken: false }, view)
       drawMine(ctx, 1, view, 0)
     },

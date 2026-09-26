@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { TILE, boardFor, edibleCells, key } from '../arcade/maze/maze'
 import { ghostsFor, type Dir } from '../arcade/maze/ghosts'
 import {
+  STARTING_LIVES,
   newGame,
   positionBetween,
   respawn,
@@ -577,11 +578,15 @@ function PlayerIcon() {
     }
   }
 
-  const again = () => {
+  /** A right answer buys back the life you just lost, up to what you started with. */
+  const again = (right: boolean) => {
     const game = gameRef.current
-    if (game) gameRef.current = respawn(game)
+    if (game) {
+      const back = respawn(game)
+      gameRef.current = right ? { ...back, lives: Math.min(STARTING_LIVES, back.lives + 1) } : back
+    }
     setMessage(null)
-    setHud((h) => ({ ...h, status: 'playing' }))
+    setHud((h) => ({ ...h, status: 'playing', lives: gameRef.current?.lives ?? h.lives }))
   }
 
   const nextLevel = () => {
@@ -689,7 +694,7 @@ function PlayerIcon() {
 
       {ping && !overlay && <Ping ping={ping} />}
 
-      {asking && <Interlude onDone={again} />}
+      {asking && <Interlude onDone={again} reward="the life back" />}
 
       {overlay && (
         <div
