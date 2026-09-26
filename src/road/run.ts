@@ -12,9 +12,9 @@
  */
 import { makeRng, type Rng } from '../engine/rng'
 import {
-  ACCELERATION, BRAKING, BURN_PER_SECOND, CAN_WORTH, CAR_LONG, CAR_WIDE, DRAG,
-  LANES, LENGTH_OF, MISSION_BONUS, PACE_OF, REACT, SIGHT, STEER_RATE, TANK,
-  TOP_SPEED, WIDTH_OF, stageFor, type CarKind, type Stage,
+  ACCELERATION, BRAKING, BURN_PER_SECOND, CAN_EVERY, CAN_WORTH, CAR_LONG, CAR_WIDE,
+  DRAG, LANES, LENGTH_OF, MISSION_BONUS, REACT, SIGHT, STEER_RATE, TANK,
+  TOP_SPEED, WANDERS, WIDTH_OF, stageFor, topSpeedOn, type CarKind, type Stage,
 } from './level'
 
 export const FIXED = 1 / 60
@@ -82,25 +82,8 @@ export interface Run {
   nextId: number
   /** How far ahead the last wave was put, so the next one keeps its distance. */
   lastWave: number
-  /**
-   * The lane nothing is allowed into.
-   *
-   * The promise that there is always a way through used to rest on the
-   * geometry being frozen — every car at one pace, so a gap laid down stayed a
-   * gap. Giving lorries, patrols and ambulances their own speeds broke that,
-   * and the walls came straight back; so did swervers, which change lanes on
-   * purpose.
-   *
-   * So the guarantee is structural now instead of arithmetical. One lane is
-   * kept clear: nothing spawns into it and no swerver may target it. It only
-   * moves to a lane that is already empty as far ahead as anything exists, so
-   * it cannot be closed by something that was already out there. Whatever else
-   * happens on the road, that lane is open.
-   *
-   * It moves about, so it is not simply "drive in lane two and win" — finding
-   * where the gap has gone is the game.
-   */
-  openLane: number
+  /** Seconds until another can of fuel may appear. */
+  canCooldown: number
 }
 
 export function newRun(number = 1, lives = STARTING_LIVES, score = 0, seed = 1): Run {
@@ -127,7 +110,7 @@ export function newRun(number = 1, lives = STARTING_LIVES, score = 0, seed = 1):
     seed,
     nextId: 1,
     lastWave: 0,
-    openLane: 1,
+    canCooldown: CAN_EVERY * 0.4,
   }
 }
 
@@ -204,8 +187,8 @@ function spawnWave(run: Run, rng: Rng): void {
     free.delete(lane)
   }
   // The open lane is not on offer, whatever else is going on.
-  free.delete(run.openLane)
-  if (free.size < 1) return
+  // Always somewhere to go: one lane of the window is left empty.
+  if (free.size <= 1) return
 
   /*
    * How many of the remaining lanes to use.
@@ -215,7 +198,7 @@ function spawnWave(run: Run, rng: Rng): void {
    * top of that, which on a four-lane road with one lane reserved meant it
    * frequently decided to spawn nothing at all.
    */
-  const want = Math.max(1, Math.min(free.size, 1 + rng.int(0, 1)))
+  const want = Math.max(1, Math.min(free.size - 1, 1 + rng.int(0, 2)))
   const lanes = [...free].sort(() => rng.next() - 0.5).slice(0, want)
 
   for (const lane of lanes) {
@@ -225,9 +208,18 @@ function spawnWave(run: Run, rng: Rng): void {
       id: run.nextId++,
       y: ahead + rng.next() * CAR_LONG * 2,
       lane,
-      // The stage's pace, adjusted for what sort of vehicle it is. A lorry
-      // lumbers and an ambulance does not.
-      speed: TOP_SPEED * run.stage.pace * PACE_OF[kind],
+      /*
+       * One pace for everything on the road, whatever it is.
+       *
+       * A bus travelling at a hatchback's speed is a small lie and it buys the
+       * whole game: vehicles at different speeds drift relative to each other,
+       * and drift turns two perfectly legal waves into a wall a hundred
+       * lengths later. That has been the cause of every blocked road in here.
+       * With one pace the geometry is frozen the moment it is laid down. The
+       * variety comes from what the things are and from them changing lanes,
+       * not from how fast they go.
+       */
+      speed: topSpeedOn(run.stage) * run.stage.pace,
       kind,
       wants: lane,
       roused: 0,
@@ -251,58 +243,46 @@ function spawnCan(run: Run, rng: Rng): void {
 }
 
 /**
- * What the different sorts of vehicle do.
+ * What the traffic does.
  *
  * All of it happens outside the reaction window, and that is the whole of the
- * rule. A swerver picks the lane you are in and slides towards it — but only
- * while it is still far enough away that you can answer it. The moment it
- * comes inside the stretch you are about to arrive in, it is locked to
- * whatever lane it is in and stays there.
+ * rule. A swerver goes looking for the lane you are in; everything else pulls
+ * out now and then for reasons of its own, which is what makes traffic traffic
+ * rather than a row of bollards. But the moment a vehicle is inside the
+ * stretch you are about to arrive in, it is locked to its lane and stays
+ * there. A car that moves after you have committed to a gap is not a hazard,
+ * it is a trick.
  *
- * Without that the game becomes unreadable: you commit to a gap, the gap moves
- * after you have committed, and there was never anything you could have done.
- * That is not difficulty.
+ * And no move may close the last way through. There used to be a whole lane
+ * kept permanently empty to guarantee that, which was simple and correct and
+ * far too kind — five stages were being finished without a scratch. Checking
+ * each move instead keeps the promise without handing over a free lane to sit
+ * in.
  */
-function moveOver(run: Run, car: Car, dt: number): void {
+function moveOver(run: Run, car: Car, dt: number, rng: Rng): void {
   const ahead = car.y - run.distance
   if (ahead <= REACT) return
 
-  if (car.kind === 'swerver') {
-    // It wants whichever lane he is in, but it will not step into the last
-    // gap: leaving the road blocked is the other side of the same promise.
-    const target = Math.round(run.lane)
-    // Never into the lane that is being kept open.
-    if (target !== run.openLane) car.wants = target
-  } else if (car.kind === 'ambulance') {
-    // It weaves, because it is in a hurry and nobody is getting out of its way.
-    const weave = Math.round(car.lane + Math.sin(car.y * 0.07) * 1.4)
-    if (weave !== run.openLane) car.wants = weave
+  /** Would putting this one in `lane` leave its stretch with no way through? */
+  const shuts = (lane: number): boolean => {
+    const others = run.cars.filter((c) => c.id !== car.id)
+    const blocked = blockedLanes(others, car.y - REACT, car.y + longOf(car) + REACT)
+    blocked.add(lane)
+    return blocked.size >= LANES
   }
 
-  car.wants = Math.min(LANES - 1, Math.max(0, car.wants))
+  if (Math.abs(car.wants - car.lane) < 0.01 && rng.next() < WANDERS[car.kind] * dt) {
+    const target = car.kind === 'swerver'
+      ? Math.round(run.lane)
+      : Math.round(car.lane) + (rng.next() < 0.5 ? -1 : 1)
+    const want = Math.min(LANES - 1, Math.max(0, target))
+    if (want !== Math.round(car.lane) && !shuts(want)) car.wants = want
+  }
+
   if (Math.abs(car.wants - car.lane) > 0.01) {
     const way = Math.sign(car.wants - car.lane)
-    const moved = car.lane + way * STEER_RATE * 0.45 * dt
+    const moved = car.lane + way * STEER_RATE * 0.5 * dt
     car.lane = way > 0 ? Math.min(car.wants, moved) : Math.max(car.wants, moved)
-  }
-}
-
-/**
- * Move the open lane about, but only somewhere that is already empty.
- *
- * Checked as far ahead as anything can exist, so a lane that looks clear now
- * cannot turn out to have had something in it all along, just out of sight.
- */
-function shiftTheGap(run: Run, rng: Rng): void {
-  if (rng.next() > 0.01) return
-  const reach = run.distance + SIGHT * 3
-  for (let tries = 0; tries < LANES; tries++) {
-    const lane = rng.int(0, LANES - 1)
-    if (lane === run.openLane) continue
-    if (blockedLanes(run.cars, run.distance - CAR_LONG, reach).has(lane)) continue
-    if (run.cars.some((car) => car.wants === lane)) continue
-    run.openLane = lane
-    return
   }
 }
 
@@ -346,7 +326,7 @@ export function step(run: Run, input: Input, dt: number): Run {
   } else if (input.brake) {
     next.speed = Math.max(0, next.speed - BRAKING * dt)
   } else if (input.go && next.fuel > 0) {
-    next.speed = Math.min(TOP_SPEED, next.speed + ACCELERATION * dt)
+    next.speed = Math.min(topSpeedOn(next.stage), next.speed + ACCELERATION * dt)
   } else {
     next.speed = Math.max(0, next.speed - DRAG * dt)
   }
@@ -365,12 +345,13 @@ export function step(run: Run, input: Input, dt: number): Run {
   next.distance += next.speed * dt
   for (const car of next.cars) {
     car.y += car.speed * dt
-    moveOver(next, car, dt)
+    moveOver(next, car, dt, rng)
     if (car.roused > 0) car.roused = Math.max(0, car.roused - dt)
   }
 
   if (next.speed > 0) {
     next.fuel = Math.max(0, next.fuel - BURN_PER_SECOND * dt * (0.4 + next.speed / TOP_SPEED))
+    next.canCooldown = Math.max(0, next.canCooldown - dt)
     /*
      * Running dry costs a life, rather than leaving you coasting.
      *
@@ -436,7 +417,7 @@ export function step(run: Run, input: Input, dt: number): Run {
     const gap = car.y - next.distance
     if (gap > -CAR_LONG * 2 && gap < CAR_LONG * 2 && car.roused === 0) car.roused = 4
     if (car.roused > 0) {
-      const chasing = TOP_SPEED * Math.min(0.85, next.stage.pace * PACE_OF.patrol + 0.2)
+      const chasing = topSpeedOn(next.stage) * Math.min(0.9, next.stage.pace + 0.22)
       car.speed = Math.min(chasing, car.speed + TOP_SPEED * 0.3 * dt)
     }
   }
@@ -448,12 +429,18 @@ export function step(run: Run, input: Input, dt: number): Run {
   if (next.cars.length < wanted && next.distance > next.lastWave - SIGHT * 0.9) {
     spawnWave(next, rng)
   }
-  // A can every so often, and sooner if the tank is low: running dry through
-  // bad luck rather than bad driving is the other kind of coin toss.
-  const thirsty = next.fuel < TANK * 0.35
-  if (next.cans.length === 0 && rng.next() < (thirsty ? 0.04 : 0.012)) spawnCan(next, rng)
-
-  shiftTheGap(next, rng)
+  /*
+   * A can now and then, and no sympathy when the tank is low.
+   *
+   * There used to be a boost to the odds when he was running out, meant kindly
+   * and with the effect that the tank never once emptied — reported as "I
+   * never seem to run out of fuel, they keep coming". Fuel that cannot run out
+   * is scenery. A plain cooldown now: miss one and you wait for the next.
+   */
+  if (next.cans.length === 0 && next.canCooldown === 0) {
+    spawnCan(next, rng)
+    next.canCooldown = CAN_EVERY
+  }
 
   // --- the end of the stage --------------------------------------------------
   if (next.distance >= next.stage.distance) {

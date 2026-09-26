@@ -23,12 +23,12 @@ export const CAR_LONG = 2.2
 export const CAR_WIDE = 0.62
 
 /**
- * Top speed, in car lengths a second.
+ * Top speed on the opening stage, in car lengths a second.
  *
- * It was twenty-six, which is the whole of the visible road every second: a
- * slow car ahead closed in about a second and a half, and even a sensible
- * driver was crashing six times on the gentlest stage. Speed is not what makes
- * this good — the gaps are — so it gives some back.
+ * Every stage after that raises it — see `Stage.limit`. Going faster is the
+ * cleanest way to make a road harder, because it takes reaction time away
+ * without taking anything away from the player: the same gaps, less of a
+ * moment to find them.
  */
 export const TOP_SPEED = 15
 /** How hard the pedal pushes, and how hard the brake pulls back. */
@@ -51,10 +51,20 @@ export const STEER_RATE = 3.4
  * the question the road asks is "can you reach that can safely" rather than
  * "did the road happen to put one in front of you".
  */
-export const TANK = 140
-export const BURN_PER_SECOND = 1.8
-/** A can puts this much back in. */
-export const CAN_WORTH = 45
+export const TANK = 100
+export const BURN_PER_SECOND = 2.4
+/** A can puts this much back in — not a full tank, on purpose. */
+export const CAN_WORTH = 32
+/**
+ * The least time between one can and the next.
+ *
+ * There was no such gap, and a can appeared as soon as the last was gone —
+ * with the odds *raised* when the tank was low, which was meant to be kind and
+ * meant the tank never actually ran out. Reported as exactly that: "I never
+ * seem to run out of fuel, they keep coming." Fuel that cannot run out is not
+ * a resource, it is scenery.
+ */
+export const CAN_EVERY = 14
 
 /**
  * How far ahead you can see, in car lengths.
@@ -122,6 +132,14 @@ export interface Stage {
    * than from how fast the cars are.
    */
   pace: number
+  /**
+   * How much faster than the opening stage you are allowed to go.
+   *
+   * The thing that actually makes later stages hard. Five stages were being
+   * finished without a scratch, and no amount of extra traffic fixes that on
+   * its own — at a fixed speed you simply have all day to pick your gap.
+   */
+  limit: number
   /** How far you have to get to finish, in car lengths. */
   distance: number
   /** The job, on top of getting there. */
@@ -138,33 +156,50 @@ export interface Stage {
  * answer it — see the note on the reaction window in `run.ts`. A hazard that
  * moves after you have committed is not a hazard, it is a trick.
  */
-export type CarKind = 'cruiser' | 'lorry' | 'swerver' | 'patrol' | 'ambulance'
+export type CarKind =
+  | 'cruiser' | 'taxi' | 'van' | 'truck' | 'bus' | 'patrol' | 'ambulance' | 'swerver'
 
-/** How much of a lane each one takes up. A lorry is wider than a car. */
+/** How much of a lane each one takes up. */
 export const WIDTH_OF: Record<CarKind, number> = {
   cruiser: 0.62,
-  lorry: 0.78,
-  swerver: 0.62,
+  taxi: 0.62,
+  van: 0.72,
+  truck: 0.82,
+  bus: 0.8,
   patrol: 0.64,
-  ambulance: 0.7,
+  ambulance: 0.72,
+  swerver: 0.62,
 }
 
-/** And how long. */
+/** And how long. A bus is most of a lane on its own. */
 export const LENGTH_OF: Record<CarKind, number> = {
   cruiser: 1,
-  lorry: 1.55,
-  swerver: 1,
+  taxi: 1,
+  van: 1.3,
+  truck: 1.9,
+  bus: 2.1,
   patrol: 1.05,
-  ambulance: 1.3,
+  ambulance: 1.35,
+  swerver: 1,
 }
 
-/** How fast each one goes, against the stage's own pace. */
-export const PACE_OF: Record<CarKind, number> = {
-  cruiser: 1,
-  lorry: 0.78,
-  swerver: 1.05,
-  patrol: 1.1,
-  ambulance: 1.25,
+/**
+ * Which of them pull out on you.
+ *
+ * A swerver goes looking for your lane. The rest change lanes now and then for
+ * no reason you are told about, which is what the road is actually like and is
+ * the difference between traffic and bollards. All of it happens outside the
+ * reaction window — see `run.ts`.
+ */
+export const WANDERS: Record<CarKind, number> = {
+  cruiser: 0.1,
+  taxi: 0.35,
+  van: 0.15,
+  truck: 0.05,
+  bus: 0.05,
+  patrol: 0.3,
+  ambulance: 0.5,
+  swerver: 1,
 }
 
 /**
@@ -190,29 +225,32 @@ export const STAGES: readonly Stage[] = [
  * relative to how much road you can see it on.
  */
   {
-    name: 'The Bypass', traffic: 2, pace: 0.44, distance: 450,
-    mission: { kind: 'pass', count: 6 }, fleet: ['cruiser'],
+    name: 'The Bypass', traffic: 3, pace: 0.46, limit: 1, distance: 450,
+    mission: { kind: 'pass', count: 10 }, fleet: ['cruiser', 'taxi', 'van'],
   },
   {
-    name: 'Rush Hour', traffic: 2, pace: 0.46, distance: 550,
-    mission: { kind: 'cans', count: 2 }, fleet: ['cruiser', 'lorry'],
+    name: 'Rush Hour', traffic: 6, pace: 0.42, limit: 1.1, distance: 550,
+    mission: { kind: 'cans', count: 2 }, fleet: ['cruiser', 'taxi', 'van', 'bus'],
   },
   {
-    name: 'The Long Straight', traffic: 3, pace: 0.48, distance: 650,
-    mission: { kind: 'pass', count: 14 }, fleet: ['cruiser', 'lorry', 'patrol'],
+    name: 'The Long Straight', traffic: 7, pace: 0.4, limit: 1.2, distance: 650,
+    mission: { kind: 'pass', count: 26 },
+    fleet: ['cruiser', 'taxi', 'truck', 'bus', 'patrol'],
   },
   {
-    name: 'Roadworks', traffic: 3, pace: 0.5, distance: 750,
-    mission: { kind: 'clean' }, fleet: ['cruiser', 'lorry', 'swerver'],
+    name: 'Roadworks', traffic: 8, pace: 0.38, limit: 1.28, distance: 750,
+    mission: { kind: 'clean' },
+    fleet: ['cruiser', 'van', 'truck', 'bus', 'swerver'],
   },
   {
-    name: 'Night Shift', traffic: 4, pace: 0.52, distance: 850,
-    mission: { kind: 'cans', count: 3 }, fleet: ['cruiser', 'patrol', 'swerver', 'ambulance'],
+    name: 'Night Shift', traffic: 9, pace: 0.36, limit: 1.36, distance: 850,
+    mission: { kind: 'cans', count: 3 },
+    fleet: ['cruiser', 'taxi', 'van', 'patrol', 'ambulance', 'swerver'],
   },
   {
-    name: "Papa's Own Motorway", traffic: 5, pace: 0.54, distance: 1000,
-    mission: { kind: 'pass', count: 28 },
-    fleet: ['cruiser', 'lorry', 'patrol', 'swerver', 'ambulance'],
+    name: "Papa's Own Motorway", traffic: 11, pace: 0.34, limit: 1.45, distance: 1000,
+    mission: { kind: 'pass', count: 45 },
+    fleet: ['cruiser', 'taxi', 'van', 'truck', 'bus', 'patrol', 'ambulance', 'swerver'],
   },
 ]
 
@@ -222,5 +260,10 @@ export function stageFor(number: number): Stage {
 
 /** Speed on the dial. Nobody wants to be told they are doing 19 car lengths. */
 export function kmh(speed: number): number {
-  return Math.round((speed / TOP_SPEED) * 400)
+  return Math.round((speed / TOP_SPEED) * 280)
+}
+
+/** What the pedal is worth on a given stage. */
+export function topSpeedOn(stage: Stage): number {
+  return TOP_SPEED * stage.limit
 }

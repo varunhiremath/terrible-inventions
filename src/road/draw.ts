@@ -41,10 +41,13 @@ export const INK = {
  */
 const PAINT: Record<CarKind, { body: string; trim: string; glass: string }> = {
   cruiser: { body: '#5ad2e0', trim: '#2a8f9c', glass: '#0d2b30' },
-  lorry: { body: '#b07de0', trim: '#7a52a0', glass: '#1a1030' },
-  swerver: { body: '#e8503a', trim: '#a82f1e', glass: '#2a0d08' },
-  patrol: { body: '#e8ebf5', trim: '#1a2a5e', glass: '#0d1630' },
+  taxi: { body: '#f0c419', trim: '#14161c', glass: '#2a2410' },
+  van: { body: '#e8ebf5', trim: '#8a91ab', glass: '#1a2028' },
+  truck: { body: '#b07de0', trim: '#5f3f8f', glass: '#1a1030' },
+  bus: { body: '#e8503a', trim: '#7a2418', glass: '#2a0d08' },
+  patrol: { body: '#eef2f8', trim: '#1a2a5e', glass: '#0d1630' },
   ambulance: { body: '#f7f7f2', trim: '#e0b13c', glass: '#1a2028' },
+  swerver: { body: '#ff3d3d', trim: '#8f1414', glass: '#2a0808' },
 }
 
 type Shape = { x: number; y: number }[]
@@ -80,7 +83,7 @@ function body(ctx: Ctx, x: number, y: number, wide: number, long: number, shape:
   ctx.closePath()
 }
 
-/** A single-seater silhouette: pointed nose, pinched waist, broad tail. */
+/** A single-seater: pointed nose, pinched waist, broad tail. */
 const RACER: Shape = [
   { x: -0.22, y: -1 }, { x: 0.22, y: -1 },
   { x: 0.42, y: -0.52 }, { x: 0.34, y: -0.1 },
@@ -89,28 +92,48 @@ const RACER: Shape = [
   { x: -0.34, y: -0.1 }, { x: -0.42, y: -0.52 },
 ]
 
-/** A saloon: rounded nose, straight flanks, slightly tucked tail. */
+/** A saloon: sloped bonnet, straight flanks, tucked boot. */
 const SALOON: Shape = [
   { x: -0.3, y: -1 }, { x: 0.3, y: -1 },
-  { x: 0.5, y: -0.55 }, { x: 0.5, y: 0.6 },
-  { x: 0.34, y: 1 }, { x: -0.34, y: 1 },
-  { x: -0.5, y: 0.6 }, { x: -0.5, y: -0.55 },
+  { x: 0.48, y: -0.62 }, { x: 0.5, y: 0.5 },
+  { x: 0.36, y: 1 }, { x: -0.36, y: 1 },
+  { x: -0.5, y: 0.5 }, { x: -0.48, y: -0.62 },
 ]
 
-/** A van: blunt, square-shouldered, taller than it is clever. */
+/** A low wedge with the shoulders set back. */
+const WEDGE: Shape = [
+  { x: -0.24, y: -1 }, { x: 0.24, y: -1 },
+  { x: 0.5, y: -0.3 }, { x: 0.5, y: 0.62 },
+  { x: 0.3, y: 1 }, { x: -0.3, y: 1 },
+  { x: -0.5, y: 0.62 }, { x: -0.5, y: -0.3 },
+]
+
+/** A van: short bonnet, tall square box behind it. */
 const VAN: Shape = [
-  { x: -0.42, y: -1 }, { x: 0.42, y: -1 },
-  { x: 0.5, y: -0.78 }, { x: 0.5, y: 0.9 },
-  { x: 0.4, y: 1 }, { x: -0.4, y: 1 },
-  { x: -0.5, y: 0.9 }, { x: -0.5, y: -0.78 },
+  { x: -0.34, y: -1 }, { x: 0.34, y: -1 },
+  { x: 0.48, y: -0.8 }, { x: 0.5, y: -0.5 },
+  { x: 0.5, y: 0.94 }, { x: 0.42, y: 1 },
+  { x: -0.42, y: 1 }, { x: -0.5, y: 0.94 },
+  { x: -0.5, y: -0.5 }, { x: -0.48, y: -0.8 },
+]
+
+/** A box on wheels, near enough the full length of its lane. */
+const BOX: Shape = [
+  { x: -0.44, y: -1 }, { x: 0.44, y: -1 },
+  { x: 0.5, y: -0.92 }, { x: 0.5, y: 0.92 },
+  { x: 0.44, y: 1 }, { x: -0.44, y: 1 },
+  { x: -0.5, y: 0.92 }, { x: -0.5, y: -0.92 },
 ]
 
 const SHAPE_OF: Record<CarKind, Shape> = {
   cruiser: SALOON,
-  lorry: VAN,
-  swerver: RACER,
+  taxi: SALOON,
+  van: VAN,
+  truck: BOX,
+  bus: BOX,
   patrol: SALOON,
   ambulance: VAN,
+  swerver: WEDGE,
 }
 
 /** Four wheels, poking out at the corners, which is most of what says "car". */
@@ -253,41 +276,76 @@ export function drawCar(ctx: Ctx, car: Car, view: View): void {
   ctx.roundRect(x - wide * 0.34, y - long * 0.3, wide * 0.68, long * 0.16, wide * 0.08)
   ctx.fill()
 
-  if (car.kind === 'lorry') {
-    // A container behind the cab, with ribs.
+  if (car.kind === 'truck') {
+    // A cab at the front and a container behind it, with ribs down the sides.
     ctx.fillStyle = paint.trim
-    for (let i = 0; i < 4; i++) {
-      ctx.fillRect(x - wide * 0.42, y + long * (0.12 + i * 0.13), wide * 0.84, long * 0.04)
+    ctx.fillRect(x - wide * 0.46, y - long * 0.12, wide * 0.92, long * 0.05)
+    for (let i = 0; i < 5; i++) {
+      ctx.fillRect(x - wide * 0.44, y + long * (0.02 + i * 0.18), wide * 0.88, long * 0.05)
     }
   }
 
+  if (car.kind === 'bus') {
+    // A row of windows down each side, which is the whole of what says bus.
+    ctx.fillStyle = paint.glass
+    for (let i = 0; i < 5; i++) {
+      const wy = y - long * 0.28 + i * long * 0.28
+      ctx.fillRect(x - wide * 0.47, wy, wide * 0.12, long * 0.17)
+      ctx.fillRect(x + wide * 0.35, wy, wide * 0.12, long * 0.17)
+    }
+    ctx.fillStyle = paint.trim
+    ctx.fillRect(x - wide * 0.5, y + long * 0.06, wide, long * 0.05)
+  }
+
+  if (car.kind === 'taxi') {
+    // A sign on the roof and a chequer down the flank.
+    ctx.fillStyle = '#14161c'
+    ctx.fillRect(x - wide * 0.16, y - long * 0.24, wide * 0.32, long * 0.12)
+    for (let i = 0; i < 5; i++) {
+      ctx.fillStyle = i % 2 === 0 ? '#14161c' : '#eef2f8'
+      ctx.fillRect(x - wide * 0.5, y + long * (0.1 + i * 0.07), wide * 0.07, long * 0.07)
+      ctx.fillRect(x + wide * 0.43, y + long * (0.1 + i * 0.07), wide * 0.07, long * 0.07)
+    }
+  }
+
+  if (car.kind === 'van') {
+    ctx.fillStyle = paint.trim
+    ctx.fillRect(x - wide * 0.44, y + long * 0.2, wide * 0.88, long * 0.06)
+  }
+
   if (car.kind === 'patrol') {
-    // A light bar across the roof, flashing blue and red.
     const on = Math.floor(view.clock * 6) % 2 === 0
     ctx.fillStyle = on ? '#3d7bff' : '#ff3d3d'
-    ctx.fillRect(x - wide * 0.4, y - long * 0.06, wide * 0.38, long * 0.07)
+    ctx.fillRect(x - wide * 0.4, y - long * 0.1, wide * 0.38, long * 0.08)
     ctx.fillStyle = on ? '#ff3d3d' : '#3d7bff'
-    ctx.fillRect(x + wide * 0.02, y - long * 0.06, wide * 0.38, long * 0.07)
+    ctx.fillRect(x + wide * 0.02, y - long * 0.1, wide * 0.38, long * 0.08)
+    ctx.fillStyle = paint.trim
+    ctx.fillRect(x - wide * 0.5, y + long * 0.14, wide, long * 0.09)
   }
 
   if (car.kind === 'ambulance') {
     ctx.fillStyle = '#e8503a'
     const armW = wide * 0.1
-    const armL = long * 0.2
-    ctx.fillRect(x - armW / 2, y + long * 0.22, armW, armL)
-    ctx.fillRect(x - armL / 2, y + long * 0.22 + armL / 2 - armW / 2, armL, armW)
+    const armL = long * 0.18
+    ctx.fillRect(x - armW / 2, y + long * 0.3, armW, armL)
+    ctx.fillRect(x - armL / 2, y + long * 0.3 + armL / 2 - armW / 2, armL, armW)
     const on = Math.floor(view.clock * 7) % 2 === 0
     ctx.fillStyle = on ? '#3d7bff' : '#0d1630'
     ctx.beginPath()
-    ctx.arc(x, y - long * 0.42, wide * 0.1, 0, Math.PI * 2)
+    ctx.arc(x, y - long * 0.44, wide * 0.1, 0, Math.PI * 2)
     ctx.fill()
   }
 
   if (car.kind === 'swerver') {
     // A rear wing, because the one that comes after you should look like it.
     ctx.fillStyle = paint.trim
-    ctx.fillRect(x - wide * 0.52, y + long * 0.42, wide * 1.04, long * 0.09)
+    ctx.fillRect(x - wide * 0.54, y + long * 0.4, wide * 1.08, long * 0.1)
   }
+
+  // Lamps: red at the back of everything, which is the end you are looking at.
+  ctx.fillStyle = '#ff4d3d'
+  ctx.fillRect(x - wide * 0.42, y + long * 0.42, wide * 0.16, long * 0.05)
+  ctx.fillRect(x + wide * 0.26, y + long * 0.42, wide * 0.16, long * 0.05)
 }
 
 /** A fuel can, sitting in a lane. */

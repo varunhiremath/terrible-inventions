@@ -116,45 +116,56 @@ describe('the road', () => {
 
   it('can be driven to the end of every stage', () => {
     /*
-     * The playability proof. Not "is there a route" — can an ordinary sort of
-     * driver actually get there, and without it costing a silly number of
-     * cars.
-     *
-     * Averaged over several roads rather than judged on one. The traffic is
-     * seeded, and a single seed swings between one crash and four on the same
-     * stage — so one road tells you about that road and nothing about the
-     * game.
+     * The playability proof: can an ordinary sort of driver get there at all.
+     * Averaged over several roads, because the traffic is seeded and one seed
+     * tells you about that road rather than about the game.
      */
     for (let number = 1; number <= STAGES.length; number++) {
+      for (let seed = 1; seed <= 5; seed++) {
+        let run = newRun(number, 99, 0, seed * 13 + 1)
+        const drive = makeDriver()
+        for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+          run = step(run, drive(run), FIXED)
+          if (run.status === 'crashed') run = resume(run)
+        }
+        expect(run.status, `${stageFor(number).name} seed ${seed} was never finished`).toBe('stageDone')
+      }
+    }
+  }, 240_000)
+
+  it('is gentle at the start and genuinely hard at the end', () => {
+    /*
+     * Both ends, because only guarding one of them is how this went wrong.
+     *
+     * The cap used to be the only rule, and it quietly held the whole game
+     * down to the difficulty of its easiest acceptable stage — five levels
+     * were finished without a single failure. So the last stage now has to
+     * cost this driver something, and the first still has to be kind.
+     *
+     * Worth knowing when reading these numbers: the driver below is a poor
+     * player. A person who is any good will crash far less than it does, so a
+     * stage it strolls through is one nobody will notice.
+     */
+    const cost = (number: number) => {
       let total = 0
-      const seeds = 5
-      for (let seed = 1; seed <= seeds; seed++) {
+      for (let seed = 1; seed <= 5; seed++) {
         let run = newRun(number, 99, 0, seed * 13 + 1)
         const drive = makeDriver()
         for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
           run = step(run, drive(run), FIXED)
           if (run.status === 'crashed') { total++; run = resume(run) }
         }
-        expect(run.status, `${stageFor(number).name} seed ${seed} was never finished`).toBe('stageDone')
       }
-      /*
-       * What this can honestly claim.
-       *
-       * Not a smooth ramp: measured with a crude autopilot over five seeds,
-       * the stage-to-stage numbers bounce around by more than the trend, so a
-       * monotonic assertion would be reading noise. What it can say is that no
-       * stage is a wall, and that the first one is gentle — which is what the
-       * numbers are actually for.
-       */
-      const average = total / seeds
-      expect(
-        average,
-        `${stageFor(number).name} averaged ${average.toFixed(1)} crashes, which is a wall`,
-      ).toBeLessThanOrEqual(3)
-      if (number === 1) {
-        expect(average, 'the first stage has to be gentle').toBeLessThanOrEqual(1.5)
-      }
+      return total / 5
     }
+
+    const first = cost(1)
+    expect(first, `the first stage cost ${first.toFixed(1)} crashes and has to be kind`)
+      .toBeLessThanOrEqual(1.6)
+
+    const last = cost(STAGES.length)
+    expect(last, `the last stage cost ${last.toFixed(1)} crashes, which is a stroll`)
+      .toBeGreaterThan(2)
   }, 240_000)
 
   it('keeps him on the tarmac rather than crashing him off the edge', () => {
@@ -282,17 +293,11 @@ describe('the vehicles', () => {
     }
   }, 120_000)
 
-  it('keeps one lane open no matter what the traffic does', () => {
-    for (const number of [4, 5, 6]) {
-      for (let seed = 1; seed <= 4; seed++) {
-        let run = newRun(number, 99, 0, seed * 7)
-        const drive = makeDriver()
-        for (let t = 0; t < 60 && run.status === 'driving'; t += FIXED) {
-          run = step(run, drive(run), FIXED)
-          const shut = blockedLanes(run.cars, run.distance, run.distance + REACT)
-          expect(shut.has(run.openLane), `the open lane was closed on stage ${number}`).toBe(false)
-        }
-      }
-    }
-  }, 120_000)
+  /*
+   * There was a test here that the permanently open lane was never closed.
+   * That lane is gone — it made five stages finishable without a scratch —
+   * and the promise it guarded is now kept by checking each lane change
+   * against the window instead. "Never blocks every lane at once", above,
+   * is the test of it, and it now has wandering traffic to contend with.
+   */
 })

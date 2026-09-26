@@ -370,7 +370,14 @@ export function Road() {
     if (!run) return
     const back = resume(run)
     runRef.current = right
-      ? { ...back, fuel: TANK, warned: false, lives: Math.min(STARTING_LIVES, back.lives + 1) }
+      // Half a tank, not a full one. A full one handed back the whole fuel
+      // problem every time a question came up, and fuel is supposed to bite.
+      ? {
+          ...back,
+          fuel: Math.max(back.fuel, TANK * 0.5),
+          warned: false,
+          lives: Math.min(STARTING_LIVES, back.lives + 1),
+        }
       : back
     setHud((h) => ({ ...h, status: 'driving', lives: runRef.current!.lives }))
   }
@@ -416,7 +423,7 @@ export function Road() {
 
       <BackButton onClick={() => go('home')} />
 
-      {asking && <Interlude onDone={carryOn} reward="your car back, and a full tank" />}
+      {asking && <Interlude onDone={carryOn} reward="your car back, and half a tank" />}
 
       {overlay && (
         <div
