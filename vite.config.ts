@@ -37,7 +37,10 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
+        // The spoken clips go in too: 1.5 MB, and the voice is the thing you
+        // most notice missing on a bad connection.
+        globPatterns: ['**/*.{js,css,html,png,svg,woff2}', 'spoken/*.opus', 'spoken/index.json'],
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),
   ],

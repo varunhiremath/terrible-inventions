@@ -31,7 +31,7 @@ import soundfile as sf
 from piper import PiperVoice
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.join(HERE, 'public', 'voice')
+OUT = os.path.join(HERE, 'public', 'spoken')
 MODELS = os.environ.get('PIPER_MODELS', '/tmp')
 
 # Two speakers. The narrator sets the scene; the villain is a different person

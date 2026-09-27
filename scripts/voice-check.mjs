@@ -16,7 +16,7 @@ const browser = await chromium.launch({
 })
 const page = await browser.newPage({ viewport: { width: 412, height: 915 } })
 const asked = []
-page.on('request', (r) => { if (r.url().includes('/voice/')) asked.push(r.url().split('/').pop()) })
+page.on('request', (r) => { if (r.url().includes('/spoken/')) asked.push(r.url().split('/').pop()) })
 
 await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
 await page.waitForTimeout(700)

@@ -8,7 +8,9 @@ dist-ssr
 
 # --- Privacy -------------------------------------------------------------
 # Real names, photos and voice recordings never enter version control.
-# See src/config/profile.ts for how these are loaded.
+# See src/config/profile.ts for how these are loaded. Note that the machine
+# voice in public/spoken/ is not one of these: it is rendered from the lines as
+# written, so it says "Papa" and "you" and never anybody's name.
 .env
 .env.*
 !.env.example

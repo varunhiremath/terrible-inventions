@@ -33,7 +33,7 @@ async function keyOf(voice: string, line: string): Promise<string> {
     .slice(0, 16)
 }
 
-const BASE = `${import.meta.env.BASE_URL}voice/`
+const BASE = `${import.meta.env.BASE_URL}spoken/`
 
 let index: Record<string, number> | null = null
 let loading: Promise<void> | null = null
