@@ -74,7 +74,7 @@ describe('the dungeon cues', () => {
  * worst of them: the fire button is held down, so one goes every quarter of a
  * second for the whole run out to Neptune.
  */
-const TICKS: CueName[] = ['chomp', 'gem', 'leap', 'overtake', 'laser', 'ping']
+const TICKS: CueName[] = ['chomp', 'gem', 'leap', 'overtake', 'laser', 'ping', 'cell']
 
   it('are short enough to be cues rather than tunes', () => {
     // Anything much past this stops being a cue and starts being music playing
@@ -284,7 +284,7 @@ describe('the space cues', () => {
     // One every RELOAD seconds, which is a quarter of a second, for a run that
     // lasts over a minute. Anything longer than the gap and they pile up into
     // a drone.
-    for (const name of ['laser', 'ping'] as CueName[]) {
+    for (const name of ['laser', 'ping', 'cell'] as CueName[]) {
       expect(loopLength(CUES[name]) * eighthSeconds(CUES[name]), name).toBeLessThan(0.25)
       for (const part of CUES[name].parts) expect(part.gain ?? 1, name).toBeLessThan(0.08)
     }

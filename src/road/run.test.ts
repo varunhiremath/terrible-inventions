@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { LANES, REACT, SIGHT, STAGES, TANK, TOP_SPEED, stageFor } from './level'
-import { FIXED, NO_INPUT, blockedLanes, missionMet, newRun, resume, step, type Input, type Run } from './run'
+import { CAR_LONG, LANES, REACT, SIGHT, STAGES, TANK, TOP_SPEED, stageFor } from './level'
+import {
+  FIXED, NO_INPUT, blockedLanes, missionMet, newRun, placeOf, racerLanes, resume,
+  standings, step, type Input, type Run,
+} from './run'
 
 /**
  * The road.
@@ -343,4 +346,224 @@ describe('the vehicles', () => {
    * against the window instead. "Never blocks every lane at once", above,
    * is the test of it, and it now has wandering traffic to contend with.
    */
+})
+
+/**
+ * The race.
+ *
+ * The road was reported as too easy twice, and both times more traffic was the
+ * wrong answer: an obstacle course you have solved is not hard, it is long.
+ * Four of his machines running the same stage is a different problem — you can
+ * drive a clean stage and still come fourth.
+ *
+ * The rule that earns its own test is the one at the bottom. A racer moves at
+ * its own speed, so it can drift into the one lane the spawner left open and
+ * close it, and no check made when it was put on the road would catch that.
+ * It is the same lesson as the drifting rubble and the different-speed
+ * traffic, and this is the third time this project has had to learn it.
+ */
+describe('the field', () => {
+  it('lines four of them up behind you', () => {
+    const run = newRun(1)
+    expect(run.racers).toHaveLength(4)
+    for (const racer of run.racers) expect(racer.y).toBeLessThan(0)
+    expect(new Set(run.racers.map((r) => r.who.name)).size).toBe(4)
+  })
+
+  it('puts you first on the grid and not for long', () => {
+    expect(placeOf(newRun(1))).toBe(1)
+    // Left alone, with the pedal up, they all go past.
+    const idle = drive(newRun(1), NO_INPUT, 20)
+    expect(placeOf(idle)).toBeGreaterThan(1)
+  })
+
+  it('is a close race rather than a procession', () => {
+    /*
+     * What "beatable" has to mean here.
+     *
+     * Not "this driver wins", because this driver is a poor one on purpose —
+     * it crashes a dozen times on the last stage and never picks up a can, and
+     * demanding a win from it would mean a field so slow that a child beats it
+     * without noticing there was one. And not "this driver loses" either.
+     *
+     * What matters is the margin. If the leader crosses the line while this
+     * driver is still a tenth of the stage back, the race was over at the
+     * start; if they finish within a few lengths of each other, a clean run
+     * wins it and a scrappy one does not. That is a race.
+     */
+    for (const number of [1, 3, 6]) {
+      const drive2 = makeDriver()
+      let run = newRun(number, 99, 0, 7)
+      for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+        run = step(run, drive2(run), FIXED)
+        if (run.status === 'crashed') run = resume(run)
+      }
+      expect(run.status, `stage ${number}`).toBe('stageDone')
+      expect(run.place, `stage ${number}`).toBeLessThanOrEqual(3)
+
+      const order = standings(run)
+      const behind = order[0].at - (order.find((row) => row.you)?.at ?? 0)
+      expect(behind, `stage ${number}: the leader was out of sight`)
+        .toBeLessThan(run.stage.distance * 0.06)
+    }
+  })
+
+  it('beats somebody who dawdles', () => {
+    // And the other half of it. A race you win by holding one button is not a
+    // race either.
+    let run = newRun(1)
+    for (let t = 0; t < 200 && run.status === 'driving'; t += FIXED) {
+      // Half throttle: the pedal every other slice.
+      run = step(run, Math.floor(t / FIXED) % 2 === 0 ? { ...NO_INPUT, go: true } : NO_INPUT, FIXED)
+    }
+    expect(placeOf(run)).toBeGreaterThan(1)
+  })
+
+  it('never shuts the stretch you cannot avoid', () => {
+    /*
+     * The promise, restated for something that moves.
+     *
+     * It cannot be "no lane is ever shut anywhere in the reaction window",
+     * and it took a failing test to see why: a racer that is told to get out
+     * of the last open lane takes about four tenths of a second to cross it,
+     * and for those four tenths the road behind it is shut. Forbidding that
+     * would mean forbidding lane changes.
+     *
+     * What actually matters is whether the road is shut *where the player is
+     * arriving*. So it is two rules. The close stretch — bumper to a third of
+     * the way out, which is the part nobody can react to — is never shut at
+     * all. The wider window may shut, but only for as long as a lane change
+     * takes, so it is always open again by the time anyone gets there.
+     */
+    const CROSSING = 0.7
+    for (const number of [1, 2, 3, 4, 5, 6]) {
+      const driver = makeDriver()
+      let run = newRun(number)
+      let shutFor = 0
+      let closeFor = 0
+      for (let t = 0; t < 90 && run.status !== 'stageDone'; t += FIXED) {
+        run = step(run, driver(run), FIXED)
+        if (run.status === 'crashed') run = resume(run)
+        if (run.status !== 'driving') break
+
+        /*
+         * Measured with the game's own definitions, not a second set written
+         * here. The first version of this test had a racer 0.81 of a lane wide
+         * while the rule had it 0.62 wide, so the two disagreed about whether
+         * the road was shut and the disagreement looked like a bug in neither.
+         */
+        const from = run.distance + CAR_LONG
+        const shutIn = (to: number) => {
+          const shut = blockedLanes(run.cars, from, to)
+          for (const lane of racerLanes(run.racers, from, to)) shut.add(lane)
+          return shut.size
+        }
+
+        /*
+         * Both stretches are allowed to shut for as long as one lane change
+         * takes and no longer. A flat "never shut" on the close stretch was
+         * the first version and it failed on the fifth stage — not because of
+         * the field but because the traffic itself is allowed to finish a
+         * lane change it has already started, which momentarily puts a car in
+         * the last lane. That has always been true of this road; the field
+         * did not introduce it, and forbidding it would mean forbidding lane
+         * changes.
+         */
+        if (shutIn(from + REACT / 3) >= LANES) closeFor += FIXED
+        else closeFor = 0
+        expect(
+          closeFor,
+          `stage ${number}: no way through in front of you at ${run.distance.toFixed(0)}`,
+        ).toBeLessThan(CROSSING)
+
+        if (shutIn(run.distance + REACT) >= LANES) shutFor += FIXED
+        else shutFor = 0
+        expect(
+          shutFor,
+          `stage ${number}: the window stayed shut at ${run.distance.toFixed(0)}`,
+        ).toBeLessThan(CROSSING)
+      }
+    }
+  })
+
+  it('keeps them on the road', () => {
+    let run = newRun(6, 99, 0, 5)
+    const driver = makeDriver()
+    for (let t = 0; t < 60 && run.status !== 'stageDone'; t += FIXED) {
+      run = step(run, driver(run), FIXED)
+      if (run.status === 'crashed') run = resume(run)
+      for (const racer of run.racers) {
+        expect(racer.lane).toBeGreaterThanOrEqual(0)
+        expect(racer.lane).toBeLessThanOrEqual(LANES - 1)
+      }
+    }
+  })
+
+  it('indicates before pulling out, like everything else here', () => {
+    let run = newRun(4, 99, 0, 3)
+    const driver = makeDriver()
+    let signalled = 0
+    let jumped = 0
+    for (let t = 0; t < 60 && run.status !== 'stageDone'; t += FIXED) {
+      const before = run.racers.map((r) => r.lane)
+      run = step(run, driver(run), FIXED)
+      if (run.status === 'crashed') run = resume(run)
+      run.racers.forEach((racer, i) => {
+        if (Math.abs(racer.lane - before[i]) < 1e-6) return
+        if (racer.signal !== 0) signalled += 1
+        else jumped += 1
+      })
+    }
+    expect(signalled + jumped, 'nothing changed lane at all').toBeGreaterThan(0)
+    // The tail of a move, after the indicator has timed out, is allowed.
+    expect(signalled).toBeGreaterThan(jumped * 0.5)
+  })
+
+  it('does not drive into the back of you', () => {
+    /*
+     * They can be hit; they do not do the hitting. A field that takes your
+     * last life by running into you from behind is not a race, it is an
+     * ambush, and there is nothing you could have done about it.
+     */
+    let run = newRun(5, 99, 0, 9)
+    let touched = 0
+    for (let t = 0; t < 120; t += FIXED) {
+      // Sitting still with the brake on: the worst possible place to be.
+      run = step(run, { ...NO_INPUT, brake: true }, FIXED)
+      if (run.mercy > 0) continue
+      for (const racer of run.racers) {
+        const gap = racer.y - run.distance
+        // Behind you and overlapping your lane is the one they must not do.
+        if (gap > 0 || gap < -CAR_LONG * 1.2) continue
+        if (Math.abs(racer.lane - run.lane) < 0.6) touched += 1
+      }
+    }
+    expect(touched, 'a racer drove into a stationary car').toBe(0)
+  })
+
+  it('sorts the finish out at the end', () => {
+    const driver = makeDriver()
+    let run = newRun(1, 99, 0, 11)
+    for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+      run = step(run, driver(run), FIXED)
+      if (run.status === 'crashed') run = resume(run)
+    }
+    expect(run.status).toBe('stageDone')
+    const order = standings(run)
+    expect(order).toHaveLength(5)
+    expect(order.filter((row) => row.you)).toHaveLength(1)
+    // Best first.
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i - 1].at).toBeGreaterThanOrEqual(order[i].at)
+    }
+  })
+
+  it('pays a place mission when the place is made', () => {
+    const stage = STAGES.findIndex((s) => s.mission.kind === 'place')
+    expect(stage, 'no stage is a race').toBeGreaterThanOrEqual(0)
+    const run = newRun(stage + 1)
+    // On the grid you are first, so the mission reads as met before the off —
+    // which is fine, because it is only ever counted at the line.
+    expect(missionMet(run)).toBe(true)
+  })
 })

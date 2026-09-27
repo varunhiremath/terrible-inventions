@@ -81,7 +81,28 @@ export function Interlude({
   }
 
   return (
-    <div className="fade-in absolute inset-0 z-40 flex items-center justify-center bg-ink/90 p-3 backdrop-blur-sm short:p-1.5">
+    /*
+     * Pointer events stop at this card and do not reach the game under it.
+     *
+     * Every game that uses a pad captures the pointer on the way down, so a
+     * thumb sliding off a button keeps steering it. Capture retargets the
+     * matching pointerup — and the compatibility mouse events with it — to the
+     * element holding the capture, and a browser raises a click only when the
+     * down and the up share a target. So the answer buttons on this card never
+     * received one: the question could not be answered by touching it in the
+     * road, the caves or the pipes. Only by keyboard, which is what every
+     * check I had was using.
+     *
+     * Found by a probe pressing a card with a real pointer instead of calling
+     * its handler. It is the third time in this project that a thing worked
+     * from the keyboard and not from a finger.
+     */
+    <div
+      className="fade-in absolute inset-0 z-40 flex items-center justify-center bg-ink/90 p-3 backdrop-blur-sm short:p-1.5"
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerMove={(e) => e.stopPropagation()}
+      onPointerUp={(e) => e.stopPropagation()}
+    >
       <div className="rise-in block-panel max-h-full w-full max-w-xl overflow-y-auto p-5 sm:p-6 short:max-w-3xl short:p-3">
         {/* The topic, as a colour first and a word second. */}
         <div className="flex items-center gap-2.5">

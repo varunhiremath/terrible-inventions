@@ -37,7 +37,15 @@ import {
 export const BULLET_SPEED = 16
 export const MONSTER_BULLET_SPEED = 9
 /** Seconds between a creature's shots. */
-export const MONSTER_RELOAD = 2.4
+/*
+ * How often a creature shoots.
+ *
+ * Down from 2.4. The caves were reported as simpler than the game they are
+ * remaking, and this is the cheapest honest lever: the creatures were always
+ * there, they just were not doing very much. There are more of them now too,
+ * and the flying level has something in it at last.
+ */
+export const MONSTER_RELOAD = 1.9
 /** How far a creature can see along its own row. */
 export const MONSTER_SIGHT = 14
 export const MONSTER_WORTH = 300
@@ -91,6 +99,15 @@ export interface Game {
   messageFor: number
   /** What just happened, for the sound. Cleared at the start of every step. */
   events: CaveEvent[]
+  /**
+   * How many shots have actually left the gun.
+   *
+   * Here rather than in the screen because it is the only thing that can tell
+   * a test, from outside, that pressing FIRE did something. The gun was broken
+   * from the button in every cave for as long as it has existed and nothing
+   * noticed, because everything that checked it used the space bar.
+   */
+  shots: number
 }
 
 export const key = (x: number, y: number) => `${x},${y}`
@@ -108,7 +125,16 @@ function freshMonsters(level: Level): Monster[] {
      * player walking in and being shot before he has moved has learned
      * nothing except that the game is unfair.
      */
-    reload: MONSTER_RELOAD * (0.5 + 0.5 * spec.phase),
+    /*
+     * Never less than a second and a bit, whatever the reload is set to.
+     *
+     * The stagger used to be a plain fraction of the reload, so shortening the
+     * reload to make the caves harder also shortened the grace at the start of
+     * a level — and a creature that shoots you before you have moved teaches
+     * nothing except that the game is unfair. The floor is the rule; the
+     * fraction only spreads them out.
+     */
+    reload: Math.max(1.2, MONSTER_RELOAD * (0.5 + 0.5 * spec.phase)),
   }))
 }
 
@@ -127,6 +153,7 @@ export function newGame(level: Level, number = 1, lives = STARTING_LIVES, score 
     status: 'playing',
     message: null,
     messageFor: 0,
+    shots: 0,
   }
 }
 
@@ -161,6 +188,7 @@ export function shoot(game: Game): Game {
   const dave = game.dave
   return {
     ...game,
+    shots: game.shots + 1,
     bullets: [
       ...game.bullets,
       {

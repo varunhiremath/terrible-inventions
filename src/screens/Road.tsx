@@ -3,7 +3,7 @@ import {
   CAR_LONG, CAR_WIDE, LANES, MISSION_BONUS, SIGHT, STAGES, TANK, kmh, missionSays, stageFor,
 } from '../road/level'
 import {
-  FIXED, STARTING_LIVES, missionMet, newRun, resume, step,
+  FIXED, STARTING_LIVES, missionMet, newRun, placeOf, resume, standings, step,
   type Input, type RoadEvent, type Run, type Status,
 } from '../road/run'
 import { createLatch, keyAt, padHeight, padLayout, type Button, type Key } from '../road/controls'
@@ -58,6 +58,32 @@ interface Hud {
   status: Status
   gone: number
   missionDone: boolean
+  /** Where you are in the race, first being 1. */
+  place: number
+}
+
+/**
+ * Probe hooks: `?stage=4` starts there, `?sprint=1` makes the stage 40 lengths.
+ *
+ * The finishing order only exists once somebody crosses the line, and crossing
+ * the line takes a minute of driving that nothing but a person can do well.
+ * A forty-length stage takes six seconds, which is how the panel gets looked
+ * at. Nothing in the app writes either of these and there is no way to them
+ * from inside it.
+ */
+function opening(): { stage: number; sprint: boolean } {
+  const asked = new URLSearchParams(window.location.search)
+  const stage = Number(asked.get('stage'))
+  return {
+    stage: Number.isFinite(stage) ? Math.min(STAGES.length, Math.max(1, Math.floor(stage))) : 1,
+    sprint: asked.get('sprint') === '1',
+  }
+}
+
+function firstRun(): Run {
+  const from = opening()
+  const run = newRun(from.stage)
+  return from.sprint ? { ...run, stage: { ...run.stage, distance: 40 } } : run
 }
 
 export function Road() {
@@ -72,7 +98,7 @@ export function Road() {
   const buttons = useRef(createLatch())
   const [hud, setHud] = useState<Hud>({
     stage: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0,
-    missionDone: false,
+    missionDone: false, place: 1,
   })
 
   useEffect(() => {
@@ -92,7 +118,7 @@ export function Road() {
     const observer = new ResizeObserver(resize)
     observer.observe(wrap)
 
-    if (!runRef.current) runRef.current = newRun(1)
+    if (!runRef.current) runRef.current = firstRun()
     const pacer = createPacer<Run>(FIXED, MAX_CATCHUP)
     let frame = 0
     let last = performance.now()
@@ -145,10 +171,11 @@ export function Road() {
         const dry = Math.max(0, 1 - next.fuel / (TANK * 0.35))
         setHeat(Math.max(deep * 0.5 + (next.distance / next.stage.distance) * 0.25, thin * 0.8, dry))
 
+        const standing = placeOf(next)
         if (
           next.number !== hud.stage || next.status !== hud.status ||
           Math.round(next.score) !== hud.score || Math.round(next.fuel) !== Math.round(hud.fuel) ||
-          kmh(next.speed) !== hud.speed || next.lives !== hud.lives
+          kmh(next.speed) !== hud.speed || next.lives !== hud.lives || standing !== hud.place
         ) {
           setHud({
             stage: next.number,
@@ -159,6 +186,7 @@ export function Road() {
             status: next.status,
             gone: next.distance,
             missionDone: next.missionDone,
+            place: standing,
           })
         }
 
@@ -270,6 +298,19 @@ export function Road() {
         ctx.textAlign = 'center'
         ctx.fillStyle = missionMet(next) ? '#4ade80' : '#8a91ab'
         ctx.fillText(progress, w / 2, capH + text * 0.9)
+
+        /*
+         * Where you are in the race.
+         *
+         * Big, and on its own, because in a race it is the only number that
+         * matters and it changes while you are looking at the road rather than
+         * at the readout. Green while you are winning it.
+         */
+        const field = next.racers.length + 1
+        ctx.font = `bold ${text * 1.25}px ui-monospace, monospace`
+        ctx.textAlign = 'left'
+        ctx.fillStyle = standing === 1 ? '#4ade80' : standing <= 2 ? '#eef2f8' : '#ff9d7a'
+        ctx.fillText(`P${standing}/${field}`, backRoom * 0.5, capH + text * 2.1)
 
         // --- the fuel gauge, down the side of the road ------------------------
         const gaugeH = middle * 0.5
@@ -409,7 +450,7 @@ export function Road() {
     runRef.current = newRun(1)
     setHud({
       stage: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0,
-      missionDone: false,
+      missionDone: false, place: 1,
     })
   }
 
@@ -428,7 +469,8 @@ export function Road() {
       onPointerCancel={onUp}
     >
       <header className="sr-only" aria-live="polite">
-        STAGE {hud.stage} SCORE {hud.score} SPEED {hud.speed} LIVES {hud.lives} FUEL {Math.round(hud.fuel)}
+        STAGE {hud.stage} SCORE {hud.score} SPEED {hud.speed} LIVES {hud.lives}{' '}
+        FUEL {Math.round(hud.fuel)} PLACE {hud.place}
       </header>
 
       <div ref={wrapRef} className="relative min-h-0 flex-1">
@@ -466,6 +508,43 @@ export function Road() {
                   ? `${missionSays(stageFor(hud.stage).mission)} — done. ${MISSION_BONUS} bonus.`
                   : `${missionSays(stageFor(hud.stage).mission)} — not this time.`}
               </p>
+            )}
+
+            {/*
+              * The finishing order.
+              *
+              * The whole reason the field is there. A stage that ends with a
+              * distance and a bonus is a stage you survived; one that ends
+              * with four names and yours somewhere among them is one you
+              * either won or did not.
+              */}
+            {hud.status === 'stageDone' && runRef.current && (
+              <ol className="mt-3 flex flex-col gap-1 short:mt-2 short:gap-0.5">
+                {standings(runRef.current).map((row, i) => (
+                  <li
+                    key={row.name}
+                    className={`flex items-baseline justify-between rounded-lg px-2 py-1 font-mono text-xs
+                                uppercase tracking-[0.15em] short:py-0.5 ${
+                      row.you ? 'bg-bolt/15 text-bolt' : 'text-dim'
+                    }`}
+                  >
+                    <span>
+                      <span className="mr-2 tabular-nums">{i + 1}</span>
+                      {row.name}
+                    </span>
+                    <span className="tabular-nums">
+                      {i === 0
+                        ? 'ON THE LINE'
+                        : (() => {
+                            const back = standings(runRef.current!)[0].at - row.at
+                            // "0 BACK" is not a gap, it is a photo finish, and
+                            // it should read like one.
+                            return back < 1 ? 'ON YOUR TAIL' : `${Math.round(back)} BACK`
+                          })()}
+                    </span>
+                  </li>
+                ))}
+              </ol>
             )}
 
             <div className="mt-5 flex flex-col gap-2">

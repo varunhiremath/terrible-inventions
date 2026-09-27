@@ -13,12 +13,16 @@
 import { makeRng, type Rng } from '../engine/rng'
 import {
   ACCELERATION, BRAKING, BURN_PER_SECOND, CAN_EVERY, CAN_WORTH, CAR_LONG, CAR_WIDE,
-  DRAG, LANES, LENGTH_OF, MISSION_BONUS, REACT, SIGHT, SIGNAL_FOR, STEER_RATE, TANK,
-  TOP_SPEED, WANDERS, WIDTH_OF, stageFor, topSpeedOn, type CarKind, type Stage,
+  DASHES, DRAG, FIELD, GRID_GAP, LANES, LENGTH_OF, MISSION_BONUS, RACER_LOOK, RACER_STEER,
+  REACT, SIGHT, SIGNAL_FOR, STEER_RATE, TANK, TOP_SPEED, WANDERS, WIDTH_OF,
+  stageFor, topSpeedOn, type CarKind, type Racer, type Stage,
 } from './level'
 
 export const FIXED = 1 / 60
 export const STARTING_LIVES = 3
+
+/** How long you cannot be hit for after coming back from a crash. */
+export const MERCY = 2
 
 export type RoadEvent =
   | 'pass' | 'can' | 'crash' | 'dry' | 'stageDone' | 'skid' | 'warn' | 'siren'
@@ -60,6 +64,30 @@ export interface Can {
   taken: boolean
 }
 
+/**
+ * One of the four you are racing.
+ *
+ * A racer is not traffic. Traffic exists to be in the way and all of it moves
+ * at one pace, which is what freezes the geometry and keeps the road passable.
+ * A racer moves at its own speed, weaves, backs off and puts its foot down —
+ * and the one rule it must never break is the road's promise: it will not sit
+ * in the last open lane of the stretch you are arriving in. That rule is in
+ * `steerRacer`, and there is a test that plays every stage watching for it.
+ */
+export interface Racing {
+  id: number
+  who: Racer
+  /** Where it is along the road, in the same units as your distance. */
+  y: number
+  lane: number
+  wants: number
+  speed: number
+  signal: -1 | 0 | 1
+  signalFor: number
+  /** Where it finished, once it has. */
+  finished: number | null
+}
+
 export type Status = 'driving' | 'crashed' | 'stageDone' | 'gameOver'
 
 export interface Run {
@@ -73,6 +101,7 @@ export interface Run {
   fuel: number
   cars: Car[]
   cans: Can[]
+  racers: Racing[]
   score: number
   passed: number
   /** For the mission: cans taken and scrapes collected on this stage. */
@@ -85,6 +114,19 @@ export interface Run {
   status: Status
   /** Counts down after a crash, while he gets going again. */
   stunned: number
+  /**
+   * Seconds of grace after getting going again, during which nothing can hit
+   * you.
+   *
+   * Needed the moment the field arrived. A crash puts you back on the road
+   * exactly where you were, and there are now four racers around you doing
+   * ninety — so you came back, were hit in the same tenth of a second, came
+   * back again, and a test with ninety-nine lives watched all ninety-nine go
+   * in about four seconds. The traffic never did this because it is cleared
+   * ahead of you on the way back in; the field cannot be, because moving the
+   * other racers would be moving the race.
+   */
+  mercy: number
   events: RoadEvent[]
   seed: number
   nextId: number
@@ -92,6 +134,8 @@ export interface Run {
   lastWave: number
   /** Seconds until another can of fuel may appear. */
   canCooldown: number
+  /** How many racers were already over the line when you crossed it. */
+  place: number
 }
 
 export function newRun(number = 1, lives = STARTING_LIVES, score = 0, seed = 1): Run {
@@ -105,6 +149,7 @@ export function newRun(number = 1, lives = STARTING_LIVES, score = 0, seed = 1):
     fuel: TANK,
     cars: [],
     cans: [],
+    racers: gridOf(stage),
     score,
     passed: 0,
     cansTaken: 0,
@@ -114,10 +159,12 @@ export function newRun(number = 1, lives = STARTING_LIVES, score = 0, seed = 1):
     lives,
     status: 'driving',
     stunned: 0,
+    mercy: 0,
     events: [],
     seed,
     nextId: 1,
     lastWave: 0,
+    place: 1,
     canCooldown: CAN_EVERY * 0.4,
   }
 }
@@ -129,6 +176,7 @@ export function resume(run: Run): Run {
     status: 'driving',
     speed: 0,
     stunned: 0,
+    mercy: MERCY,
     lane: 1.5,
     events: [],
     // Enough in the tank to get going again. Coming back with an empty one
@@ -354,7 +402,7 @@ function moveOver(run: Run, car: Car, dt: number, rng: Rng): void {
 
   if (moving) {
     const way = Math.sign(car.wants - car.lane)
-    const moved = car.lane + way * STEER_RATE * 0.5 * dt
+    const moved = car.lane + way * STEER_RATE * DASHES[car.kind] * dt
     car.lane = way > 0 ? Math.min(car.wants, moved) : Math.max(car.wants, moved)
     if (Math.abs(car.wants - car.lane) < 0.01) car.signal = 0
   }
@@ -365,7 +413,280 @@ export function missionMet(run: Run): boolean {
   const mission = run.stage.mission
   if (mission.kind === 'pass') return run.passed >= mission.count
   if (mission.kind === 'cans') return run.cansTaken >= mission.count
+  if (mission.kind === 'place') return placeOf(run) <= mission.place
   return run.pranged === 0
+}
+
+
+// --- the field ---------------------------------------------------------------
+
+/** The four of them, lined up behind you at the start of a stage. */
+export function gridOf(_stage: Stage): Racing[] {
+  return FIELD.map((who, i) => ({
+    id: 1000 + i,
+    who,
+    // Behind you, and staggered, so the first thing that happens in a stage is
+    // four sets of headlights arriving in your mirrors.
+    y: -GRID_GAP * (i + 1),
+    lane: i % LANES,
+    wants: i % LANES,
+    speed: 0,
+    signal: 0 as -1 | 0 | 1,
+    signalFor: 0,
+    finished: null,
+  }))
+}
+
+/** Where you are in the race: first is 1. */
+export function placeOf(run: Run): number {
+  return 1 + run.racers.filter((r) => (r.finished ?? r.y) > run.distance).length
+}
+
+/**
+ * Which lanes the field is taking up in a stretch of road.
+ *
+ * The same shape as `blockedLanes` for traffic, and deliberately the same
+ * definition used by the rule below and by the test that checks the rule. The
+ * first version had the game measuring a racer as 0.62 of a lane wide and the
+ * test measuring it as 0.81, so the two disagreed about whether the road was
+ * shut and the failure was in neither of them.
+ */
+export function racerLanes(
+  racers: readonly Racing[],
+  from: number,
+  to: number,
+  except?: number,
+): Set<number> {
+  const blocked = new Set<number>()
+  for (const racer of racers) {
+    if (racer.id === except || racer.finished !== null) continue
+    if (racer.y + CAR_LONG < from || racer.y > to) continue
+    for (let lane = 0; lane < LANES; lane++) {
+      if (overlaps(occupies(lane), occupies(racer.lane))) blocked.add(lane)
+    }
+  }
+  return blocked
+}
+
+/** The order at the end of a stage, you included, best first. */
+export function standings(run: Run): { name: string; you: boolean; at: number }[] {
+  const rows = run.racers.map((r) => ({ name: r.who.name, you: false, at: r.finished ?? r.y }))
+  rows.push({ name: 'You', you: true, at: run.distance })
+  return rows.sort((a, b) => b.at - a.at)
+}
+
+/**
+ * The nearest solid thing in front of a racer in a given lane, and how fast it
+ * is going.
+ *
+ * The speed is the half that was missing first time round. Knowing only how
+ * far away something is, a racer slows to a fraction of the traffic's pace and
+ * carries on creeping into it; knowing how fast it is going, it can sit behind
+ * it at the same speed, which is what following actually is.
+ */
+function aheadOf(run: Run, racer: Racing, lane: number): { gap: number; speed: number } {
+  let nearest = Infinity
+  let pace = Infinity
+  const mine = occupies(lane)
+  const note = (gap: number, speed: number) => {
+    if (gap >= nearest) return
+    nearest = gap
+    pace = speed
+  }
+  for (const car of run.cars) {
+    const gap = car.y - racer.y
+    if (gap < 0 || gap > RACER_LOOK * 2) continue
+    if (overlaps(mine, spread(car))) note(gap, car.speed)
+  }
+  // And each other, so they do not drive through their own field.
+  for (const other of run.racers) {
+    if (other.id === racer.id) continue
+    const gap = other.y - racer.y
+    if (gap < 0 || gap > RACER_LOOK * 2) continue
+    if (overlaps(mine, occupies(other.lane))) note(gap, other.speed)
+  }
+  /*
+   * And you.
+   *
+   * Left out of the first version, with the obvious consequence: the field
+   * starts behind you, catches you in the first few seconds and drives
+   * straight into the back of you. Five tests failed at once and every one of
+   * them was this. A racer has to see the player as an obstacle like any
+   * other — it will back off, look for a lane, and lose time doing it.
+   */
+  const yours = run.distance - racer.y
+  if (yours >= -CAR_LONG && yours <= RACER_LOOK * 2 && overlaps(mine, occupies(run.lane))) {
+    note(Math.max(0, yours), run.speed)
+  }
+  return { gap: nearest, speed: pace }
+}
+
+/** How far ahead a racer is looking, which depends on how fast it is going. */
+function lookFor(racer: Racing): number {
+  return Math.max(RACER_LOOK, (racer.speed * racer.speed) / (2 * BRAKING) + CAR_LONG * 2)
+}
+
+/**
+ * A racer picks its lane, and gives way to the road's promise.
+ *
+ * Two jobs. The first is ordinary racing: look down your own lane, and if
+ * something is close, take the lane with the most room. The second is the one
+ * that matters and is the reason this function is worth reading — **a racer
+ * will not sit in the last lane left open by the traffic in the stretch the
+ * player is arriving in.**
+ *
+ * Without that rule the whole promise this game is built on falls over. The
+ * traffic spawner guarantees a way through by leaving a lane empty in every
+ * window; a racer is not traffic, moves at its own speed, and can therefore
+ * drift into exactly that lane and close it — and because it is moving
+ * relative to everything else, no check made when it was put on the road would
+ * have caught it. It is the same lesson as the drifting rubble and the
+ * different-speed traffic, arriving for the third time: nothing may move
+ * relative to a guarantee that was measured once.
+ *
+ * So instead of freezing the racer, which would ruin the race, the guarantee
+ * is enforced continuously, on the one body that can break it.
+ */
+function steerRacer(run: Run, racer: Racing, dt: number): void {
+  /*
+   * The stretch the player is arriving in: from just in front of their bumper
+   * out to the far edge of their reaction window. Starting it at their own
+   * position counted cars level with them and behind them, which are not in
+   * the way of anywhere they are going.
+   */
+  const window: [number, number] = [run.distance + CAR_LONG, run.distance + REACT]
+  const insideWindow = racer.y + CAR_LONG >= window[0] && racer.y <= window[1]
+
+  /*
+   * What is shut, counting the traffic and the rest of the field.
+   *
+   * Counting only the traffic was not enough: two racers, each seeing two
+   * lanes open, could sit in both and close the road between them without
+   * either one breaking the rule on its own. The test found it on the fourth
+   * stage inside four seconds.
+   */
+  const shut = blockedLanes(run.cars, window[0], window[1])
+  for (const lane of racerLanes(run.racers, window[0], window[1], racer.id)) shut.add(lane)
+  const open: number[] = []
+  for (let lane = 0; lane < LANES; lane++) if (!shut.has(lane)) open.push(lane)
+  const lastOpen = open.length === 1 ? open[0] : null
+
+  const here = Math.round(racer.lane)
+  const moving = Math.abs(racer.wants - racer.lane) >= 0.01
+  const wouldShut = (lane: number) =>
+    insideWindow && lastOpen !== null && overlaps(occupies(lane), occupies(lastOpen))
+
+  // Already in it, or heading into it: get out, whether or not a move is under
+  // way. Waiting for the current move to finish was the other half of the gap.
+  const mustLeave = wouldShut(racer.lane) || (moving && wouldShut(racer.wants))
+
+  if (!moving || mustLeave) {
+    const room = aheadOf(run, racer, here).gap
+    if (mustLeave || room < lookFor(racer)) {
+      let best = here
+      let most = mustLeave ? -Infinity : room
+      for (const lane of [here - 1, here + 1, here - 2, here + 2]) {
+        if (lane < 0 || lane > LANES - 1) continue
+        // Never into the last lane left open, if the player is about to need it.
+        if (wouldShut(lane)) continue
+        const there = aheadOf(run, racer, lane).gap
+        if (there > most) { most = there; best = lane }
+      }
+      if (best !== here || mustLeave) {
+        racer.wants = best
+        racer.signal = best === here ? 0 : best > here ? 1 : -1
+        /*
+         * An ordinary move is indicated first and made afterwards, like
+         * everything else on this road. Getting out of the last open lane is
+         * not an ordinary move: half a second of indicating politely is half a
+         * second with the road shut, which is exactly what the rule exists to
+         * prevent. It still shows the indicator — it just does not wait.
+         */
+        racer.signalFor = best === here || mustLeave ? 0 : SIGNAL_FOR
+      }
+    }
+  }
+
+  if (racer.signalFor > 0) {
+    racer.signalFor = Math.max(0, racer.signalFor - dt)
+    // It indicates first and pulls out afterwards, like everything else here.
+    if (racer.signalFor > SIGNAL_FOR * 0.45) return
+  }
+
+  if (Math.abs(racer.wants - racer.lane) < 0.01) {
+    racer.lane = racer.wants
+    racer.signal = 0
+    return
+  }
+  const way = Math.sign(racer.wants - racer.lane)
+  racer.lane = Math.abs(racer.wants - racer.lane) <= RACER_STEER * dt
+    ? racer.wants
+    : racer.lane + way * RACER_STEER * dt
+}
+
+/** One racer, one slice. */
+function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
+  if (racer.finished !== null) return
+
+  steerRacer(run, racer, dt)
+
+  /*
+   * Its pace, with a wobble on it.
+   *
+   * The wobble is what the road was missing: traffic at one speed is a moving
+   * wall to be threaded, and a field of four metronomes would be the same
+   * thing with names on. A racer that is a little quicker on one straight and
+   * a little slower on the next is a racer you can catch, and lose again.
+   */
+  const target =
+    topSpeedOn(run.stage) * racer.who.pace * (1 + Math.sin(clock * 0.7 + racer.id) * racer.who.swing)
+
+  /*
+   * Something close in its own lane and nowhere to go: follow it rather than
+   * drive through it. Losing time is how a racer pays for being blocked, and
+   * it is exactly what happens to you.
+   *
+   * The first version slowed to a fraction of the traffic's pace, which is
+   * still forwards — so a racer stuck behind the player crept into the back of
+   * them and took one of their lives. It matches the speed of whatever it is
+   * following now, and closes the last of the gap at nothing at all.
+   */
+  const { gap, speed: theirs } = aheadOf(run, racer, Math.round(racer.lane))
+  /*
+   * How fast it can be going and still stop in the room it has.
+   *
+   * A flat look-ahead of seven lengths was the first try, and at eighteen
+   * lengths a second a car needs ten to stop: it simply could not, so it went
+   * into the back of whatever it was following, which on the fifth stage was
+   * usually the player. This is the ordinary safe-following sum — the speed
+   * from which the room left brings you to the speed of the thing in front.
+   */
+  const room = Math.max(0, gap - CAR_LONG * 1.6)
+  const safe = Math.sqrt(2 * BRAKING * 0.8 * room) + Math.max(0, theirs)
+  const capped = Math.min(target, safe)
+
+  racer.speed = capped > racer.speed
+    ? Math.min(capped, racer.speed + ACCELERATION * dt)
+    : Math.max(capped, racer.speed - BRAKING * dt)
+  racer.speed = Math.max(0, Math.min(topSpeedOn(run.stage) * 1.05, racer.speed))
+  racer.y += racer.speed * dt
+
+  /*
+   * And a bumper, because arithmetic is not a promise.
+   *
+   * However good the sum above is, one bad slice — a car changing lane into
+   * the gap, the player braking hard — can still put a racer inside the thing
+   * it is following. It cannot be allowed to end a slice overlapping the
+   * player: that is a life lost to something the player could not have
+   * avoided. So it is stopped short instead.
+   */
+  const onto = run.distance - racer.y
+  if (onto > 0 && onto < CAR_LONG * 1.2 && overlaps(occupies(racer.lane), occupies(run.lane))) {
+    racer.y = run.distance - CAR_LONG * 1.2
+    racer.speed = Math.min(racer.speed, Math.max(0, run.speed))
+  }
+
+  if (racer.y >= run.stage.distance) racer.finished = racer.y
 }
 
 export function step(run: Run, input: Input, dt: number): Run {
@@ -388,10 +709,13 @@ export function step(run: Run, input: Input, dt: number): Run {
     events: [],
     cars: run.cars.map((c) => ({ ...c })),
     cans: run.cans.map((c) => ({ ...c })),
+    racers: run.racers.map((r) => ({ ...r })),
     // Advancing the seed every step keeps the traffic unpredictable without
     // making the simulation depend on anything outside itself.
     seed: (run.seed * 1664525 + 1013904223) >>> 0,
   }
+
+  next.mercy = Math.max(0, next.mercy - dt)
 
   // --- the pedals ----------------------------------------------------------
   if (next.stunned > 0) {
@@ -422,6 +746,16 @@ export function step(run: Run, input: Input, dt: number): Run {
     moveOver(next, car, dt, rng)
     if (car.roused > 0) car.roused = Math.max(0, car.roused - dt)
   }
+  /*
+   * The field. Driven after the traffic, so a racer sees where the traffic has
+   * got to this slice rather than where it was last one — which matters at the
+   * moment a lane closes in front of it.
+   *
+   * The clock is taken from your distance rather than a wall clock: the
+   * simulation must give the same answer for the same inputs, and a racer's
+   * pace wobble is part of the simulation.
+   */
+  for (const racer of next.racers) driveRacer(next, racer, dt, next.distance / TOP_SPEED)
 
   if (next.speed > 0) {
     next.fuel = Math.max(0, next.fuel - BURN_PER_SECOND * dt * (0.4 + next.speed / TOP_SPEED))
@@ -450,10 +784,31 @@ export function step(run: Run, input: Input, dt: number): Run {
 
   // --- what you hit --------------------------------------------------------
   const mine: [number, number] = occupies(next.lane)
-  for (const car of next.cars) {
+  if (next.mercy === 0) for (const car of next.cars) {
     const gap = car.y - next.distance
     if (gap > longOf(car) || gap < -CAR_LONG) continue
     if (!overlaps(mine, spread(car))) continue
+    next.lives -= 1
+    next.pranged += 1
+    next.status = next.lives > 0 ? 'crashed' : 'gameOver'
+    next.stunned = 1.2
+    next.events.push('crash')
+    return next
+  }
+
+  /*
+   * Running into one of them.
+   *
+   * Same as hitting anything else: they are cars on the same road. They will
+   * not hit you — a racer backs off rather than crashing, because a field that
+   * takes your last life by driving into the back of you is not a race, it is
+   * an ambush — but you can certainly hit them.
+   */
+  if (next.mercy === 0) for (const racer of next.racers) {
+    if (racer.finished !== null) continue
+    const gap = racer.y - next.distance
+    if (gap > CAR_LONG || gap < -CAR_LONG) continue
+    if (!overlaps(mine, occupies(racer.lane))) continue
     next.lives -= 1
     next.pranged += 1
     next.status = next.lives > 0 ? 'crashed' : 'gameOver'
@@ -519,7 +874,9 @@ export function step(run: Run, input: Input, dt: number): Run {
   // --- the end of the stage --------------------------------------------------
   if (next.distance >= next.stage.distance) {
     next.status = 'stageDone'
-    next.score += 500 + Math.round(next.fuel) * 5
+    next.place = placeOf(next)
+    // Finishing money, and more of it the higher up you come.
+    next.score += 500 + Math.round(next.fuel) * 5 + Math.max(0, 5 - next.place) * 250
     next.missionDone = missionMet(next)
     if (next.missionDone) next.score += MISSION_BONUS
     next.events.push('stageDone')

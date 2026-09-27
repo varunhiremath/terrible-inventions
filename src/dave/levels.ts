@@ -70,19 +70,37 @@ export const LEVELS: readonly Level[] = [
     ],
   },
   {
+    /*
+     * The flying level, rebuilt.
+     *
+     * It was reported as "very easy", and it was: a long floor of fire with
+     * nothing above it, so the whole level was hold UP and hold RIGHT for
+     * fifteen seconds. Flying was the reward and there was nothing to fly
+     * around.
+     *
+     * Now there is a slalom. Stalactites of fire come down to row five and
+     * stalagmites come up to row four, so at any point along the crossing
+     * there is exactly one height that works and it is not the same height
+     * twice running. Two jetpacks, because one tank does not do it, and the
+     * second is past the halfway point — running out over the fire is the
+     * punishment for dawdling in the first half.
+     */
     name: "First Flight",
     theme: { frame: 'blue', platform: 'brown' },
     start: { x: 2, y: 8 },
+    monsters: [
+      { at: { x: 84, y: 3 }, kind: 'saucer', phase: 0.0 },
+    ],
     rows: [
-      "                                                                                                    ",
-      "                                                                     T                              ",
-      "                                                                   ######                           ",
-      "                                                                                                    ",
-      "                    3434                                                                 #####      ",
-      "                     3634                                                 J                         ",
-      "        J             6633                                              #####                       ",
-      "       #####            34                                                                     D    ",
-      "     33 53             5                                                                            ",
+      "                          ^               ^               ^        T                                ",
+      "                          ^               ^               ^       ######                            ",
+      "                          ^               ^               ^                                         ",
+      "                          ^               ^               ^                                         ",
+      "                    3434          ^               ^                                      #####      ",
+      "                     3634         ^               ^                       J                         ",
+      "        J             6633        ^               ^                     #####                       ",
+      "       #####            34        ^               ^                                            D    ",
+      "     33 53             5          ^               ^                                                 ",
       "####################^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^########^^^^^^^^########################",
     ],
   },
@@ -93,6 +111,7 @@ export const LEVELS: readonly Level[] = [
     monsters: [
       { at: { x: 34, y: 8 }, kind: 'spider', phase: 0.0 },
       { at: { x: 52, y: 8 }, kind: 'spider', phase: 0.5 },
+      { at: { x: 44, y: 4 }, kind: 'saucer', phase: 0.34 },
     ],
     path: { points: [{ x: 0, y: 0 }, { x: 4, y: 0 }], speed: 3.0 },
     rows: [
@@ -116,6 +135,7 @@ export const LEVELS: readonly Level[] = [
       { at: { x: 45, y: 8 }, kind: 'orb', phase: 0.0 },
       { at: { x: 63, y: 8 }, kind: 'orb', phase: 0.33 },
       { at: { x: 72, y: 8 }, kind: 'spider', phase: 0.66 },
+      { at: { x: 37, y: 5 }, kind: 'spider', phase: 0.51 },
     ],
     path: { points: [{ x: 0, y: 0 }, { x: 3, y: 0 }], speed: 3.2 },
     rows: [
@@ -138,6 +158,8 @@ export const LEVELS: readonly Level[] = [
     monsters: [
       { at: { x: 26, y: 8 }, kind: 'spider', phase: 0.0 },
       { at: { x: 58, y: 8 }, kind: 'orb', phase: 0.5 },
+      { at: { x: 37, y: 6 }, kind: 'saucer', phase: 0.34 },
+      { at: { x: 44, y: 3 }, kind: 'orb', phase: 0.68 },
     ],
     path: { points: [{ x: 0, y: 0 }, { x: 0, y: -3 }, { x: 3, y: -3 }, { x: 3, y: 0 }], speed: 3.4 },
     rows: [
@@ -160,6 +182,8 @@ export const LEVELS: readonly Level[] = [
     monsters: [
       { at: { x: 30, y: 4 }, kind: 'saucer', phase: 0.0 },
       { at: { x: 55, y: 3 }, kind: 'saucer', phase: 0.5 },
+      { at: { x: 37, y: 2 }, kind: 'saucer', phase: 0.34 },
+      { at: { x: 44, y: 2 }, kind: 'orb', phase: 0.68 },
     ],
     path: { points: [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 3 }, { x: 0, y: 3 }], speed: 4.0 },
     rows: [
@@ -183,6 +207,8 @@ export const LEVELS: readonly Level[] = [
       { at: { x: 24, y: 6 }, kind: 'orb', phase: 0.0 },
       { at: { x: 48, y: 8 }, kind: 'spider', phase: 0.4 },
       { at: { x: 70, y: 8 }, kind: 'orb', phase: 0.7 },
+      { at: { x: 37, y: 5 }, kind: 'spider', phase: 0.51 },
+      { at: { x: 58, y: 6 }, kind: 'saucer', phase: 0.85 },
     ],
     path: { points: [{ x: 0, y: 0 }, { x: 4, y: 0 }], speed: 3.6 },
     rows: [
@@ -207,6 +233,8 @@ export const LEVELS: readonly Level[] = [
       { at: { x: 44, y: 6 }, kind: 'saucer', phase: 0.25 },
       { at: { x: 65, y: 8 }, kind: 'orb', phase: 0.5 },
       { at: { x: 86, y: 8 }, kind: 'spider', phase: 0.75 },
+      { at: { x: 30, y: 7 }, kind: 'orb', phase: 0.68 },
+      { at: { x: 37, y: 2 }, kind: 'spider', phase: 0.02 },
     ],
     path: { points: [{ x: 0, y: 0 }, { x: 3, y: 0 }, { x: 3, y: -2 }, { x: 0, y: -2 }], speed: 4.0 },
     rows: [

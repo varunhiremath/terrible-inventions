@@ -10,13 +10,15 @@
  */
 import { makeRng, type Rng } from '../engine/rng'
 import {
-  BOLT_SPEED, FLYABLE, MERCY, RELOAD, SHIP_SPEED, SHIP_TALL, SHIP_WIDE,
-  SIZE_OF, STARTING_SHIELDS, TOUGHNESS, WORTH, worldFor, type Hazard, type World,
+  BOLT_SPEED, COSTS, FLYABLE, MAGNET_PULL, MERCY, MOST_OF, MOST_SHIELDS, NEW_KIT,
+  SCRAP_OF, SCRAP_WIDE, SHIP_SPEED, SHIP_TALL, SHIP_WIDE, SIZE_OF, STARTING_SHIELDS,
+  TOUGHNESS, WORTH, reloadFor, worldFor,
+  type Hazard, type Kit, type Upgrade, type World,
 } from './level'
 
 export const FIXED = 1 / 60
 
-export type SpaceEvent = 'shot' | 'hit' | 'broke' | 'knock' | 'arrive' | 'warn'
+export type SpaceEvent = 'shot' | 'hit' | 'broke' | 'knock' | 'arrive' | 'warn' | 'scrap'
 
 export interface Input {
   left: boolean
@@ -44,6 +46,23 @@ export interface Bolt {
   id: number
   x: number
   y: number
+  /** Whether this one carries on through what it breaks. */
+  pierces: boolean
+}
+
+/**
+ * A cell of scrap, falling.
+ *
+ * It falls at the same pace as everything else and, without a magnet, in a
+ * straight line — same reason as the rubble. With one it leans towards the
+ * ship, which is safe to allow because scrap is not a hazard: nothing about
+ * the promise that there is a way through is measured against it.
+ */
+export interface Scrap {
+  id: number
+  x: number
+  y: number
+  worth: number
 }
 
 export type Status = 'flying' | 'knocked' | 'arrived' | 'lost'
@@ -57,6 +76,11 @@ export interface Run {
   progress: number
   rubble: Rubble[]
   bolts: Bolt[]
+  scrap: Scrap[]
+  /** Cells collected and not yet spent. Carried from world to world. */
+  purse: number
+  /** What has been fitted. Carried too. */
+  kit: Kit
   score: number
   broken: number
   shields: number
@@ -70,7 +94,14 @@ export interface Run {
   warned: boolean
 }
 
-export function newRun(number = 1, shields = STARTING_SHIELDS, score = 0, seed = 1): Run {
+export function newRun(
+  number = 1,
+  shields = STARTING_SHIELDS,
+  score = 0,
+  seed = 1,
+  purse = 0,
+  kit: Kit = NEW_KIT,
+): Run {
   return {
     world: worldFor(number),
     number,
@@ -78,6 +109,9 @@ export function newRun(number = 1, shields = STARTING_SHIELDS, score = 0, seed =
     progress: 0,
     rubble: [],
     bolts: [],
+    scrap: [],
+    purse,
+    kit,
     score,
     broken: 0,
     shields,
@@ -101,6 +135,9 @@ export function resume(run: Run): Run {
     x: 0.5,
     // Nothing left close enough to hit again the moment you reappear.
     rubble: run.rubble.filter((r) => r.y < 0.45),
+    // The scrap that was in the air stays there. Losing a shield already
+    // costs enough without also emptying your pockets onto the floor.
+    scrap: run.scrap.filter((c) => c.y < 0.45),
   }
 }
 
@@ -171,6 +208,32 @@ function send(run: Run, rng: Rng): void {
   }
 }
 
+/**
+ * Whether a thing can be bought right now, and why not if it cannot.
+ *
+ * Kept next to `buy` and used by the shop to grey a row out, so the reason a
+ * button does nothing is the same reason it looks like it will do nothing.
+ */
+export function canBuy(run: Run, what: Upgrade): boolean {
+  if (run.purse < COSTS[what]) return false
+  if (what === 'shield') return run.shields < MOST_SHIELDS
+  if (what === 'rapid') return run.kit.rapid < MOST_OF.rapid
+  if (what === 'twin') return !run.kit.twin
+  if (what === 'pierce') return !run.kit.pierce
+  return !run.kit.magnet
+}
+
+/** Spends the scrap. Does nothing at all if it cannot be afforded. */
+export function buy(run: Run, what: Upgrade): Run {
+  if (!canBuy(run, what)) return run
+  const paid = { ...run, purse: run.purse - COSTS[what] }
+  if (what === 'shield') return { ...paid, shields: paid.shields + 1 }
+  if (what === 'rapid') return { ...paid, kit: { ...paid.kit, rapid: paid.kit.rapid + 1 } }
+  if (what === 'twin') return { ...paid, kit: { ...paid.kit, twin: true } }
+  if (what === 'pierce') return { ...paid, kit: { ...paid.kit, pierce: true } }
+  return { ...paid, kit: { ...paid.kit, magnet: true } }
+}
+
 export function step(run: Run, input: Input, dt: number): Run {
   if (run.status !== 'flying') {
     return run.events.length === 0 ? run : { ...run, events: [] }
@@ -182,6 +245,7 @@ export function step(run: Run, input: Input, dt: number): Run {
     events: [],
     rubble: run.rubble.map((r) => ({ ...r })),
     bolts: run.bolts.map((b) => ({ ...b })),
+    scrap: run.scrap.map((c) => ({ ...c })),
     seed: (run.seed * 1664525 + 1013904223) >>> 0,
   }
 
@@ -194,8 +258,19 @@ export function step(run: Run, input: Input, dt: number): Run {
 
   // --- shooting -------------------------------------------------------------
   if (input.fire && next.reload === 0) {
-    next.bolts.push({ id: next.nextId++, x: next.x, y: 1 - SHIP_TALL })
-    next.reload = RELOAD
+    // A twin cannon puts one either side of the nose rather than two down the
+    // middle, which is the point of it: it covers a wider lane, it does not
+    // hit the same thing twice.
+    const barrels = next.kit.twin ? [-SHIP_WIDE * 0.34, SHIP_WIDE * 0.34] : [0]
+    for (const off of barrels) {
+      next.bolts.push({
+        id: next.nextId++,
+        x: Math.min(1, Math.max(0, next.x + off)),
+        y: 1 - SHIP_TALL,
+        pierces: next.kit.pierce,
+      })
+    }
+    next.reload = reloadFor(next.kit)
     next.events.push('shot')
   }
   for (const bolt of next.bolts) bolt.y -= BOLT_SPEED * dt
@@ -218,19 +293,56 @@ export function step(run: Run, input: Input, dt: number): Run {
       if (Math.abs(bolt.y - rock.y) > half) continue
       rock.health -= 1
       rock.flash = 0.12
-      bolt.y = -1
       if (rock.health <= 0) {
         next.score += WORTH[rock.kind]
         next.broken += 1
         next.events.push('broke')
+        // What is left of it, for the pocket. It falls from where the thing
+        // was, which means the good stuff is usually in the worst place.
+        const worth = SCRAP_OF[rock.kind]
+        if (worth > 0) {
+          next.scrap.push({ id: next.nextId++, x: rock.x, y: rock.y, worth })
+        }
       } else {
         next.events.push('hit')
       }
-      break
+      // A piercing bolt carries on. Anything else has done its work — and it
+      // stops here even when the thing it hit survived, or one bolt would saw
+      // through a whole column in a single step.
+      if (!bolt.pierces) {
+        bolt.y = -1
+        break
+      }
     }
   }
   next.bolts = next.bolts.filter((b) => b.y > -0.05)
   next.rubble = next.rubble.filter((r) => r.health > 0 || TOUGHNESS[r.kind] === 0)
+
+  // --- scrap ------------------------------------------------------------------
+  for (const cell of next.scrap) {
+    cell.y += next.world.fall * dt
+    /*
+     * A magnet leans it towards you. Safe to let this one move sideways, for
+     * the reason nothing else is allowed to: scrap is not a hazard, so no
+     * promise about there being a way through is measured against where it is.
+     */
+    if (next.kit.magnet) {
+      const towards = Math.sign(next.x - cell.x)
+      cell.x = Math.min(1, Math.max(0, cell.x + towards * MAGNET_PULL * dt))
+    }
+  }
+  const pocket: [number, number] = [next.x - SHIP_WIDE / 2, next.x + SHIP_WIDE / 2]
+  next.scrap = next.scrap.filter((cell) => {
+    if (cell.y > 1.25) return false
+    const near = Math.abs(cell.y - (1 - SHIP_TALL / 2)) <= SCRAP_WIDE / 2 + SHIP_TALL
+    const across = overlaps(pocket, [cell.x - SCRAP_WIDE / 2, cell.x + SCRAP_WIDE / 2])
+    if (near && across) {
+      next.purse += cell.worth
+      next.events.push('scrap')
+      return false
+    }
+    return true
+  })
 
   // --- rubble meeting you ----------------------------------------------------
   if (next.mercy === 0) {

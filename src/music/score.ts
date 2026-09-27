@@ -1143,10 +1143,18 @@ export const CLOSING: Track = {
   parts: [{ wave: 'pulse', duty: 0.5, gain: 0.1, sustain: 0.45, pattern: 'C5 .  B4 .  C5 .  B4 . ' }],
 }
 
+/** A cell of scrap, pocketed. Fires as often as the laser nearly. */
+export const CELL: Track = {
+  name: 'Cell',
+  beatsPerMinute: 300,
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.06, sustain: 0.35, pattern: 'B5 E6' }],
+}
+
 /** Space's own set, all in E Phrygian, like the loop they interrupt. */
 export const SPACE_CUES = {
   laser: LASER,
   ping: PING,
+  cell: CELL,
   burst: BURST,
   struck: STRUCK,
   orbit: ORBIT,

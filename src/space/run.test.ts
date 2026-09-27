@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { FLYABLE, SHIP_SPEED, SHIP_WIDE, SIZE_OF, WORLDS, worldFor } from './level'
-import { FIXED, NO_INPUT, newRun, resume, step, widestGap, type Input, type Run } from './run'
+import {
+  COSTS, FLYABLE, MOST_OF, MOST_SHIELDS, NEW_KIT, SCRAP_OF, SHIP_SPEED, SHIP_WIDE,
+  SIZE_OF, TOUGHNESS, WORLDS, reloadFor, worldFor, type Hazard,
+} from './level'
+import {
+  FIXED, NO_INPUT, buy, canBuy, newRun, resume, step, widestGap, type Input, type Run,
+} from './run'
 
 /**
  * The run out through the solar system.
@@ -180,5 +185,182 @@ describe('the worlds', () => {
       expect(WORLDS[i].fall, WORLDS[i].name).toBeGreaterThanOrEqual(WORLDS[i - 1].fall)
       expect(WORLDS[i].traffic, WORLDS[i].name).toBeGreaterThanOrEqual(WORLDS[i - 1].traffic)
     }
+  })
+})
+
+/**
+ * The scrap, and what it buys.
+ *
+ * Breaking something leaves a cell that falls, and going back for it is a
+ * decision rather than a reward — which is the only reason it is interesting.
+ * Every rule below exists because the alternative is either a shop nobody can
+ * afford or a ship that cannot be touched by the fourth world.
+ */
+describe('the scrap', () => {
+  const breakOne = (kind: Hazard, kit = NEW_KIT): Run => {
+    // Put one thing directly over the ship and shoot it until it goes.
+    let run: Run = { ...newRun(1), kit, x: 0.5 }
+    run.rubble.push({
+      id: 99, kind, x: 0.5, y: 0.5, drift: 0, health: TOUGHNESS[kind], flash: 0,
+    })
+    for (let shot = 0; shot < 10 && run.rubble.length > 0; shot++) {
+      run = { ...run, reload: 0 }
+      run = fly(run, { left: false, right: false, fire: true }, 0.5)
+      if (run.status !== 'flying') break
+    }
+    return run
+  }
+
+  it('leaves a cell behind when something breaks up', () => {
+    const after = breakOne('rock')
+    expect(after.broken).toBeGreaterThan(0)
+    // Either still falling, or already collected on the way past.
+    expect(after.scrap.length + after.purse).toBeGreaterThan(0)
+  })
+
+  it('leaves nothing at all for one of his mines', () => {
+    // A mine cannot be shot, so nothing should ever come off one.
+    expect(SCRAP_OF.mine).toBe(0)
+  })
+
+  it('pays more for the things that are harder to break', () => {
+    expect(SCRAP_OF.drone).toBeGreaterThan(SCRAP_OF.rock)
+    expect(SCRAP_OF.rock).toBeGreaterThan(SCRAP_OF.shard)
+  })
+
+  it('goes in the pocket when the ship flies into it', () => {
+    let run: Run = { ...newRun(1), x: 0.5 }
+    run.scrap.push({ id: 1, x: 0.5, y: 0.3, worth: 3 })
+    run = fly(run, NO_INPUT, 6)
+    expect(run.purse).toBe(3)
+    expect(run.scrap).toHaveLength(0)
+  })
+
+  it('is lost if it falls past you', () => {
+    let run: Run = { ...newRun(1), x: 0.1 }
+    run.scrap.push({ id: 1, x: 0.9, y: 0.3, worth: 3 })
+    run = fly(run, NO_INPUT, 8)
+    expect(run.purse).toBe(0)
+    expect(run.scrap).toHaveLength(0)
+  })
+
+  it('leans towards you once a magnet is fitted, and not before', () => {
+    const drop = (magnet: boolean) => {
+      let run: Run = { ...newRun(1), x: 0.1, kit: { ...NEW_KIT, magnet } }
+      run.scrap.push({ id: 1, x: 0.9, y: 0.1, worth: 3 })
+      run = fly(run, NO_INPUT, 1)
+      return run.scrap[0]?.x ?? 0
+    }
+    expect(drop(false)).toBeCloseTo(0.9, 5)
+    expect(drop(true)).toBeLessThan(0.9)
+  })
+
+  it('never lets a magnet drag a cell off the screen', () => {
+    let run: Run = { ...newRun(1), x: 0.5, kit: { ...NEW_KIT, magnet: true } }
+    run.scrap.push({ id: 1, x: 0.02, y: 0, worth: 1 })
+    run = fly(run, NO_INPUT, 2)
+    for (const cell of run.scrap) {
+      expect(cell.x).toBeGreaterThanOrEqual(0)
+      expect(cell.x).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('keeps what is in the air when a shield goes', () => {
+    // Losing a shield costs enough already without also emptying your pockets.
+    let run: Run = { ...newRun(1), purse: 12 }
+    run.scrap.push({ id: 1, x: 0.5, y: 0.1, worth: 3 })
+    const back = resume({ ...run, status: 'knocked', shields: 2 })
+    expect(back.purse).toBe(12)
+    expect(back.scrap).toHaveLength(1)
+  })
+})
+
+describe('the shop', () => {
+  const rich = (purse: number): Run => ({ ...newRun(1), purse })
+
+  it('will not sell what cannot be paid for', () => {
+    const skint = rich(COSTS.twin - 1)
+    expect(canBuy(skint, 'twin')).toBe(false)
+    expect(buy(skint, 'twin')).toBe(skint)
+  })
+
+  it('takes the money and fits the thing', () => {
+    const after = buy(rich(COSTS.twin), 'twin')
+    expect(after.kit.twin).toBe(true)
+    expect(after.purse).toBe(0)
+  })
+
+  it('sells a shield again and again, up to what the hull holds', () => {
+    let run = rich(COSTS.shield * 20)
+    for (let i = 0; i < 20; i++) run = buy(run, 'shield')
+    expect(run.shields).toBe(MOST_SHIELDS)
+    // And stops charging once it stops selling.
+    expect(canBuy(run, 'shield')).toBe(false)
+  })
+
+  it('sells the trigger twice and no more', () => {
+    let run = rich(COSTS.rapid * 5)
+    for (let i = 0; i < 5; i++) run = buy(run, 'rapid')
+    expect(run.kit.rapid).toBe(MOST_OF.rapid)
+  })
+
+  it('will not sell the same one-off twice', () => {
+    const once = buy(rich(COSTS.pierce * 2), 'pierce')
+    expect(canBuy(once, 'pierce')).toBe(false)
+    expect(buy(once, 'pierce').purse).toBe(once.purse)
+  })
+
+  it('prices the first stop so it buys something and not everything', () => {
+    /*
+     * A world drops roughly twenty to sixty cells depending on how much you
+     * shoot. If the cheapest thing cost more than a good run at Mercury, the
+     * shop would be scenery for the first half of the game; if the dearest
+     * were affordable at the first stop, the rest of the game would be over.
+     */
+    const cheapest = Math.min(...Object.values(COSTS))
+    const dearest = Math.max(...Object.values(COSTS))
+    expect(cheapest).toBeLessThanOrEqual(40)
+    expect(dearest).toBeGreaterThan(60)
+  })
+})
+
+describe('the kit, once it is fitted', () => {
+  it('makes the trigger quicker, and only so quick', () => {
+    expect(reloadFor({ ...NEW_KIT, rapid: 1 })).toBeLessThan(reloadFor(NEW_KIT))
+    expect(reloadFor({ ...NEW_KIT, rapid: 2 })).toBeLessThan(reloadFor({ ...NEW_KIT, rapid: 1 }))
+    // Never so quick that the sky is a solid wall of bolts.
+    expect(reloadFor({ ...NEW_KIT, rapid: 9 })).toBeGreaterThan(0.1)
+  })
+
+  it('puts two bolts up instead of one', () => {
+    const one = fly({ ...newRun(1), kit: NEW_KIT }, { left: false, right: false, fire: true }, FIXED)
+    const two = fly({ ...newRun(1), kit: { ...NEW_KIT, twin: true } }, { left: false, right: false, fire: true }, FIXED)
+    expect(two.bolts.length).toBe(one.bolts.length * 2)
+  })
+
+  it('keeps both of a twin cannon\'s bolts on the screen at the edges', () => {
+    for (const x of [0, 1]) {
+      const run = fly(
+        { ...newRun(1), x, kit: { ...NEW_KIT, twin: true } },
+        { left: false, right: false, fire: true },
+        FIXED,
+      )
+      for (const bolt of run.bolts) {
+        expect(bolt.x).toBeGreaterThanOrEqual(0)
+        expect(bolt.x).toBeLessThanOrEqual(1)
+      }
+    }
+  })
+
+  it('carries a piercing bolt on through what it breaks', () => {
+    const stack = (pierces: boolean) => {
+      let run: Run = { ...newRun(1), x: 0.5, kit: { ...NEW_KIT, pierce: pierces } }
+      // Two shards in a line: one hit each, so a piercing bolt takes both.
+      run.rubble.push({ id: 1, kind: 'shard', x: 0.5, y: 0.55, drift: 0, health: 1, flash: 0 })
+      run.rubble.push({ id: 2, kind: 'shard', x: 0.5, y: 0.35, drift: 0, health: 1, flash: 0 })
+      return fly(run, { left: false, right: false, fire: true }, 0.35).broken
+    }
+    expect(stack(false)).toBe(1)
+    expect(stack(true)).toBe(2)
   })
 })

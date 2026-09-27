@@ -160,3 +160,71 @@ export const WORLDS: readonly World[] = [
 export function worldFor(number: number): World {
   return WORLDS[Math.min(Math.max(1, number), WORLDS.length) - 1]
 }
+
+// --- the kit ---------------------------------------------------------------
+
+/**
+ * What the scrap is for.
+ *
+ * Breaking something up leaves a cell behind, the cell falls, and flying into
+ * it puts it in your pocket. At a world you can spend the lot. That is the
+ * whole loop, and the interesting part of it is that the cell falls: going
+ * after one means going back into the traffic for it, which is a decision
+ * rather than a reward.
+ */
+export type Upgrade = 'shield' | 'rapid' | 'twin' | 'pierce' | 'magnet'
+
+export interface Kit {
+  /** Shots come quicker. Two steps. */
+  rapid: number
+  /** Two bolts instead of one, side by side. */
+  twin: boolean
+  /** A bolt carries on through whatever it breaks. */
+  pierce: boolean
+  /** Scrap leans towards you instead of falling straight past. */
+  magnet: boolean
+}
+
+export const NEW_KIT: Kit = { rapid: 0, twin: false, pierce: false, magnet: false }
+
+/** How many of each can be bought. A shield is bought again and again. */
+export const MOST_OF: Record<Upgrade, number> = {
+  shield: 99, rapid: 2, twin: 1, pierce: 1, magnet: 1,
+}
+
+/**
+ * What each costs.
+ *
+ * A world drops somewhere between twenty and sixty cells depending on how much
+ * you shoot, so the first stop buys one thing and the third stop buys the
+ * expensive thing. Priced so that nothing can be bought on the way to Venus
+ * and everything can be owned by Uranus if you have been greedy about it.
+ */
+export const COSTS: Record<Upgrade, number> = {
+  shield: 30, rapid: 45, twin: 70, pierce: 90, magnet: 40,
+}
+
+export const SHOP: Record<Upgrade, { name: string; says: string }> = {
+  shield: { name: 'Shield', says: 'One more hit before it matters.' },
+  rapid: { name: 'Quicker trigger', says: 'Less waiting between shots.' },
+  twin: { name: 'Twin cannon', says: 'Two bolts, side by side.' },
+  pierce: { name: 'Piercing bolts', says: 'A bolt carries on through.' },
+  magnet: { name: 'Scrap magnet', says: 'Cells lean your way as they fall.' },
+}
+
+/** The most shields the hull will hold, bought or not. */
+export const MOST_SHIELDS = 6
+
+/** How long between shots, given what has been fitted. */
+export function reloadFor(kit: Kit): number {
+  return RELOAD * (1 - 0.22 * Math.min(MOST_OF.rapid, kit.rapid))
+}
+
+/** What a broken-up thing leaves behind. A mine leaves nothing: it is his. */
+export const SCRAP_OF: Record<Hazard, number> = {
+  rock: 3, shard: 1, drone: 5, mine: 0,
+}
+
+/** How wide a cell of scrap is, and how fast it leans when a magnet is fitted. */
+export const SCRAP_WIDE = 0.05
+export const MAGNET_PULL = 0.5

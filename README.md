@@ -23,14 +23,26 @@ the money taken out.
 | **The Caves** | Ten caves, a trophy in each, and a jetpack he has not tested | Between lives |
 | **The Dungeon** | Thirteen floors, one hour, every move a commitment | Between lives |
 | **The Pipes** | Run, jump, stomp, reach the flag | Between lives |
-| **The Road** | Four lanes, six stages, a fuel gauge that bites | Between lives; a right answer is half a tank and a car back |
-| **The Long Way Out** | Fly to the eight real planets, in order, through what he has left in the way | Between shields; arriving tells you something true about the world you reached |
+| **The Road** | Four lanes, six stages, and four of his machines racing you to the line | Between lives; a right answer is half a tank and a car back |
+| **The Long Way Out** | Fly to the eight real planets, in order, through what he has left in the way | None. Break things up for scrap, spend it at each world, and every world tells you something true |
 
 Two of them make the same promise in the model and prove it in a test: **there is always
 a way through**. A screen with no gap in it is not difficulty, it is a coin toss you lose.
 Both games got that wrong first in the same way — a guarantee made when something is
 spawned does not survive anything moving relative to anything else afterwards — and both
 are fixed the same way, by freezing the relative geometry the moment it is laid down.
+
+The road's field of racers is the exception that proves it. A racer is not traffic: it
+moves at its own speed, so it can drift into the one lane the spawner left open and shut
+the road, and no check made when it was put out there would catch that. So the promise is
+enforced continuously on the one body that can break it — a racer will not sit in the last
+open lane of the stretch you are arriving in, and gets out of it without waiting to
+indicate. There is a test that plays every stage watching for a wall.
+
+**The maths is not in every game.** It is in five of them, between lives. The sixth was
+asked to drop it, and what replaced it has to be worth the interruption on its own: losing
+a shield puts up something true about the sky you are in, and then you carry on. Nothing to
+answer, nothing to get wrong.
 
 ## The music
 

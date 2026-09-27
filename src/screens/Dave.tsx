@@ -65,6 +65,33 @@ if (LOUDEST.length !== Object.keys(NOISE).length) {
   throw new Error('a cave event with no place in the order')
 }
 
+/**
+ * Which cave to open on.
+ *
+ * `?cave=5` in the address, and nothing else. There is no way to it from the
+ * app and nothing in the app writes it: it exists so a probe can stand in a
+ * late cave without playing four of them first, which is how the gun being
+ * broken went unnoticed for as long as it did. A child on a phone will never
+ * see it; I need it every time something is reported about cave five.
+ */
+function openingCave(): number {
+  const asked = Number(new URLSearchParams(window.location.search).get('cave'))
+  if (!Number.isFinite(asked)) return 1
+  return Math.min(LEVELS.length, Math.max(1, Math.floor(asked)))
+}
+
+/**
+ * Whether to start holding the gun. `?armed=1`, and the same rules apply.
+ *
+ * The probe that checks the FIRE button needs a gun in hand, and getting one
+ * honestly means jumping onto a particular ledge in cave five. That is a test
+ * of the platforms, which the solver already covers; this one is about whether
+ * pressing the button makes a bullet.
+ */
+function openingArms(): boolean {
+  return new URLSearchParams(window.location.search).get('armed') === '1'
+}
+
 export function Dave() {
   const go = useStore((s) => s.go)
 
@@ -77,6 +104,8 @@ export function Dave() {
   /** Jump is the frame the up-band is first touched, not every frame it is held. */
   const wasUp = useRef(false)
   const wasFire = useRef(false)
+  /** A tap that began since the last frame, held until a frame has read it. */
+  const firePending = useRef(false)
   const clock = useRef(0)
   /** The pad as it was last frame, so a change of buttons re-announces them. */
   const padShape = useRef('')
@@ -84,12 +113,15 @@ export function Dave() {
   const hintsFrom = useRef(0)
 
   const [hud, setHud] = useState({
-    score: 0, lives: 3, level: 1, fuel: 0, gun: false, trophy: false,
+    score: 0, lives: 3, level: 1, fuel: 0, gun: false, trophy: false, shots: 0,
     status: 'playing' as Game['status'], message: null as string | null,
   })
 
   useEffect(() => {
-    gameRef.current = newGame(levelFor(1), 1)
+    const opening = newGame(levelFor(openingCave()), openingCave())
+    gameRef.current = openingArms()
+      ? { ...opening, dave: { ...opening.dave, hasGun: true } }
+      : opening
     clock.current = 0
     say(fill('Into the hideout, then. Do try not to touch anything hot.'), { as: 'papa' })
   }, [])
@@ -125,17 +157,35 @@ export function Dave() {
       const elapsed = (now - last) / 1000
       last = now
 
-      const game = gameRef.current
+      let game = gameRef.current
       if (game) {
         const held = combine([...touches.current.values()])
         const jump = held.up && !wasUp.current
         wasUp.current = held.up
         const input: Input = { ...NO_INPUT, left: held.left, right: held.right, up: held.up, down: held.down, jump }
-        if (held.fire && !wasFire.current) {
-          const armed = shoot(gameRef.current!)
-          gameRef.current = armed
-        }
+
+        /*
+         * The shot goes into the game this frame is about to advance.
+         *
+         * It used to be written to `gameRef.current` while the frame carried
+         * on simulating the copy it had taken a line earlier, and then
+         * overwrote the reference with the result — so the bullet was created
+         * and thrown away sixty times a second. The gun had never worked from
+         * the button in any cave. It worked from the space bar, because that
+         * happens between frames and the next frame picks the bullet up, which
+         * is exactly why every check I had ran clean: they all used the
+         * keyboard.
+         *
+         * `firePending` is the other half of it. A tap can start and end
+         * between two frames, and this screen reads its buttons straight off
+         * the map of live touches, so a quick tap on FIRE was never seen at
+         * all. The other four games latch their buttons for this reason; this
+         * one did not.
+         */
+        if ((held.fire || firePending.current) && !wasFire.current) game = shoot(game)
         wasFire.current = held.fire
+        firePending.current = false
+        gameRef.current = game
 
         // Drawn between the last two states, not at the latest one. Without
         // it everything moves by however many slices happened to fit in the
@@ -178,15 +228,21 @@ export function Dave() {
         setHeat(Math.max(deep * 0.5 + (next.dave.hasTrophy ? 0.35 : 0), thin * 0.85))
 
         if (
+          // The level number is in here because it can change on its own —
+          // the cave hook opens somewhere other than the first one, and the
+          // readout happily went on saying LEVEL 01 while cave five was being
+          // played, since nothing else about the state had moved yet.
+          next.number !== shown.level ||
           next.score !== shown.score || next.lives !== shown.lives ||
           next.status !== shown.status || next.message !== shown.message ||
           Math.ceil(next.dave.fuel) !== Math.ceil(shown.fuel) ||
-          next.dave.hasGun !== shown.gun || next.dave.hasTrophy !== shown.trophy
+          next.dave.hasGun !== shown.gun || next.dave.hasTrophy !== shown.trophy ||
+          next.shots !== shown.shots
         ) {
           shown = {
             score: next.score, lives: next.lives, level: next.number,
             fuel: next.dave.fuel, gun: next.dave.hasGun, trophy: next.dave.hasTrophy,
-            status: next.status, message: next.message,
+            status: next.status, message: next.message, shots: next.shots,
           }
           setHud({ ...shown })
         }
@@ -332,7 +388,12 @@ export function Dave() {
     return keyAt((e.clientX - rect.left) * scale, (e.clientY - rect.top) * scale, padRef.current)
   }
   const onDown = (e: React.PointerEvent) => {
-    touches.current.set(e.pointerId, readTouch(e))
+    const key = readTouch(e)
+    touches.current.set(e.pointerId, key)
+    // Remembered, so a tap short enough to begin and end inside one frame
+    // still fires. Steering does not need this — nobody taps left for four
+    // milliseconds — but a shot is a stab at a button by definition.
+    if (key === 'fire') firePending.current = true
     ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
   }
   const onMove = (e: React.PointerEvent) => {
@@ -416,7 +477,7 @@ export function Dave() {
       <header className="sr-only" aria-live="polite">
         SCORE: {String(hud.score).padStart(5, '0')} LEVEL {String(hud.level).padStart(2, '0')} DAVES: {Math.max(0, hud.lives)}
         {hud.trophy ? ' TROPHY' : ''}
-        {hud.gun ? ' GUN' : ''}
+        {hud.gun ? ` GUN SHOTS ${hud.shots}` : ''}
         {hud.fuel > 0 ? ` JETPACK ${Math.ceil(hud.fuel)}` : ''}
       </header>
 

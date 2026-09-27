@@ -14,7 +14,7 @@
  */
 import { drawHint } from '../ui/padHints'
 import { CAR_LONG, CAR_WIDE, LANES, LENGTH_OF, SIGHT, WIDTH_OF, type CarKind } from './level'
-import type { Can, Car, Run } from './run'
+import type { Can, Car, Racing, Run } from './run'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -405,7 +405,13 @@ export function drawCan(ctx: Ctx, can: Can, view: View): void {
  * one thing your own car has to say. The visor is the same light bar the
  * runner in the maze wears, because it is the same person driving.
  */
-export function drawMine(ctx: Ctx, lane: number, view: View, stunned: number): void {
+export function drawMine(
+  ctx: Ctx,
+  lane: number,
+  view: View,
+  stunned: number,
+  mercy = 0,
+): void {
   const x = laneX(view, lane)
   const y = view.line
   const wide = view.lane * CAR_WIDE
@@ -413,6 +419,9 @@ export function drawMine(ctx: Ctx, lane: number, view: View, stunned: number): v
 
   // A wreck flashes, so it is obvious the controls are not listening yet.
   if (stunned > 0 && Math.floor(stunned * 12) % 2 === 0) return
+  // And so does a car that cannot be hit yet, for the same reason: the state
+  // the game is in should be visible without being explained.
+  if (stunned <= 0 && mercy > 0 && Math.floor(mercy * 9) % 2 === 0) return
 
   ctx.fillStyle = INK.shadow
   body(ctx, x + wide * 0.07, y + long * 0.05, wide, long, RACER, wide * 0.16)
@@ -439,6 +448,58 @@ export function drawMine(ctx: Ctx, lane: number, view: View, stunned: number): v
   ctx.fill()
 }
 
+/**
+ * One of the four you are racing.
+ *
+ * The same shape as your own car, because they are the same kind of thing —
+ * that is the point of them. Their own colours, a number on the nose, and the
+ * indicator, because a racer pulling out gives the same warning everything
+ * else on this road does.
+ */
+export function drawRacer(ctx: Ctx, racer: Racing, view: View): void {
+  const x = laneX(view, racer.lane)
+  const y = roadY(view, racer.y)
+  const wide = view.lane * CAR_WIDE
+  const long = CAR_LONG * view.depth
+
+  ctx.fillStyle = INK.shadow
+  body(ctx, x + wide * 0.07, y + long * 0.05, wide, long, RACER, wide * 0.16)
+  ctx.fill()
+
+  wheels(ctx, x, y, wide * 0.86, long, wide * 0.06)
+
+  ctx.fillStyle = racer.who.colour
+  body(ctx, x, y, wide, long, RACER, wide * 0.16)
+  ctx.fill()
+
+  ctx.fillStyle = racer.who.trim
+  ctx.fillRect(x - wide * 0.46, y - long * 0.52, wide * 0.92, long * 0.08)
+  ctx.fillRect(x - wide * 0.5, y + long * 0.42, wide, long * 0.1)
+
+  ctx.fillStyle = INK.visor
+  ctx.beginPath()
+  ctx.ellipse(x, y - long * 0.02, wide * 0.19, long * 0.15, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Rear lamps, since you are usually looking at the back of one.
+  ctx.fillStyle = '#ff5b4a'
+  for (const side of [-1, 1]) {
+    ctx.fillRect(x + side * wide * 0.32 - wide * 0.06, y + long * 0.34, wide * 0.12, long * 0.06)
+  }
+
+  if (racer.signal !== 0 && Math.floor(view.clock * 5) % 2 === 0) {
+    ctx.fillStyle = '#ffb02e'
+    for (const end of [-0.38, 0.34]) {
+      ctx.beginPath()
+      ctx.ellipse(
+        x + racer.signal * wide * 0.62, y + long * end,
+        wide * 0.1, long * 0.06, 0, 0, Math.PI * 2,
+      )
+      ctx.fill()
+    }
+  }
+}
+
 /** Everything on the road, in the order it has to be drawn. */
 export function drawRun(ctx: Ctx, run: Run, lane: number, view: View, w: number, h: number): void {
   drawRoad(ctx, view, w, h)
@@ -454,7 +515,15 @@ export function drawRun(ctx: Ctx, run: Run, lane: number, view: View, w: number,
     if (y < -CAR_LONG * 2 || y > SIGHT * 1.6) continue
     drawCar(ctx, car, view)
   }
-  drawMine(ctx, lane, view, run.stunned)
+  for (const racer of run.racers) {
+    if (racer.finished !== null) continue
+    const y = racer.y - view.distance
+    // Further back than the traffic, because the field comes up behind you
+    // and headlights in the mirror are half the point of having one.
+    if (y < -CAR_LONG * 4 || y > SIGHT * 1.6) continue
+    drawRacer(ctx, racer, view)
+  }
+  drawMine(ctx, lane, view, run.stunned, run.mercy)
 }
 
 /**

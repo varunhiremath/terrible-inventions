@@ -10,8 +10,8 @@
  * looking at Jupiter.
  */
 import { drawHint } from '../ui/padHints'
-import { SHIP_TALL, SHIP_WIDE, SIZE_OF, TOUGHNESS, type World } from './level'
-import type { Bolt, Rubble, Run } from './run'
+import { SCRAP_WIDE, SHIP_TALL, SHIP_WIDE, SIZE_OF, TOUGHNESS, type World } from './level'
+import type { Bolt, Rubble, Run, Scrap } from './run'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -29,6 +29,7 @@ export const INK = {
   drone: '#e8503a',
   droneDark: '#8f2a1c',
   mine: '#b07de0',
+  scrap: '#ffd23f',
 } as const
 
 export interface View {
@@ -277,6 +278,52 @@ export function drawRubble(ctx: Ctx, rock: Rubble, view: View): void {
   }
 }
 
+/**
+ * A cell of scrap, falling.
+ *
+ * Gold, spinning, and the only thing on screen you are allowed to fly into.
+ * It has to be readable as "get this" at a glance and it has to look nothing
+ * like a mine, which is the other small round thing in the sky.
+ */
+export function drawCell(ctx: Ctx, cell: Scrap, view: View): void {
+  const x = px(view, cell.x)
+  const y = py(view, cell.y)
+  const size = SCRAP_WIDE * view.w * (cell.worth >= 5 ? 1.25 : 1)
+  const turn = view.clock * 3 + cell.id
+
+  // A squashed hexagon, spinning about its upright: a coin seen edge-on and
+  // then flat again, which is the oldest "pick me up" in the business.
+  const squash = Math.abs(Math.cos(turn)) * 0.8 + 0.2
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.scale(squash, 1)
+  ctx.fillStyle = INK.scrap
+  ctx.beginPath()
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + Math.PI / 6
+    const cx2 = Math.cos(a) * size
+    const cy2 = Math.sin(a) * size
+    if (i === 0) ctx.moveTo(cx2, cy2)
+    else ctx.lineTo(cx2, cy2)
+  }
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillStyle = '#8a5a12'
+  ctx.beginPath()
+  ctx.arc(0, 0, size * 0.34, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+
+  // A little light around it, so it is findable against the star field.
+  const glow = ctx.createRadialGradient(x, y, size * 0.4, x, y, size * 2.2)
+  glow.addColorStop(0, 'rgba(255,210,63,0.35)')
+  glow.addColorStop(1, 'rgba(255,210,63,0)')
+  ctx.fillStyle = glow
+  ctx.beginPath()
+  ctx.arc(x, y, size * 2.2, 0, Math.PI * 2)
+  ctx.fill()
+}
+
 export function drawBolt(ctx: Ctx, bolt: Bolt, view: View): void {
   const x = px(view, bolt.x)
   const y = py(view, bolt.y)
@@ -366,6 +413,7 @@ export function drawRun(ctx: Ctx, run: Run, view: View, travelled: number): void
 
   drawWorld(ctx, run.world, run.progress, play)
   for (const bolt of run.bolts) drawBolt(ctx, bolt, play)
+  for (const cell of run.scrap) drawCell(ctx, cell, play)
   for (const rock of run.rubble) drawRubble(ctx, rock, play)
   drawShip(ctx, run.x, play, run.mercy, view.clock)
   ctx.restore()

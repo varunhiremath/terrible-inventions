@@ -106,11 +106,17 @@ export type Mission =
   | { kind: 'pass'; count: number }
   | { kind: 'cans'; count: number }
   | { kind: 'clean' }
+  /** Finish the stage in the first `place` of the field. */
+  | { kind: 'place'; place: number }
 
 export function missionSays(mission: Mission): string {
   switch (mission.kind) {
     case 'pass':
       return `Get past ${mission.count} of them`
+    case 'place':
+      return mission.place === 1
+        ? 'Win it'
+        : `Finish in the first ${mission.place}`
     case 'cans':
       return `Pick up ${mission.count} cans of fuel`
     case 'clean':
@@ -202,14 +208,34 @@ export const LENGTH_OF: Record<CarKind, number> = {
  * reaction window — see `run.ts`.
  */
 export const WANDERS: Record<CarKind, number> = {
-  cruiser: 0.1,
-  taxi: 0.35,
-  van: 0.15,
-  truck: 0.05,
-  bus: 0.05,
-  patrol: 0.3,
-  ambulance: 0.5,
-  swerver: 1,
+  cruiser: 0.16,
+  taxi: 0.5,
+  van: 0.22,
+  truck: 0.08,
+  bus: 0.08,
+  patrol: 0.45,
+  ambulance: 0.7,
+  swerver: 1.6,
+}
+
+/**
+ * How fast each sort crosses a lane, against the player's steering.
+ *
+ * A swerver dashes; everything else drifts. That is the difference between
+ * "there is a red car coming across" and "there was a red car coming across",
+ * and it is what makes the red ones worth watching for rather than worth
+ * noting. Still only ever outside the reaction window — a car that moves after
+ * you have committed to a gap is not a hazard, it is a trick.
+ */
+export const DASHES: Record<CarKind, number> = {
+  cruiser: 0.5,
+  taxi: 0.6,
+  van: 0.5,
+  truck: 0.4,
+  bus: 0.4,
+  patrol: 0.7,
+  ambulance: 0.8,
+  swerver: 1.15,
 }
 
 /**
@@ -247,26 +273,27 @@ export const STAGES: readonly Stage[] = [
   },
   {
     name: 'Rush Hour', traffic: 5, pace: 0.42, limit: 1.1, distance: 550,
-    mission: { kind: 'cans', count: 2 }, fleet: ['cruiser', 'taxi', 'van', 'bus'],
+    mission: { kind: 'place', place: 3 },
+    fleet: ['cruiser', 'taxi', 'van', 'bus', 'swerver'],
   },
   {
     name: 'The Long Straight', traffic: 6, pace: 0.4, limit: 1.2, distance: 650,
-    mission: { kind: 'pass', count: 26 },
-    fleet: ['cruiser', 'taxi', 'truck', 'bus', 'patrol'],
+    mission: { kind: 'cans', count: 2 },
+    fleet: ['cruiser', 'taxi', 'truck', 'bus', 'patrol', 'swerver'],
   },
   {
     name: 'Roadworks', traffic: 6, pace: 0.38, limit: 1.28, distance: 750,
-    mission: { kind: 'clean' },
-    fleet: ['cruiser', 'van', 'truck', 'bus', 'swerver'],
+    mission: { kind: 'place', place: 2 },
+    fleet: ['cruiser', 'van', 'truck', 'bus', 'swerver', 'swerver'],
   },
   {
     name: 'Night Shift', traffic: 7, pace: 0.36, limit: 1.36, distance: 850,
-    mission: { kind: 'cans', count: 3 },
-    fleet: ['cruiser', 'taxi', 'van', 'patrol', 'ambulance', 'swerver'],
+    mission: { kind: 'clean' },
+    fleet: ['cruiser', 'taxi', 'van', 'patrol', 'ambulance', 'swerver', 'swerver'],
   },
   {
     name: "Papa's Own Motorway", traffic: 8, pace: 0.34, limit: 1.45, distance: 1000,
-    mission: { kind: 'pass', count: 45 },
+    mission: { kind: 'place', place: 1 },
     fleet: ['cruiser', 'taxi', 'van', 'truck', 'bus', 'patrol', 'ambulance', 'swerver'],
   },
 ]
@@ -284,3 +311,62 @@ export function kmh(speed: number): number {
 export function topSpeedOn(stage: Stage): number {
   return TOP_SPEED * stage.limit
 }
+
+// --- the others in the race -------------------------------------------------
+
+/**
+ * Four of his, running the same stage as you.
+ *
+ * The road was reported as too easy twice, and more traffic was not the
+ * answer either time: traffic is an obstacle course, and an obstacle course
+ * you have already solved is not hard, it is long. Somebody to beat is a
+ * different thing. You can drive a clean stage and still come fourth.
+ *
+ * Their pace is given against your top speed on the stage, so they scale with
+ * you rather than against the fixed number — otherwise the later stages, where
+ * you are half as fast again, would leave them standing.
+ *
+ * The numbers look high — the leader is nominally as quick as you are — and
+ * they have to be. A racer spends a good part of a stage stuck behind the same
+ * traffic you are, backing off and weaving, and loses far more to that than
+ * the figure suggests. At four fifths of your speed on paper they were beaten
+ * comfortably by a test driver that crashed ten times a stage, which is not a
+ * race. What actually decides it is who gets held up least.
+ */
+export interface Racer {
+  name: string
+  colour: string
+  trim: string
+  /** Fraction of your top speed they average over a stage. */
+  pace: number
+  /** How much they vary it, so nobody drives like a metronome. */
+  swing: number
+}
+
+export const FIELD: readonly Racer[] = [
+  { name: 'Piston', colour: '#e8503a', trim: '#7d1f14', pace: 1, swing: 0.06 },
+  { name: 'Gasket', colour: '#f2b134', trim: '#8a5f10', pace: 0.96, swing: 0.09 },
+  { name: 'Tack', colour: '#5ad2e0', trim: '#1c6570', pace: 0.93, swing: 0.05 },
+  { name: 'Grinder', colour: '#9b7ede', trim: '#4a2f80', pace: 0.89, swing: 0.11 },
+]
+
+/**
+ * How far ahead or behind the field starts, in car lengths.
+ *
+ * Staggered, and all of it behind you: starting a race from the back of the
+ * grid is a fine thing in a game you can restart and a miserable one in a game
+ * where the first thirty seconds decide it.
+ */
+export const GRID_GAP = 9
+
+/** How quickly a racer changes lane. Quicker than traffic; they mean it. */
+export const RACER_STEER = 2.6
+
+/**
+ * How close a racer gets to something before backing off, in car lengths.
+ *
+ * They are not allowed to crash — a field that wipes itself out in the first
+ * stage is no race at all — so instead they slow down, look for a lane, and
+ * lose time. Which is exactly what happens to you.
+ */
+export const RACER_LOOK = 7

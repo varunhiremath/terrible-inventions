@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { STARTING_SHIELDS, WORLDS, worldFor } from '../space/level'
+import { NEW_KIT, STARTING_SHIELDS, WORLDS, worldFor, type Kit, type Upgrade } from '../space/level'
 import {
-  FIXED, newRun, resume, step,
+  FIXED, buy, newRun, resume, step,
   type Input, type Run, type SpaceEvent, type Status,
 } from '../space/run'
 import { createLatch, keyAt, padHeight, padLayout, type Button, type Key } from '../space/controls'
@@ -13,7 +13,8 @@ import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
 import { LABELS, hintAlpha } from '../ui/padHints'
 import { useStore } from '../store'
-import { Interlude } from './Interlude'
+import { pickFact, type Fact } from '../space/facts'
+import { FactCard, Shop } from './SpaceShop'
 
 /**
  * The long way out.
@@ -36,10 +37,11 @@ const NOISE: Record<SpaceEvent, CueName> = {
   knock: 'struck',
   arrive: 'orbit',
   warn: 'closing',
+  scrap: 'cell',
 }
 
 /** Loudest first: one sound a frame, and never the laser if anything else fired. */
-const LOUDEST: SpaceEvent[] = ['arrive', 'knock', 'warn', 'broke', 'hit', 'shot']
+const LOUDEST: SpaceEvent[] = ['arrive', 'knock', 'warn', 'broke', 'scrap', 'hit', 'shot']
 if (LOUDEST.length !== Object.keys(NOISE).length) {
   throw new Error('a space event with no place in the order')
 }
@@ -51,6 +53,26 @@ interface Hud {
   progress: number
   status: Status
   broken: number
+  purse: number
+  kit: Kit
+}
+
+/**
+ * Where to set off from, and with what. `?world=6&scrap=120`, and nothing else.
+ *
+ * The same probe hook the caves have, for the same reason: the shop only opens
+ * when you land, landing takes a minute of good flying, and a picture of the
+ * shop is the only way to find out whether it fits on a phone. Nothing in the
+ * app writes these and there is no way to them from inside it.
+ */
+function opening(): { world: number; scrap: number } {
+  const asked = new URLSearchParams(window.location.search)
+  const world = Number(asked.get('world'))
+  const scrap = Number(asked.get('scrap'))
+  return {
+    world: Number.isFinite(world) ? Math.min(WORLDS.length, Math.max(1, Math.floor(world))) : 1,
+    scrap: Number.isFinite(scrap) ? Math.max(0, Math.floor(scrap)) : 0,
+  }
 }
 
 export function Space() {
@@ -66,7 +88,15 @@ export function Space() {
   const buttons = useRef(createLatch())
   const [hud, setHud] = useState<Hud>({
     number: 1, score: 0, shields: STARTING_SHIELDS, progress: 0, status: 'flying', broken: 0,
+    purse: 0, kit: NEW_KIT,
   })
+  /*
+   * The facts already read, so a run does not hand out the same one twice.
+   * Kept for the sitting rather than saved: coming back tomorrow to a fresh
+   * set of facts is a feature, not a bug.
+   */
+  const read = useRef<string[]>([])
+  const [fact, setFact] = useState<Fact | null>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -85,7 +115,10 @@ export function Space() {
     const observer = new ResizeObserver(resize)
     observer.observe(wrap)
 
-    if (!runRef.current) runRef.current = newRun(1)
+    if (!runRef.current) {
+      const from = opening()
+      runRef.current = newRun(from.world, STARTING_SHIELDS, 0, 1, from.scrap)
+    }
     const pacer = createPacer<Run>(FIXED, MAX_CATCHUP)
     let frame = 0
     let last = performance.now()
@@ -134,6 +167,7 @@ export function Space() {
         if (
           next.number !== hud.number || next.status !== hud.status ||
           next.score !== hud.score || next.shields !== hud.shields ||
+          next.purse !== hud.purse || next.kit !== hud.kit ||
           Math.round(next.progress * 50) !== Math.round(hud.progress * 50)
         ) {
           setHud({
@@ -143,6 +177,8 @@ export function Space() {
             progress: next.progress,
             status: next.status,
             broken: next.broken,
+            purse: next.purse,
+            kit: next.kit,
           })
         }
 
@@ -213,6 +249,18 @@ export function Space() {
         ctx.fillStyle = next.progress > 0.85 ? '#ffe08a' : '#58b9ff'
         ctx.fillRect(0, barY, w * next.progress, barH)
 
+        /*
+         * What is in the pocket.
+         *
+         * Top left, under the score. It was along the bottom, which is where
+         * the eye is while flying — and also exactly where the ship is, so at
+         * the left-hand edge of the screen the number was printed across it.
+         */
+        ctx.font = `bold ${text * 0.9}px ui-monospace, monospace`
+        ctx.textAlign = 'left'
+        ctx.fillStyle = '#ffd23f'
+        ctx.fillText(`◆ ${next.purse}`, backRoom, capH + text * 0.9)
+
         padRef.current = padLayout(w, h)
         const shape = padRef.current.map((k) => k.id).join(',')
         if (shape !== padShape.current) {
@@ -277,15 +325,45 @@ export function Space() {
     }
   }, [])
 
-  /** A right answer hands back the shield you just lost, up to what you started with. */
-  const carryOn = (right: boolean) => {
+  /*
+   * The fact that goes with a knock.
+   *
+   * Chosen once, when the knock happens, and not on every render: a card that
+   * changed its mind about what it was telling you while you read it would be
+   * worse than no card.
+   */
+  useEffect(() => {
+    if (hud.status !== 'knocked' || hud.shields <= 0) return
+    setFact((already) => {
+      if (already) return already
+      const chosen = pickFact(read.current, Math.random())
+      read.current = [...read.current, chosen.text]
+      return chosen
+    })
+  }, [hud.status, hud.shields])
+
+  /*
+   * Back out there after a knock.
+   *
+   * No question, and nothing bought back. A shield is a thing you buy at a
+   * world with scrap you went and earned, which is a better trade than a
+   * question you might have been asked anyway — and it is the trade this game
+   * was asked for.
+   */
+  const carryOn = () => {
     const run = runRef.current
     if (!run) return
-    const back = resume(run)
-    runRef.current = right
-      ? { ...back, shields: Math.min(STARTING_SHIELDS, back.shields + 1) }
-      : back
+    runRef.current = resume(run)
+    setFact(null)
     setHud((h) => ({ ...h, status: 'flying', shields: runRef.current!.shields }))
+  }
+
+  const spend = (what: Upgrade) => {
+    const run = runRef.current
+    if (!run) return
+    const after = buy(run, what)
+    runRef.current = after
+    setHud((h) => ({ ...h, purse: after.purse, shields: after.shields, kit: after.kit }))
   }
 
   const onward = () => {
@@ -293,23 +371,28 @@ export function Space() {
     if (!run) return
     const number = run.number + 1
     if (number > WORLDS.length) return
-    runRef.current = newRun(number, run.shields, run.score, run.seed)
+    // Scrap and kit carry. That is the whole reason to go back for a cell
+    // rather than getting out of its way.
+    runRef.current = newRun(number, run.shields, run.score, run.seed, run.purse, run.kit)
     setHud((h) => ({ ...h, status: 'flying', number, progress: 0 }))
   }
 
   const startOver = () => {
     runRef.current = newRun(1)
+    read.current = []
+    setFact(null)
     setHud({
       number: 1, score: 0, shields: STARTING_SHIELDS, progress: 0, status: 'flying', broken: 0,
+      purse: 0, kit: NEW_KIT,
     })
   }
 
   const world = worldFor(hud.number)
   const lastWorld = hud.number >= WORLDS.length
   const outOfShields = hud.shields <= 0
-  /** A knock asks you something and puts you straight back out there. */
-  const asking = hud.status === 'knocked' && !outOfShields
-  const overlay = hud.status !== 'flying' && !asking
+  /** A knock puts up a fact and puts you straight back out there. */
+  const knocked = hud.status === 'knocked' && !outOfShields
+  const overlay = hud.status !== 'flying' && !knocked
 
   return (
     <div
@@ -321,7 +404,7 @@ export function Space() {
     >
       <header className="sr-only" aria-live="polite">
         FLYING TO {world.name} SCORE {hud.score} SHIELDS {hud.shields}{' '}
-        BROKEN {hud.broken} PROGRESS {Math.round(hud.progress * 100)}
+        BROKEN {hud.broken} SCRAP {hud.purse} PROGRESS {Math.round(hud.progress * 100)}
       </header>
 
       <div ref={wrapRef} className="relative min-h-0 flex-1">
@@ -330,7 +413,7 @@ export function Space() {
 
       <BackButton onClick={() => go('home')} />
 
-      {asking && <Interlude onDone={carryOn} reward="a shield back" />}
+      {knocked && fact && <FactCard fact={fact} shields={hud.shields} onDone={carryOn} />}
 
       {overlay && (
         <div
@@ -339,11 +422,11 @@ export function Space() {
           onPointerMove={(e) => e.stopPropagation()}
           onPointerUp={(e) => e.stopPropagation()}
         >
-          <div className="block-panel w-full max-w-md p-5">
+          <div className="block-panel max-h-full w-full max-w-md overflow-y-auto p-5 short:max-w-2xl short:p-3">
             <p className="text-sm font-bold uppercase tracking-wider text-rust">
               {hud.status === 'arrived' ? world.name.toUpperCase() : fill('{papa}')}
             </p>
-            <p className="mt-2 text-xl leading-snug">
+            <p className="mt-2 text-xl leading-snug short:mt-1 short:text-base">
               {hud.status === 'arrived' && lastWorld
                 ? 'Neptune. There is nothing past Neptune but my patience, and you have used that up too.'
                 : hud.status === 'arrived'
@@ -360,30 +443,38 @@ export function Space() {
               */}
             {hud.status === 'arrived' && (
               <>
-                <p className="mt-3 text-base leading-snug text-parchment">{world.fact}</p>
+                <p className="mt-3 text-base leading-snug text-parchment short:mt-1.5 short:text-sm">{world.fact}</p>
                 {world.moons.length > 0 && (
-                  <p className="mt-2 font-mono text-xs uppercase tracking-[0.2em] text-dim">
+                  <p className="mt-2 font-mono text-xs uppercase tracking-[0.2em] text-dim short:mt-1 short:text-[0.65rem]">
                     Moons: {world.moons.map((m) => m.name).join(', ')}
                   </p>
                 )}
-                <p className="mt-2 font-mono text-xs uppercase tracking-[0.2em] text-moss">
+                <p className="mt-2 font-mono text-xs uppercase tracking-[0.2em] text-moss short:mt-1 short:text-[0.65rem]">
                   {hud.broken} broken up on the way
                 </p>
+                {runRef.current && <Shop run={runRef.current} onBuy={spend} />}
               </>
             )}
 
-            <div className="mt-5 flex flex-col gap-2">
+            <div
+              /*
+               * Side by side on a short screen. Stacked, the second one hung
+               * off the bottom edge of a phone held sideways — and this panel
+               * has a whole shop in it now, which is where the height went.
+               */
+              className="mt-5 flex flex-col gap-2 short:mt-2 short:flex-row-reverse short:gap-2"
+            >
               {hud.status === 'arrived' && !lastWorld && (
-                <Btn tone="go" onClick={onward} className="py-4 text-lg">
+                <Btn tone="go" onClick={onward} className="py-4 text-lg short:min-h-0 short:flex-1 short:py-2 short:text-base">
                   On to {worldFor(hud.number + 1).name}
                 </Btn>
               )}
               {(outOfShields || (hud.status === 'arrived' && lastWorld)) && (
-                <Btn tone="go" onClick={startOver} className="py-4 text-lg">
+                <Btn tone="go" onClick={startOver} className="py-4 text-lg short:min-h-0 short:flex-1 short:py-2 short:text-base">
                   Start again
                 </Btn>
               )}
-              <Btn onClick={() => go('home')}>Back to the menu</Btn>
+              <Btn onClick={() => go('home')} className="short:min-h-0 short:py-2 short:text-sm">Back to the menu</Btn>
             </div>
           </div>
         </div>
