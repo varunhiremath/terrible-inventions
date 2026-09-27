@@ -13,7 +13,8 @@
 import { makeRng, type Rng } from '../engine/rng'
 import {
   ACCELERATION, BRAKING, BURN_PER_SECOND, CAN_EVERY, CAN_WORTH, CAR_LONG, CAR_WIDE,
-  DASHES, DRAG, FIELD, GRID_GAP, LANES, LENGTH_OF, MISSION_BONUS, RACER_LOOK, RACER_STEER,
+  COUNTDOWN, DASHES, DRAG, FIELD, GRID, GRID_ROW, LANES, LENGTH_OF, LIGHT_EVERY,
+  MISSION_BONUS, POLE, RACER_LOOK, RACER_STEER,
   REACT, SIGHT, SIGNAL_FOR, STEER_RATE, TANK, TOP_SPEED, WANDERS, WIDTH_OF,
   stageFor, topSpeedOn, type CarKind, type Racer, type Stage,
 } from './level'
@@ -24,8 +25,23 @@ export const STARTING_LIVES = 3
 /** How long you cannot be hit for after coming back from a crash. */
 export const MERCY = 2
 
+/**
+ * And how long after the lights go out.
+ *
+ * Five cars leave a four-lane grid three quarters of a lane apart, so the
+ * first second is all of them finding a lane at once with inches in it. A
+ * nudge in that second is not a mistake anybody made, and taking a life for
+ * it turned the opening of every stage into a coin toss — the first go at
+ * this grid lost one at the lights in every single run.
+ */
+export const START_MERCY = 1.6
+
 export type RoadEvent =
   | 'pass' | 'can' | 'crash' | 'dry' | 'stageDone' | 'skid' | 'warn' | 'siren'
+  /** One of the three lights coming on. */
+  | 'light'
+  /** And them going out. */
+  | 'green'
 
 export interface Input {
   left: boolean
@@ -84,7 +100,13 @@ export interface Racing {
   speed: number
   signal: -1 | 0 | 1
   signalFor: number
-  /** Where it finished, once it has. */
+  /**
+   * The clock reading when it crossed the line, once it has.
+   *
+   * A time, not a distance. It was a distance, which was fine while the only
+   * question was who was in front and useless the moment the finish had to
+   * say how long anybody took.
+   */
   finished: number | null
 }
 
@@ -136,6 +158,17 @@ export interface Run {
   canCooldown: number
   /** How many racers were already over the line when you crossed it. */
   place: number
+  /**
+   * Seconds since the lights went out, and the seconds before they do.
+   *
+   * The clock is the race: it is what the finish is reported in, what a best
+   * time is measured in, and the only number that can be compared with
+   * yesterday's. Nothing moves while `countdown` is running.
+   */
+  clock: number
+  countdown: number
+  /** The clock reading when you crossed the line. */
+  yourTime: number | null
 }
 
 export function newRun(number = 1, lives = STARTING_LIVES, score = 0, seed = 1): Run {
@@ -144,7 +177,8 @@ export function newRun(number = 1, lives = STARTING_LIVES, score = 0, seed = 1):
     stage,
     number,
     distance: 0,
-    lane: 1.5,
+    // Your grid slot: front row, a lane of your own.
+    lane: POLE.lane,
     speed: 0,
     fuel: TANK,
     cars: [],
@@ -165,6 +199,9 @@ export function newRun(number = 1, lives = STARTING_LIVES, score = 0, seed = 1):
     nextId: 1,
     lastWave: 0,
     place: 1,
+    clock: 0,
+    countdown: COUNTDOWN,
+    yourTime: null,
     canCooldown: CAN_EVERY * 0.4,
   }
 }
@@ -177,6 +214,11 @@ export function resume(run: Run): Run {
     speed: 0,
     stunned: 0,
     mercy: MERCY,
+    /*
+     * The clock keeps running. A crash costs you the time it costs you, which
+     * is the whole reason a time is worth recording — one that stopped for
+     * every prang would say nothing about the drive.
+     */
     lane: 1.5,
     events: [],
     // Enough in the tank to get going again. Coming back with an empty one
@@ -425,11 +467,9 @@ export function gridOf(_stage: Stage): Racing[] {
   return FIELD.map((who, i) => ({
     id: 1000 + i,
     who,
-    // Behind you, and staggered, so the first thing that happens in a stage is
-    // four sets of headlights arriving in your mirrors.
-    y: -GRID_GAP * (i + 1),
-    lane: i % LANES,
-    wants: i % LANES,
+    y: GRID[i].row * GRID_ROW,
+    lane: GRID[i].lane,
+    wants: GRID[i].lane,
     speed: 0,
     signal: 0 as -1 | 0 | 1,
     signalFor: 0,
@@ -439,7 +479,35 @@ export function gridOf(_stage: Stage): Racing[] {
 
 /** Where you are in the race: first is 1. */
 export function placeOf(run: Run): number {
-  return 1 + run.racers.filter((r) => (r.finished ?? r.y) > run.distance).length
+  return 1 + run.racers.filter((r) => r.finished !== null || r.y > run.distance).length
+}
+
+/**
+ * When somebody will cross the line, in seconds from the lights.
+ *
+ * Their real time if they are already over it. Otherwise the clock now plus
+ * however long the road they have left would take at the speed they are doing
+ * — an estimate, and the only honest one available: the stage ends when *you*
+ * cross the line, so the rest of the field genuinely has not finished yet. It
+ * is what a television graphic does at the flag, for the same reason.
+ */
+export function timeOf(run: Run, racer: Racing): number {
+  if (racer.finished !== null) return racer.finished
+  const left = run.stage.distance - racer.y
+  if (left <= 0) return run.clock
+  /*
+   * Worked out from the pace it has kept, not the speed it happens to be
+   * doing at the flag.
+   *
+   * The first version used the instantaneous speed, and a car that was sat
+   * behind a lorry at the moment you crossed the line got a projected finish
+   * of nearly forty seconds later — it printed "+37.95s" next to a car that
+   * was a few lengths behind. Average pace cannot do that: it is what the car
+   * has actually managed over the whole race, which is the right guess for
+   * what it will manage over the rest of it.
+   */
+  const pace = run.clock > 0 ? racer.y / run.clock : 0
+  return run.clock + left / Math.max(1, pace)
 }
 
 /**
@@ -469,10 +537,30 @@ export function racerLanes(
 }
 
 /** The order at the end of a stage, you included, best first. */
-export function standings(run: Run): { name: string; you: boolean; at: number }[] {
-  const rows = run.racers.map((r) => ({ name: r.who.name, you: false, at: r.finished ?? r.y }))
-  rows.push({ name: 'You', you: true, at: run.distance })
-  return rows.sort((a, b) => b.at - a.at)
+export interface Standing {
+  name: string
+  you: boolean
+  /** Seconds from the lights to the line. */
+  at: number
+  /** Whether that time is a real one or a projection from the flag. */
+  estimated: boolean
+}
+
+export function standings(run: Run): Standing[] {
+  const rows: Standing[] = run.racers.map((r) => ({
+    name: r.who.name,
+    you: false,
+    at: timeOf(run, r),
+    estimated: r.finished === null,
+  }))
+  rows.push({
+    name: 'You',
+    you: true,
+    at: run.yourTime ?? run.clock,
+    estimated: run.yourTime === null,
+  })
+  // Quickest first, which for a time is the other way round from a distance.
+  return rows.sort((a, b) => a.at - b.at)
 }
 
 /**
@@ -493,16 +581,25 @@ function aheadOf(run: Run, racer: Racing, lane: number): { gap: number; speed: n
     nearest = gap
     pace = speed
   }
+  /*
+   * Level does not count as ahead.
+   *
+   * Two cars at the same point in the same lane each read the other as
+   * something to follow, each matched the other's speed, and the pair of them
+   * crawled the whole race at less than a mile an hour. You cannot follow
+   * something that is beside you.
+   */
+  const LEVEL = CAR_LONG * 0.8
   for (const car of run.cars) {
     const gap = car.y - racer.y
-    if (gap < 0 || gap > RACER_LOOK * 2) continue
+    if (gap < LEVEL || gap > RACER_LOOK * 2) continue
     if (overlaps(mine, spread(car))) note(gap, car.speed)
   }
   // And each other, so they do not drive through their own field.
   for (const other of run.racers) {
     if (other.id === racer.id) continue
     const gap = other.y - racer.y
-    if (gap < 0 || gap > RACER_LOOK * 2) continue
+    if (gap < LEVEL || gap > RACER_LOOK * 2) continue
     if (overlaps(mine, occupies(other.lane))) note(gap, other.speed)
   }
   /*
@@ -515,8 +612,8 @@ function aheadOf(run: Run, racer: Racing, lane: number): { gap: number; speed: n
    * other — it will back off, look for a lane, and lose time doing it.
    */
   const yours = run.distance - racer.y
-  if (yours >= -CAR_LONG && yours <= RACER_LOOK * 2 && overlaps(mine, occupies(run.lane))) {
-    note(Math.max(0, yours), run.speed)
+  if (yours >= LEVEL && yours <= RACER_LOOK * 2 && overlaps(mine, occupies(run.lane))) {
+    note(yours, run.speed)
   }
   return { gap: nearest, speed: pace }
 }
@@ -576,23 +673,65 @@ function steerRacer(run: Run, racer: Racing, dt: number): void {
   const wouldShut = (lane: number) =>
     insideWindow && lastOpen !== null && overlaps(occupies(lane), occupies(lastOpen))
 
+  /*
+   * Alongside you, and therefore not allowed to come across.
+   *
+   * A racer only ever looked *ahead* down a lane, which was enough while the
+   * field started strung out behind. On a grid it is not: five cars set off
+   * three quarters of a lane apart, and the first thing each of them wants is
+   * a proper lane — so they converge, and the one beside you converges into
+   * you. From the driving seat that is a car appearing out of nowhere and
+   * taking a life, which is the fault this grid was meant to fix.
+   */
+  const alongside = Math.abs(racer.y - run.distance) < CAR_LONG * 1.8
+  const intoYou = (lane: number) =>
+    alongside && overlaps(occupies(lane), occupies(run.lane))
+
+  /*
+   * And not into one of its own either.
+   *
+   * Without this, two of them leaving the grid picked the same lane in the
+   * same instant — the only one left that was not beside the player — and
+   * ended the race stacked on top of each other doing walking pace.
+   */
+  const intoOther = (lane: number) =>
+    run.racers.some(
+      (other) =>
+        other.id !== racer.id &&
+        other.finished === null &&
+        Math.abs(other.y - racer.y) < CAR_LONG * 1.8 &&
+        overlaps(occupies(lane), occupies(other.lane)),
+    )
+
   // Already in it, or heading into it: get out, whether or not a move is under
   // way. Waiting for the current move to finish was the other half of the gap.
-  const mustLeave = wouldShut(racer.lane) || (moving && wouldShut(racer.wants))
+  const mustLeave =
+    wouldShut(racer.lane) || (moving && (wouldShut(racer.wants) || intoYou(racer.wants)))
 
   if (!moving || mustLeave) {
-    const room = aheadOf(run, racer, here).gap
+    // Judged from where it actually is, not from the lane it rounds to. On
+    // the grid a car sits three quarters of a lane over, and rounding put it
+    // in a lane it was not in — one that happened to contain the player, so
+    // two of the field sat on the line waiting for a car that was not in
+    // front of them to move. They finished the race at nought miles an hour.
+    const room = aheadOf(run, racer, racer.lane).gap
     if (mustLeave || room < lookFor(racer)) {
       let best = here
       let most = mustLeave ? -Infinity : room
       for (const lane of [here - 1, here + 1, here - 2, here + 2]) {
         if (lane < 0 || lane > LANES - 1) continue
-        // Never into the last lane left open, if the player is about to need it.
-        if (wouldShut(lane)) continue
+        // Never into the last lane left open, if the player is about to need
+        // it, and never across the player while level with them.
+        if (wouldShut(lane) || intoYou(lane) || intoOther(lane)) continue
         const there = aheadOf(run, racer, lane).gap
         if (there > most) { most = there; best = lane }
       }
-      if (best !== here || mustLeave) {
+      /*
+       * Only if there is somewhere better to be. Forcing the move when the
+       * search found nothing meant re-targeting the lane it was already in,
+       * over and over, which cancelled its own indicator every slice.
+       */
+      if (best !== here) {
         racer.wants = best
         racer.signal = best === here ? 0 : best > here ? 1 : -1
         /*
@@ -604,6 +743,25 @@ function steerRacer(run: Run, racer: Racing, dt: number): void {
          */
         racer.signalFor = best === here || mustLeave ? 0 : SIGNAL_FOR
       }
+    }
+  }
+
+  /*
+   * Straightening up.
+   *
+   * A grid slot is three quarters of a lane over, so a car that leaves the
+   * line and never thinks about it again spends the whole race straddling a
+   * white line — which looks wrong and, worse, takes up two lanes of a
+   * four-lane road for as long as it lasts. Once there is room, it tidies
+   * itself into the nearest proper lane.
+   */
+  if (Math.abs(racer.wants - racer.lane) < 0.01) {
+    const tidy = Math.min(LANES - 1, Math.max(0, Math.round(racer.lane)))
+    const askew = Math.abs(racer.lane - tidy) > 0.01
+    if (askew && !wouldShut(tidy) && !intoYou(tidy) && !intoOther(tidy)) {
+      racer.wants = tidy
+      racer.signal = tidy > racer.lane ? 1 : -1
+      racer.signalFor = SIGNAL_FOR * 0.5
     }
   }
 
@@ -651,7 +809,7 @@ function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
    * them and took one of their lives. It matches the speed of whatever it is
    * following now, and closes the last of the gap at nothing at all.
    */
-  const { gap, speed: theirs } = aheadOf(run, racer, Math.round(racer.lane))
+  const { gap, speed: theirs } = aheadOf(run, racer, racer.lane)
   /*
    * How fast it can be going and still stop in the room it has.
    *
@@ -669,6 +827,7 @@ function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
     ? Math.min(capped, racer.speed + ACCELERATION * dt)
     : Math.max(capped, racer.speed - BRAKING * dt)
   racer.speed = Math.max(0, Math.min(topSpeedOn(run.stage) * 1.05, racer.speed))
+  const was = racer.y
   racer.y += racer.speed * dt
 
   /*
@@ -682,11 +841,15 @@ function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
    */
   const onto = run.distance - racer.y
   if (onto > 0 && onto < CAR_LONG * 1.2 && overlaps(occupies(racer.lane), occupies(run.lane))) {
-    racer.y = run.distance - CAR_LONG * 1.2
+    // Held back, never shoved backwards. Setting the position outright put a
+    // car behind where it had already got to, which on the grid — where the
+    // player is at nought — meant a negative distance and a car that could
+    // never catch up with its own starting line.
+    racer.y = Math.min(racer.y, Math.max(was, run.distance - CAR_LONG * 1.2))
     racer.speed = Math.min(racer.speed, Math.max(0, run.speed))
   }
 
-  if (racer.y >= run.stage.distance) racer.finished = racer.y
+  if (racer.y >= run.stage.distance) racer.finished = run.clock
 }
 
 export function step(run: Run, input: Input, dt: number): Run {
@@ -715,6 +878,29 @@ export function step(run: Run, input: Input, dt: number): Run {
     seed: (run.seed * 1664525 + 1013904223) >>> 0,
   }
 
+  /*
+   * The lights.
+   *
+   * Nothing moves at all while they are on — not you, not the field, not the
+   * traffic. It is three seconds of a five-car grid sitting still, and it is
+   * the only moment in this game where nothing is being asked of anybody.
+   *
+   * One event per light, raised when the whole second it belongs to ticks
+   * over. Comparing the ceilings either side of the slice is how a fixed step
+   * finds an edge; counting on the clock landing exactly on a second is how
+   * you find it about half the time.
+   */
+  if (next.countdown > 0) {
+    const before = Math.ceil(next.countdown / LIGHT_EVERY)
+    next.countdown = Math.max(0, next.countdown - dt)
+    const after = Math.ceil(next.countdown / LIGHT_EVERY)
+    if (after !== before) next.events.push(next.countdown > 0 ? 'light' : 'green')
+    if (next.countdown === 0) next.mercy = START_MERCY
+    next.speed = 0
+    return next
+  }
+
+  next.clock += dt
   next.mercy = Math.max(0, next.mercy - dt)
 
   // --- the pedals ----------------------------------------------------------
@@ -874,6 +1060,7 @@ export function step(run: Run, input: Input, dt: number): Run {
   // --- the end of the stage --------------------------------------------------
   if (next.distance >= next.stage.distance) {
     next.status = 'stageDone'
+    next.yourTime = next.clock
     next.place = placeOf(next)
     // Finishing money, and more of it the higher up you come.
     next.score += 500 + Math.round(next.fuel) * 5 + Math.max(0, 5 - next.place) * 250

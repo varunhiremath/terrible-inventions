@@ -971,6 +971,28 @@ export const SIREN: Track = {
   parts: [{ wave: 'pulse', duty: 0.25, gain: 0.09, sustain: 0.6, pattern: 'B4 E5 B4 E5 .  . ' }],
 }
 
+/**
+ * One of the three lights coming on. A tick, and nothing more than a tick.
+ *
+ * The whole point of a countdown is the silence between the beats, so this
+ * has to be short enough to leave some.
+ */
+export const LIGHT: Track = {
+  name: 'Light',
+  beatsPerMinute: 240,
+  parts: [{ wave: 'pulse', duty: 0.5, gain: 0.07, sustain: 0.4, pattern: 'B4 B5' }],
+}
+
+/** And them going out. Up, and quick, because you should already be moving. */
+export const GREEN: Track = {
+  name: 'Green',
+  beatsPerMinute: 210,
+  parts: [
+    { wave: 'pulse', duty: 0.25, gain: 0.14, sustain: 0.55, pattern: 'E5 B5 E6 .  . ' },
+    { wave: 'triangle', gain: 0.16, sustain: 0.7, pattern: 'E3 .  E4 .  . ' },
+  ],
+}
+
 /** The end of a stage. */
 export const ARRIVE: Track = {
   name: 'Arrive',
@@ -1204,6 +1226,8 @@ export const CAVE_CUES = {
 
 /** The road's own set, all in E natural minor, like the driving loop. */
 export const ROAD_CUES = {
+  light: LIGHT,
+  green: GREEN,
   overtake: OVERTAKE,
   refuel: REFUEL,
   prang: PRANG,

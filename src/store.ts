@@ -78,6 +78,13 @@ interface State {
   setVoice: (voice: VoiceMode) => void
   setMusic: (music: boolean) => void
   setRewards: (rewards: string[]) => void
+  /**
+   * Records a lap of the road, keeping it only if it is quicker than the last.
+   *
+   * Returns whether it was: the screen wants to say so, and nobody wants to be
+   * told they have set a personal best when they have not.
+   */
+  recordLap: (stage: number, seconds: number) => boolean
   replaceSave: (save: SaveState) => void
 }
 
@@ -258,6 +265,16 @@ export const useStore = create<State>((set, get) => ({
     const next: SaveState = { ...get().save, rewards }
     set({ save: next })
     void persistSave(next)
+  },
+
+  recordLap: (stage, seconds) => {
+    const best = get().save.roadBest ?? {}
+    const before = best[stage]
+    if (before !== undefined && before <= seconds) return false
+    const next: SaveState = { ...get().save, roadBest: { ...best, [stage]: seconds } }
+    set({ save: next })
+    void persistSave(next)
+    return true
   },
 
   replaceSave: (save) => {

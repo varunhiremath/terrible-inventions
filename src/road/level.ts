@@ -326,12 +326,15 @@ export function topSpeedOn(stage: Stage): number {
  * you rather than against the fixed number — otherwise the later stages, where
  * you are half as fast again, would leave them standing.
  *
- * The numbers look high — the leader is nominally as quick as you are — and
- * they have to be. A racer spends a good part of a stage stuck behind the same
- * traffic you are, backing off and weaving, and loses far more to that than
- * the figure suggests. At four fifths of your speed on paper they were beaten
- * comfortably by a test driver that crashed ten times a stage, which is not a
- * race. What actually decides it is who gets held up least.
+ * The numbers look high for cars you are meant to beat, and they have to be: a
+ * racer spends a good part of a stage stuck behind the same traffic you are,
+ * backing off and weaving, and loses far more to that than the figure
+ * suggests. What actually decides a stage is who gets held up least.
+ *
+ * They have been tuned twice. They were low while the field started strung out
+ * behind you, because the head start did half the work; once everybody lined
+ * up on the same grid that handicap vanished and the same numbers put the test
+ * driver last in every stage. These are the numbers for a standing start.
  */
 export interface Racer {
   name: string
@@ -344,20 +347,73 @@ export interface Racer {
 }
 
 export const FIELD: readonly Racer[] = [
-  { name: 'Piston', colour: '#e8503a', trim: '#7d1f14', pace: 1, swing: 0.06 },
-  { name: 'Gasket', colour: '#f2b134', trim: '#8a5f10', pace: 0.96, swing: 0.09 },
-  { name: 'Tack', colour: '#5ad2e0', trim: '#1c6570', pace: 0.93, swing: 0.05 },
-  { name: 'Grinder', colour: '#9b7ede', trim: '#4a2f80', pace: 0.89, swing: 0.11 },
+  { name: 'Piston', colour: '#e8503a', trim: '#7d1f14', pace: 0.88, swing: 0.06 },
+  { name: 'Gasket', colour: '#f2b134', trim: '#8a5f10', pace: 0.85, swing: 0.09 },
+  { name: 'Tack', colour: '#5ad2e0', trim: '#1c6570', pace: 0.82, swing: 0.05 },
+  { name: 'Grinder', colour: '#9b7ede', trim: '#4a2f80', pace: 0.78, swing: 0.11 },
 ]
 
 /**
- * How far ahead or behind the field starts, in car lengths.
+ * The grid.
  *
- * Staggered, and all of it behind you: starting a race from the back of the
- * grid is a fine thing in a game you can restart and a miserable one in a game
- * where the first thirty seconds decide it.
+ * Everybody is on it before the lights, nobody arrives from behind, and
+ * nothing moves until they go out. That is the thing that needed fixing: the
+ * field used to be strung out down the road and came past in the first few
+ * seconds, which from the driving seat is four cars appearing out of nowhere
+ * and one of them hitting you.
+ *
+ * It is staggered rather than one straight line, and that is not a detail.
+ * Five cars will not fit across four lanes: put them all on the line and two
+ * of them have to straddle a white line, which takes up two lanes each — so
+ * three quarters of the road is shut at the start, and a car that never quite
+ * tidies itself up keeps a lane shut for the whole race. One line was tried
+ * and that is exactly what it did. A proper grid is two by two by one, every
+ * car in a lane of its own, which is also what a real one looks like.
+ *
+ * You start at the back of it, and every one of them is ahead of you where you
+ * can see them. That is deliberate and it is the whole point of the change:
+ * the complaint was cars arriving from behind, and the surest answer to it is
+ * a grid with nothing behind you on it. It also means the first thing you see
+ * when the lights go out is four cars to catch, which is a better picture of a
+ * race than an empty road.
+ *
+ * Putting you on the front row was tried first. The view only shows a couple
+ * of lengths of road behind you, so two of the field sat off the bottom of the
+ * screen at the lights, which is the same fault in a nicer hat.
+ *
+ * The slowest of them, Grinder, is the one directly ahead of you, so the first
+ * car you have to get past is the one you can.
  */
-export const GRID_GAP = 9
+export interface Slot {
+  lane: number
+  /** Rows ahead of you on the grid. */
+  row: number
+}
+
+export const GRID: readonly Slot[] = [
+  { lane: 0, row: 2 },
+  { lane: 3, row: 2 },
+  { lane: 2, row: 1 },
+  { lane: 1, row: 1 },
+]
+
+/** Yours: the back of the grid, second lane in, with room either side. */
+export const POLE: Slot = { lane: 1, row: 0 }
+
+/** How far back each row sits, in car lengths. */
+export const GRID_ROW = CAR_LONG * 1.6
+
+/**
+ * The lights.
+ *
+ * Three of them, a second apart, and then green. A standing start needs a
+ * moment of nothing happening before it or it is not a start, it is just the
+ * screen appearing — and the moment is what makes the first corner worth
+ * arriving at.
+ */
+export const LIGHTS = 3
+export const LIGHT_EVERY = 1
+export const COUNTDOWN = LIGHTS * LIGHT_EVERY
 
 /** How quickly a racer changes lane. Quicker than traffic; they mean it. */
 export const RACER_STEER = 2.6

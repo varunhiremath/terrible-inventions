@@ -527,6 +527,64 @@ export function drawRun(ctx: Ctx, run: Run, lane: number, view: View, w: number,
 }
 
 /**
+ * The start lights, on a gantry over the road.
+ *
+ * Three of them come on a second apart and then all of them go out, which is
+ * the one signal every racing game and every real race agrees on. Drawn over
+ * the road rather than in the readout strip, because a light you have to look
+ * away from the road to see is not a start light.
+ */
+export function drawLights(
+  ctx: Ctx,
+  countdown: number,
+  lights: number,
+  every: number,
+  w: number,
+  top: number,
+  h: number,
+): void {
+  const done = countdown <= 0
+  const size = Math.min(w * 0.075, h * 0.1)
+  const gap = size * 2.6
+  const cy = top + h * 0.3
+
+  if (!done) {
+    // The gantry.
+    ctx.fillStyle = '#12151c'
+    ctx.fillRect(w / 2 - gap * 1.8, cy - size * 1.9, gap * 3.6, size * 3.4)
+    ctx.strokeStyle = '#2a3040'
+    ctx.lineWidth = Math.max(2, size * 0.12)
+    ctx.strokeRect(w / 2 - gap * 1.8, cy - size * 1.9, gap * 3.6, size * 3.4)
+  }
+
+  // How many are lit: one more each second as the clock counts down.
+  const lit = done ? 0 : lights - Math.ceil(countdown / every) + 1
+
+  for (let i = 0; i < lights; i++) {
+    const cx = w / 2 + (i - (lights - 1) / 2) * gap
+    ctx.beginPath()
+    ctx.arc(cx, cy, size, 0, Math.PI * 2)
+    ctx.fillStyle = done ? '#1c2a1c' : i < lit ? '#ff3b2f' : '#2a1414'
+    ctx.fill()
+    ctx.strokeStyle = '#0a0c11'
+    ctx.lineWidth = Math.max(2, size * 0.14)
+    ctx.stroke()
+
+    // A lit one throws some light about.
+    if (!done && i < lit) {
+      const glow = ctx.createRadialGradient(cx, cy, size * 0.4, cx, cy, size * 2.4)
+      glow.addColorStop(0, 'rgba(255,59,47,0.45)')
+      glow.addColorStop(1, 'rgba(255,59,47,0)')
+      ctx.fillStyle = glow
+      ctx.beginPath()
+      ctx.arc(cx, cy, size * 2.4, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+}
+
+
+/**
  * The pad.
  *
  * Same look as everywhere else in the app — a dark disc that brightens under a

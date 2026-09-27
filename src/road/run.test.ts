@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { CAR_LONG, LANES, REACT, SIGHT, STAGES, TANK, TOP_SPEED, stageFor } from './level'
+import {
+  CAR_LONG, CAR_WIDE, COUNTDOWN, GRID_ROW, LANES, LIGHTS, REACT, SIGHT, STAGES, TANK,
+  TOP_SPEED, stageFor,
+} from './level'
 import {
   FIXED, NO_INPUT, blockedLanes, missionMet, newRun, placeOf, racerLanes, resume,
-  standings, step, type Input, type Run,
+  standings, step, timeOf, type Input, type Run,
 } from './run'
 
 /**
@@ -40,18 +43,26 @@ const drive = (run: Run, input: Input, seconds: number) => {
  */
 function makeDriver() {
   let target: number | null = null
+  // It has to see the racers as well as the traffic. It did not, which is
+  // fair enough when the field was strung out behind and fatal once everybody
+  // starts level: it drove straight into them all the way down the road and
+  // reported the opening stage as three times harder than it is.
 
   return (run: Run): Input => {
     /** Seconds until he would reach the next car in a lane, or forever. */
     const secondsTo = (lane: number): number => {
       let soonest = Infinity
-      for (const car of run.cars) {
-        if (Math.abs(car.lane - lane) >= 0.9) continue
-        const gap = car.y - run.distance
-        if (gap < 0) continue
-        const closing = run.speed - car.speed
-        if (closing <= 0.5) continue
+      const note = (at: number, speed: number, where: number) => {
+        if (Math.abs(where - lane) >= 0.9) return
+        const gap = at - run.distance
+        if (gap < 0) return
+        const closing = run.speed - speed
+        if (closing <= 0.5) return
         soonest = Math.min(soonest, gap / closing)
+      }
+      for (const car of run.cars) note(car.y, car.speed, car.lane)
+      for (const racer of run.racers) {
+        if (racer.finished === null) note(racer.y, racer.speed, racer.lane)
       }
       return soonest
     }
@@ -183,7 +194,14 @@ describe('the road', () => {
       ['left', { ...NO_INPUT, left: true }],
       ['right', { ...NO_INPUT, right: true }],
     ] as const) {
-      let run: Run = { ...newRun(1), stage: { ...stageFor(1), traffic: 0 } }
+      // Past the lights first: nothing moves while they are on, which is the
+      // point of them, and a six-second test that spends three of them on the
+      // grid measures half of what it meant to.
+      // No field either: steering into one of them is a crash, which resets
+      // him to the middle of the road and makes this measure nothing.
+      let run: Run = {
+        ...newRun(1), stage: { ...stageFor(1), traffic: 0 }, countdown: 0, racers: [],
+      }
       for (let t = 0; t < 6; t += FIXED) {
         run = step({ ...run, cars: [] }, input, FIXED)
       }
@@ -206,7 +224,7 @@ describe('the road', () => {
   })
 
   it('says so, once, the moment the tank runs out', () => {
-    let run = { ...newRun(1), fuel: 0.05, speed: TOP_SPEED / 2 }
+    let run = { ...newRun(1), fuel: 0.05, speed: TOP_SPEED / 2, countdown: 0 }
     const heard: string[] = []
     for (let t = 0; t < 3; t += FIXED) {
       run = step(run, { ...NO_INPUT, go: true }, FIXED)
@@ -363,18 +381,86 @@ describe('the vehicles', () => {
  * traffic, and this is the third time this project has had to learn it.
  */
 describe('the field', () => {
-  it('lines four of them up behind you', () => {
+  it('puts all four of them on the grid, in lanes of their own', () => {
+    /*
+     * Everybody on the grid before the lights, nobody arriving from behind.
+     * They used to be strung out down the road and came past in the first few
+     * seconds, which from the driving seat is four cars appearing out of
+     * nowhere and one of them hitting you.
+     *
+     * Staggered, because five cars do not fit across four lanes: one line
+     * means two of them straddling a white line, which takes up two lanes
+     * each and shuts most of the road at the off.
+     */
     const run = newRun(1)
     expect(run.racers).toHaveLength(4)
-    for (const racer of run.racers) expect(racer.y).toBeLessThan(0)
     expect(new Set(run.racers.map((r) => r.who.name)).size).toBe(4)
+
+    // On the grid, not out on the road: a few lengths ahead at most, and all
+    // of them where they can be seen.
+    for (const racer of run.racers) {
+      expect(racer.y).toBeGreaterThanOrEqual(0)
+      expect(racer.y).toBeLessThan(GRID_ROW * 3)
+      // Every one of them in a proper lane, not on a line between two.
+      expect(Math.abs(racer.lane - Math.round(racer.lane))).toBeLessThan(1e-9)
+    }
+    expect(Math.abs(run.lane - Math.round(run.lane))).toBeLessThan(1e-9)
+
+    // Nobody parked on top of anybody, row by row.
+    const rows = new Map<string, number[]>()
+    for (const racer of [...run.racers, { y: run.distance, lane: run.lane }]) {
+      const key = racer.y.toFixed(2)
+      rows.set(key, [...(rows.get(key) ?? []), racer.lane])
+    }
+    for (const [row, lanes] of rows) {
+      const sorted = [...lanes].sort((a, b) => a - b)
+      for (let i = 1; i < sorted.length; i++) {
+        expect(sorted[i] - sorted[i - 1], `two cars share a slot on row ${row}`)
+          .toBeGreaterThan(CAR_WIDE)
+      }
+    }
+
+    // And nobody behind you at all, which is where the rear-ending came from.
+    for (const racer of run.racers) {
+      expect(racer.y, `${racer.who.name} is sitting in your mirrors`).toBeGreaterThan(0)
+    }
   })
 
-  it('puts you first on the grid and not for long', () => {
-    expect(placeOf(newRun(1))).toBe(1)
-    // Left alone, with the pedal up, they all go past.
+  it('holds everybody still until the lights go out', () => {
+    let run = newRun(1)
+    const lights: string[] = []
+    for (let t = 0; t < COUNTDOWN - FIXED; t += FIXED) {
+      run = step(run, { ...NO_INPUT, go: true }, FIXED)
+      lights.push(...run.events)
+    }
+    expect(run.distance, 'the pedal did something before the start').toBe(0)
+    const grid = newRun(1)
+    run.racers.forEach((racer, i) => {
+      expect(racer.y, `${racer.who.name} jumped the start`).toBe(grid.racers[i].y)
+    })
+    expect(run.clock, 'the race clock started early').toBe(0)
+
+    // Three lights, then green, and the clock starts.
+    run = step(run, { ...NO_INPUT, go: true }, FIXED)
+    lights.push(...run.events)
+    expect(lights.filter((e) => e === 'light')).toHaveLength(LIGHTS - 1)
+    expect(lights.filter((e) => e === 'green')).toHaveLength(1)
+
+    run = step(run, { ...NO_INPUT, go: true }, FIXED)
+    expect(run.clock).toBeGreaterThan(0)
+    expect(run.distance).toBeGreaterThan(0)
+  })
+
+  it('puts you at the back of the grid, with all of them to catch', () => {
+    expect(placeOf(newRun(1))).toBe(5)
+    // And leaving the pedal alone keeps you there.
     const idle = drive(newRun(1), NO_INPUT, 20)
-    expect(placeOf(idle)).toBeGreaterThan(1)
+    expect(placeOf(idle)).toBe(5)
+    // While driving gets you past them.
+    const driver = makeDriver()
+    let run = newRun(1, 99, 0, 7)
+    for (let t = 0; t < 40 && run.status === 'driving'; t += FIXED) run = step(run, driver(run), FIXED)
+    expect(placeOf(run), 'never got past anybody').toBeLessThan(5)
   })
 
   it('is a close race rather than a procession', () => {
@@ -394,18 +480,39 @@ describe('the field', () => {
     for (const number of [1, 3, 6]) {
       const drive2 = makeDriver()
       let run = newRun(number, 99, 0, 7)
+      let pranged = 0
       for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
         run = step(run, drive2(run), FIXED)
-        if (run.status === 'crashed') run = resume(run)
+        if (run.status === 'crashed') { pranged += 1; run = resume(run) }
       }
       expect(run.status, `stage ${number}`).toBe('stageDone')
-      expect(run.place, `stage ${number}`).toBeLessThanOrEqual(3)
 
+      /*
+       * The margin, and measured against this driver's own mistakes.
+       *
+       * It crashes a dozen times on the last stage, and a crash costs about
+       * three seconds — a stop, a stunned moment and the climb back to speed.
+       * Demanding a podium from it would mean a field slow enough that a
+       * child beats it without noticing there was one. What has to be true is
+       * that the gap at the flag is explained by the crashes rather than by
+       * the field being out of reach, so a clean run wins and a scrappy one
+       * does not.
+       */
       const order = standings(run)
-      const behind = order[0].at - (order.find((row) => row.you)?.at ?? 0)
-      expect(behind, `stage ${number}: the leader was out of sight`)
-        .toBeLessThan(run.stage.distance * 0.06)
+      const behind = (order.find((row) => row.you)?.at ?? 0) - order[0].at
+      const excused = pranged * 3.5 + 4
+      expect(behind, `stage ${number}: beaten by more than ${pranged} crashes explain`)
+        .toBeLessThan(excused)
     }
+
+    // And the gentle end of it has to be winnable by this driver outright.
+    const easy = makeDriver()
+    let first = newRun(1, 99, 0, 7)
+    for (let t = 0; t < 400 && first.status !== 'stageDone'; t += FIXED) {
+      first = step(first, easy(first), FIXED)
+      if (first.status === 'crashed') first = resume(first)
+    }
+    expect(first.place, 'the opening stage should be winnable').toBe(1)
   })
 
   it('beats somebody who dawdles', () => {
@@ -445,6 +552,21 @@ describe('the field', () => {
         run = step(run, driver(run), FIXED)
         if (run.status === 'crashed') run = resume(run)
         if (run.status !== 'driving') break
+        /*
+         * Not on the grid. Five cars sit on the line three quarters of a lane
+         * apart, so by this measure every lane is shut before the lights go
+         * out — and so it is, and it does not matter in the least, because
+         * nothing is moving and nobody is arriving anywhere. The rule is about
+         * a stretch you are travelling into.
+         */
+        /*
+         * And not in the first few seconds after them either. The grid is four
+         * cars across four lanes a couple of lengths ahead, all accelerating
+         * at the same rate as you — which this measure calls a wall and which
+         * is nothing of the kind: you are not closing on it. Within a few
+         * seconds their paces differ and the field strings out.
+         */
+        if (run.clock < 4) continue
 
         /*
          * Measured with the game's own definitions, not a second set written
@@ -552,18 +674,141 @@ describe('the field', () => {
     const order = standings(run)
     expect(order).toHaveLength(5)
     expect(order.filter((row) => row.you)).toHaveLength(1)
-    // Best first.
+    // Quickest first, which for a time is the opposite way round from the
+    // distances this used to be sorted on.
     for (let i = 1; i < order.length; i++) {
-      expect(order[i - 1].at).toBeGreaterThanOrEqual(order[i].at)
+      expect(order[i].at).toBeGreaterThanOrEqual(order[i - 1].at)
     }
+    // And your own time is a real one, not a projection.
+    expect(order.find((row) => row.you)?.estimated).toBe(false)
+    expect(run.yourTime).toBeGreaterThan(0)
   })
 
   it('pays a place mission when the place is made', () => {
     const stage = STAGES.findIndex((s) => s.mission.kind === 'place')
     expect(stage, 'no stage is a race').toBeGreaterThanOrEqual(0)
     const run = newRun(stage + 1)
-    // On the grid you are first, so the mission reads as met before the off —
-    // which is fine, because it is only ever counted at the line.
-    expect(missionMet(run)).toBe(true)
+    // You start last, so a place mission is not met until you have done
+    // something about it. It is only ever counted at the line anyway.
+    expect(missionMet(run)).toBe(false)
+    const won = { ...run, racers: run.racers.map((r) => ({ ...r, y: -1 })) }
+    expect(missionMet(won)).toBe(true)
+  })
+})
+
+/**
+ * The clock.
+ *
+ * A race that does not tell you how long it took is a race you cannot compare
+ * with the one you did yesterday, which is the whole reason a time is worth
+ * keeping at all.
+ */
+describe('the time', () => {
+  it('does not start until the lights do', () => {
+    let run = newRun(1)
+    run = drive(run, { ...NO_INPUT, go: true }, COUNTDOWN - FIXED * 2)
+    expect(run.clock).toBe(0)
+  })
+
+  it('runs from the lights to the line', () => {
+    const driver = makeDriver()
+    let run = newRun(1, 99, 0, 7)
+    for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+      run = step(run, driver(run), FIXED)
+      if (run.status === 'crashed') run = resume(run)
+    }
+    expect(run.status).toBe('stageDone')
+    expect(run.yourTime).not.toBeNull()
+    // Long enough to be a lap and short enough to be one stage of six.
+    expect(run.yourTime!).toBeGreaterThan(10)
+    expect(run.yourTime!).toBeLessThan(200)
+    // And it is the clock, not the wall: the countdown is not in it.
+    expect(run.yourTime!).toBeCloseTo(run.clock, 5)
+  })
+
+  it('keeps running through a crash', () => {
+    /*
+     * A crash costs you the time it costs you. A clock that stopped for every
+     * prang would make the quickest lap the one with the most crashes in it,
+     * which is the wrong lesson entirely.
+     */
+    let run = { ...newRun(1), countdown: 0 }
+    run = drive(run, { ...NO_INPUT, go: true }, 4)
+    const before = run.clock
+    const after = drive(resume({ ...run, status: 'crashed', lives: 2 }), NO_INPUT, 1)
+    expect(after.clock).toBeGreaterThan(before)
+  })
+
+  it('gives everybody a finishing time, real or projected', () => {
+    const driver = makeDriver()
+    let run = newRun(1, 99, 0, 7)
+    for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+      run = step(run, driver(run), FIXED)
+      if (run.status === 'crashed') run = resume(run)
+    }
+    const order = standings(run)
+    for (const row of order) {
+      expect(row.at, row.name).toBeGreaterThan(0)
+      expect(Number.isFinite(row.at), row.name).toBe(true)
+    }
+    // Anybody still out on the road when you crossed has an estimate, and
+    // anybody already over the line has a real time. Nothing else.
+    for (const racer of run.racers) {
+      const row = order.find((r) => r.name === racer.who.name)!
+      expect(row.estimated, racer.who.name).toBe(racer.finished === null)
+    }
+  })
+
+  it('cannot hand out a time of infinity to a stopped car', () => {
+    // A projection divides by a pace. A racer that has not moved at all would
+    // have divided by nought and printed a gap of Infinity.
+    let run = { ...newRun(1), countdown: 0, clock: 12 }
+    run = { ...run, racers: run.racers.map((r) => ({ ...r, speed: 0, y: 0 })) }
+    for (const racer of run.racers) expect(Number.isFinite(timeOf(run, racer))).toBe(true)
+  })
+
+  it('projects from the pace kept, not the speed at the flag', () => {
+    /*
+     * A car sitting behind a lorry at the moment you cross the line is not
+     * forty seconds from home. Reading its instantaneous speed said it was,
+     * and the result panel printed "+37.95s" beside a car a few lengths back.
+     */
+    const stage = stageFor(1)
+    let run = { ...newRun(1), countdown: 0, clock: 20 }
+    // Nearly home, having averaged a good pace, but stopped dead right now.
+    const stuck = { ...run.racers[0], y: stage.distance - 10, speed: 0 }
+    run = { ...run, racers: [stuck] }
+    const projected = timeOf(run, stuck) - run.clock
+    expect(projected).toBeGreaterThan(0)
+    expect(projected, 'a car ten lengths out was given half a minute').toBeLessThan(2)
+  })
+})
+
+describe('the getaway', () => {
+  it('gets all four of them off the line', () => {
+    /*
+     * Two of them used to sit on the grid for the whole race and finish at
+     * nought miles an hour, which the result panel dutifully reported as
+     * thirty-eight seconds behind. A racer three quarters of a lane over was
+     * being judged as if it were in the lane it rounds to — and that lane
+     * contained the player, so it politely waited for a car that was not in
+     * front of it.
+     */
+    let run = newRun(1, 99, 0, 5)
+    run = drive(run, { ...NO_INPUT, go: true }, COUNTDOWN + 6)
+    for (const racer of run.racers) {
+      expect(racer.y, `${racer.who.name} never left the line`).toBeGreaterThan(CAR_LONG * 4)
+      expect(racer.speed, `${racer.who.name} is not going anywhere`).toBeGreaterThan(1)
+    }
+  })
+
+  it('never shoves one of them backwards off the grid', () => {
+    // The bumper that keeps a racer out of the back of you used to set its
+    // position outright, which at the start line is a negative distance.
+    let run = newRun(1)
+    run = drive(run, NO_INPUT, COUNTDOWN + 3)
+    for (const racer of run.racers) {
+      expect(racer.y, `${racer.who.name} went backwards`).toBeGreaterThanOrEqual(0)
+    }
   })
 })

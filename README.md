@@ -23,7 +23,7 @@ the money taken out.
 | **The Caves** | Ten caves, a trophy in each, and a jetpack he has not tested | Between lives |
 | **The Dungeon** | Thirteen floors, one hour, every move a commitment | Between lives |
 | **The Pipes** | Run, jump, stomp, reach the flag | Between lives |
-| **The Road** | Four lanes, six stages, and four of his machines racing you to the line | Between lives; a right answer is half a tank and a car back |
+| **The Road** | Four lanes, six stages, and four of his machines racing you from a standing start | Between lives; a right answer is half a tank and a car back |
 | **The Long Way Out** | Fly to the eight real planets, in order, through what he has left in the way | None. Break things up for scrap, spend it at each world, and every world tells you something true |
 
 Two of them make the same promise in the model and prove it in a test: **there is always
@@ -31,6 +31,11 @@ a way through**. A screen with no gap in it is not difficulty, it is a coin toss
 Both games got that wrong first in the same way — a guarantee made when something is
 spawned does not survive anything moving relative to anything else afterwards — and both
 are fixed the same way, by freezing the relative geometry the moment it is laid down.
+
+The road is a race proper: a staggered grid, three red lights, and a clock that
+starts when they go out and does not stop for a crash. The result is read the way a
+result is read — the winner's time, and everybody else's gap to it — and your best time
+on each stage is kept on the device, so the thing to beat is your own from yesterday.
 
 The road's field of racers is the exception that proves it. A racer is not traffic: it
 moves at its own speed, so it can drift into the one lane the spawner left open and shut

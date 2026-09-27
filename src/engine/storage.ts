@@ -51,6 +51,15 @@ export interface SaveState {
    * one you dare not skip.
    */
   seenIntro: Record<string, boolean>
+  /**
+   * The quickest anybody has got round each stage of the road, in seconds.
+   *
+   * Keyed by stage number. Kept on the device with everything else, so the
+   * time to beat is his own from yesterday rather than a number somebody
+   * decided was good — which is the only kind of target worth chasing when
+   * you are the only person who plays.
+   */
+  roadBest: Record<number, number>
 }
 
 export function emptySave(): SaveState {
@@ -67,6 +76,7 @@ export function emptySave(): SaveState {
     coopLog: [],
     arcade: { level: 1, highScore: 0, powerUps: emptyPowerUps() },
     seenIntro: {},
+    roadBest: {},
   }
 }
 

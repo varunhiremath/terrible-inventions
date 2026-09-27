@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  CAR_LONG, CAR_WIDE, LANES, MISSION_BONUS, SIGHT, STAGES, TANK, kmh, missionSays, stageFor,
+  CAR_LONG, CAR_WIDE, COUNTDOWN, LANES, LIGHTS, LIGHT_EVERY, MISSION_BONUS, SIGHT, STAGES,
+  TANK, kmh, missionSays, stageFor,
 } from '../road/level'
 import {
   FIXED, STARTING_LIVES, missionMet, newRun, placeOf, resume, standings, step,
   type Input, type RoadEvent, type Run, type Status,
 } from '../road/run'
 import { createLatch, keyAt, padHeight, padLayout, type Button, type Key } from '../road/controls'
-import { drawPad, drawRun, type View } from '../road/draw'
+import { drawLights, drawPad, drawRun, type View } from '../road/draw'
 import { playCue, setHeat } from '../music/player'
 import type { CueName } from '../music/score'
 import { createPacer } from '../arcade/pacing'
@@ -41,10 +42,13 @@ const NOISE: Record<RoadEvent, CueName> = {
   skid: 'overtake',
   warn: 'warn',
   siren: 'siren',
+  light: 'light',
+  green: 'green',
 }
 
 /** Loudest thing first: one sound a frame, and never the overtake. */
-const LOUDEST: RoadEvent[] = ['stageDone', 'crash', 'dry', 'warn', 'can', 'siren', 'pass', 'skid']
+const LOUDEST: RoadEvent[] =
+  ['stageDone', 'crash', 'dry', 'green', 'light', 'warn', 'can', 'siren', 'pass', 'skid']
 if (LOUDEST.length !== Object.keys(NOISE).length) {
   throw new Error('a road event with no place in the order')
 }
@@ -60,6 +64,9 @@ interface Hud {
   missionDone: boolean
   /** Where you are in the race, first being 1. */
   place: number
+  /** Seconds since the lights, and the lights themselves. */
+  clock: number
+  countdown: number
 }
 
 /**
@@ -88,6 +95,8 @@ function firstRun(): Run {
 
 export function Road() {
   const go = useStore((s) => s.go)
+  const recordLap = useStore((s) => s.recordLap)
+  const bestSoFar = useStore((s) => s.save.roadBest)
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const runRef = useRef<Run | null>(null)
@@ -98,8 +107,17 @@ export function Road() {
   const buttons = useRef(createLatch())
   const [hud, setHud] = useState<Hud>({
     stage: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0,
-    missionDone: false, place: 1,
+    missionDone: false, place: 1, clock: 0, countdown: 0,
   })
+  /** Whether the lap just finished was the quickest one yet. */
+  const [beatIt, setBeatIt] = useState(false)
+  /*
+   * The times to beat, in a ref as well as in the save.
+   *
+   * The drawing loop runs outside React and cannot read a hook that changes;
+   * this is the same trick the pad uses. Written whenever a lap is recorded.
+   */
+  const bestRef = useRef<Record<number, number>>({})
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -175,7 +193,9 @@ export function Road() {
         if (
           next.number !== hud.stage || next.status !== hud.status ||
           Math.round(next.score) !== hud.score || Math.round(next.fuel) !== Math.round(hud.fuel) ||
-          kmh(next.speed) !== hud.speed || next.lives !== hud.lives || standing !== hud.place
+          kmh(next.speed) !== hud.speed || next.lives !== hud.lives || standing !== hud.place ||
+          Math.round(next.clock * 10) !== Math.round(hud.clock * 10) ||
+          Math.ceil(next.countdown) !== Math.ceil(hud.countdown)
         ) {
           setHud({
             stage: next.number,
@@ -187,6 +207,8 @@ export function Road() {
             gone: next.distance,
             missionDone: next.missionDone,
             place: standing,
+            clock: next.clock,
+            countdown: next.countdown,
           })
         }
 
@@ -349,6 +371,30 @@ export function Road() {
         ctx.fillText('F', gaugeX + gaugeW / 2, gaugeY - gaugeW * 0.6)
         ctx.textBaseline = 'middle'
 
+        /*
+         * The clock, under the mission line.
+         *
+         * Tenths, because a race is decided in them and because a number that
+         * only moves once a second does not look like it is running.
+         */
+        const best = bestRef.current[next.number]
+        const tenths = (seconds: number) => seconds.toFixed(1)
+        ctx.font = `bold ${text * 0.95}px ui-monospace, monospace`
+        ctx.textAlign = 'right'
+        ctx.fillStyle = best !== undefined && next.clock > best ? '#ff9d7a' : '#eef2f8'
+        ctx.fillText(`${tenths(next.clock)}s`, w - backRoom * 0.5, capH + text * 2.1)
+        if (best !== undefined) {
+          ctx.font = `bold ${text * 0.6}px ui-monospace, monospace`
+          ctx.fillStyle = '#8a91ab'
+          ctx.fillText(`BEST ${tenths(best)}`, w - backRoom * 0.5, capH + text * 3.1)
+        }
+        ctx.textAlign = 'left'
+
+        // The lights, over the road, while they are on and for a moment after.
+        if (next.countdown > 0 || next.clock < 0.9) {
+          drawLights(ctx, next.countdown, LIGHTS, LIGHT_EVERY, w, capH, middle)
+        }
+
         padRef.current = padLayout(w, h)
         const shape = padRef.current.map((k) => k.id).join(',')
         if (shape !== padShape.current) {
@@ -372,6 +418,34 @@ export function Road() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /*
+   * The times to beat, brought in from the save once.
+   *
+   * Into a ref as well as being read here, because the drawing loop runs
+   * outside React and has to be able to print the target while you are
+   * chasing it.
+   */
+  useEffect(() => {
+    bestRef.current = { ...(bestSoFar ?? {}) }
+  }, [bestSoFar])
+
+  /**
+   * A finished lap, offered to the record book.
+   *
+   * Only once per finish — the status stays on `stageDone` while the panel is
+   * up, and offering the same lap sixty times a second would be harmless but
+   * would also mean the "your best yet" line flickered off after the first.
+   */
+  const logged = useRef('')
+  useEffect(() => {
+    const run = runRef.current
+    if (hud.status !== 'stageDone' || !run || run.yourTime === null) return
+    const mark = `${run.number}:${run.yourTime.toFixed(3)}`
+    if (logged.current === mark) return
+    logged.current = mark
+    setBeatIt(recordLap(run.number, run.yourTime))
+  }, [hud.status, recordLap])
 
   // --- the glass ------------------------------------------------------------
   const readTouch = (e: React.PointerEvent) => {
@@ -443,15 +517,17 @@ export function Road() {
     const number = run.number + 1
     if (number > STAGES.length) return
     runRef.current = newRun(number, run.lives, run.score, run.seed)
-    setHud((h) => ({ ...h, status: 'driving', stage: number }))
+    setBeatIt(false)
+    setHud((h) => ({ ...h, status: 'driving', stage: number, clock: 0, countdown: COUNTDOWN }))
   }
 
   const startOver = () => {
     runRef.current = newRun(1)
     setHud({
       stage: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0,
-      missionDone: false, place: 1,
+      missionDone: false, place: 1, clock: 0, countdown: 0,
     })
+    setBeatIt(false)
   }
 
   const lastStage = hud.stage >= STAGES.length
@@ -470,7 +546,8 @@ export function Road() {
     >
       <header className="sr-only" aria-live="polite">
         STAGE {hud.stage} SCORE {hud.score} SPEED {hud.speed} LIVES {hud.lives}{' '}
-        FUEL {Math.round(hud.fuel)} PLACE {hud.place}
+        FUEL {Math.round(hud.fuel)} PLACE {hud.place}{' '}
+        {hud.countdown > 0 ? `LIGHTS ${Math.ceil(hud.countdown)}` : `TIME ${hud.clock.toFixed(1)}`}
       </header>
 
       <div ref={wrapRef} className="relative min-h-0 flex-1">
@@ -518,34 +595,53 @@ export function Road() {
               * with four names and yours somewhere among them is one you
               * either won or did not.
               */}
-            {hud.status === 'stageDone' && runRef.current && (
-              <ol className="mt-3 flex flex-col gap-1 short:mt-2 short:gap-0.5">
-                {standings(runRef.current).map((row, i) => (
-                  <li
-                    key={row.name}
-                    className={`flex items-baseline justify-between rounded-lg px-2 py-1 font-mono text-xs
-                                uppercase tracking-[0.15em] short:py-0.5 ${
-                      row.you ? 'bg-bolt/15 text-bolt' : 'text-dim'
-                    }`}
-                  >
-                    <span>
-                      <span className="mr-2 tabular-nums">{i + 1}</span>
-                      {row.name}
-                    </span>
-                    <span className="tabular-nums">
-                      {i === 0
-                        ? 'ON THE LINE'
-                        : (() => {
-                            const back = standings(runRef.current!)[0].at - row.at
-                            // "0 BACK" is not a gap, it is a photo finish, and
-                            // it should read like one.
-                            return back < 1 ? 'ON YOUR TAIL' : `${Math.round(back)} BACK`
-                          })()}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            )}
+            {hud.status === 'stageDone' && runRef.current && (() => {
+              const order = standings(runRef.current)
+              const winner = order[0].at
+              return (
+                <>
+                  <ol className="mt-3 flex flex-col gap-1 short:mt-2 short:gap-0.5">
+                    {order.map((row, i) => (
+                      <li
+                        key={row.name}
+                        className={`flex items-baseline justify-between rounded-lg px-2 py-1 font-mono text-xs
+                                    uppercase tracking-[0.15em] short:py-0.5 ${
+                          row.you ? 'bg-bolt/15 text-bolt' : 'text-dim'
+                        }`}
+                      >
+                        <span>
+                          <span className="mr-2 tabular-nums">{i + 1}</span>
+                          {row.name}
+                        </span>
+                        {/*
+                          * The winner's time, and everybody else's gap to it,
+                          * which is how a result is read everywhere else in
+                          * the world. A tilde on the ones still out on the
+                          * road when you crossed: their time is worked out
+                          * from where they had got to, because the stage ends
+                          * when you finish and they genuinely had not.
+                          */}
+                        <span className="tabular-nums">
+                          {i === 0
+                            ? `${row.at.toFixed(2)}s`
+                            : `${row.estimated ? '~' : ''}+${(row.at - winner).toFixed(2)}s`}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+
+                  <p className={`mt-2 font-mono text-xs font-bold uppercase tracking-[0.2em] short:mt-1 ${
+                    beatIt ? 'text-moss' : 'text-dim'
+                  }`}>
+                    {beatIt
+                      ? `Your best yet — ${(hud.clock).toFixed(2)}s`
+                      : bestRef.current[hud.stage] !== undefined
+                        ? `Your best here: ${bestRef.current[hud.stage].toFixed(2)}s`
+                        : 'No time to beat here yet'}
+                  </p>
+                </>
+              )
+            })()}
 
             <div className="mt-5 flex flex-col gap-2">
               {hud.status === 'stageDone' && !lastStage && (

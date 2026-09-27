@@ -22,8 +22,8 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 412, height: 915 } })
 const problems = []
 
-const open = async (game) => {
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
+const open = async (game, query = '') => {
+  await page.goto(`http://127.0.0.1:4173/${query}`, { waitUntil: 'networkidle' })
   await page.waitForTimeout(700)
   await page.getByRole('button', { name: game }).first().click()
   await page.waitForTimeout(500)
@@ -53,11 +53,18 @@ else {
   if ((await progress()) <= before) problems.push('the run did not carry on after the fact card')
 }
 
-// --- the road: the maths question that comes up when you prang -------------
-await open(/the road/i)
+/*
+ * --- the road: the maths question that comes up when you prang -------------
+ *
+ * On a late stage, because the opening one is nearly empty: holding the pedal
+ * down the first stage gets you to the flag without hitting anything, and this
+ * then reported "the road never asked a question", which was true and was not
+ * a fault.
+ */
+await open(/the road/i, '?stage=5')
 await page.keyboard.down('ArrowUp')
 let asked = false
-for (let wait = 0; wait < 40 && !asked; wait++) {
+for (let wait = 0; wait < 60 && !asked; wait++) {
   await page.waitForTimeout(1000)
   asked = (await page.locator('.rise-in.block-btn').count()) > 0
 }
