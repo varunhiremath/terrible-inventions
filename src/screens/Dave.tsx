@@ -29,6 +29,7 @@ import { OPENERS } from '../lines'
 import { useStore } from '../store'
 import { jetScale, spareLives } from '../workshop/kit'
 import { Interlude } from './Interlude'
+import { LevelWipe } from '../ui/LevelWipe'
 
 /**
  * The caves.
@@ -482,7 +483,7 @@ export function Dave() {
     setHud((h) => ({ ...h, status: 'playing', message: null, lives: gameRef.current!.lives }))
   }
 
-  const nextLevel = () => {
+  const advanceNow = () => {
     const game = gameRef.current
     if (!game) return
     silence()
@@ -494,6 +495,17 @@ export function Dave() {
     clock.current = 0
     setHud((h) => ({ ...h, status: 'playing', level: number, message: null }))
   }
+
+  /*
+   * The walk to the next level, and then the next level.
+   *
+   * Cutting straight from a finished board to a fresh one loses the one moment
+   * in the game that is purely a reward, so the tap plays a short scene first
+   * and `advanceNow` runs when it is over.
+   */
+  const [wipe, setWipe] = useState<number | null>(null)
+  const nextLevel = () => setWipe((gameRef.current?.number ?? 1) + 1)
+
 
   const lastLevel = hud.level >= 10
   // Losing a life asks you something and puts you straight back in. A panel
@@ -534,6 +546,16 @@ export function Dave() {
 
       <BackButton onClick={() => go('home')} />
 
+      {wipe !== null && (
+        <LevelWipe
+          scene="cave"
+          title={`Room ${wipe}`}
+          onDone={() => {
+            setWipe(null)
+            advanceNow()
+          }}
+        />
+      )}
       {asking && <Interlude onDone={again} reward="the life back" />}
 
       {overlay && (

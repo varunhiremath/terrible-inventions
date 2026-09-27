@@ -1,0 +1,44 @@
+<!doctype html>
+<!--
+  A bench for the level transitions, served by the dev server and left out of
+  the build (Vite only takes index.html as an entry).
+
+  It exists because six short animations cannot be judged from a diff, and
+  driving six games to a finished level to see each one takes minutes. This
+  puts all six side by side; `scripts/wipe-shot.mjs` photographs them at three
+  points through the two and a half seconds.
+
+      npx vite --port 5199
+      node scripts/wipe-shot.mjs
+-->
+<html>
+  <head><meta charset="utf-8" /><title>wipes</title></head>
+  <body style="margin:0;background:#000">
+    <div id="all" style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px"></div>
+    <script type="module">
+      import React from 'react'
+      import { createRoot } from 'react-dom/client'
+      import { LevelWipe } from '/src/ui/LevelWipe.tsx'
+      const scenes = ['maze', 'cave', 'pipes', 'dungeon', 'road', 'space']
+      const titles = ['Level 2', 'Room 4', 'Level 3', 'Level 7', 'Level 5', 'Mars']
+      const host = document.getElementById('all')
+      scenes.forEach((scene, i) => {
+        const box = document.createElement('div')
+        box.style.cssText = 'position:relative;height:260px;background:#0d1016'
+        // Tailwind is not loaded on this page, so the canvas would otherwise fall
+        // back to its intrinsic 300x150 and every scene would look cropped.
+        box.innerHTML = '<style>canvas{display:block;width:100%;height:100%}</style>'
+        host.appendChild(box)
+        createRoot(box).render(
+          React.createElement(LevelWipe, {
+            scene,
+            title: titles[i],
+            // Never advance: this page is only here to be looked at.
+            onDone: () => {},
+          }),
+        )
+      })
+      window.__ready = true
+    </script>
+  </body>
+</html>

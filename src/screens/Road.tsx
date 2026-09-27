@@ -25,6 +25,7 @@ import { spareLives, tankScale } from '../workshop/kit'
 import { Garage } from './Garage'
 import { Together } from './Together'
 import { Interlude } from './Interlude'
+import { LevelWipe } from '../ui/LevelWipe'
 
 /**
  * The road.
@@ -903,7 +904,7 @@ export function Road() {
     setHud((h) => ({ ...h, status: 'driving', lives: runRef.current!.lives }))
   }
 
-  const nextLevel = () => {
+  const advanceNow = () => {
     const run = runRef.current
     if (!run) return
     const number = run.number + 1
@@ -913,6 +914,17 @@ export function Road() {
     setBeatIt(false)
     setHud((h) => ({ ...h, status: 'driving', level: number, clock: 0, countdown: COUNTDOWN }))
   }
+
+  /*
+   * The walk to the next level, and then the next level.
+   *
+   * Cutting straight from a finished board to a fresh one loses the one moment
+   * in the game that is purely a reward, so the tap plays a short scene first
+   * and `advanceNow` runs when it is over.
+   */
+  const [wipe, setWipe] = useState<number | null>(null)
+  const nextLevel = () => setWipe((runRef.current?.number ?? 1) + 1)
+
 
   /**
    * Taking a different car out.
@@ -1081,6 +1093,16 @@ export function Road() {
 
       <BackButton onClick={() => go('home')} />
 
+      {wipe !== null && (
+        <LevelWipe
+          scene="road"
+          title={`Level ${wipe}`}
+          onDone={() => {
+            setWipe(null)
+            advanceNow()
+          }}
+        />
+      )}
       {asking && <Interlude onDone={carryOn} reward="your car back, and half a tank" />}
 
       {overlay && (

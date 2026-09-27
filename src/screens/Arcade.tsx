@@ -29,6 +29,7 @@ import { useAfterABeat } from '../ui/afterABeat'
 import { say, silence } from '../voice'
 import { useStore } from '../store'
 import { Interlude } from './Interlude'
+import { LevelWipe } from '../ui/LevelWipe'
 
 /**
  * Papa Panic.
@@ -605,10 +606,21 @@ function PlayerIcon() {
     setHud((h) => ({ ...h, status: 'playing', lives: gameRef.current?.lives ?? h.lives }))
   }
 
-  const nextLevel = () => {
+  const advanceNow = () => {
     silence()
     advanceLevel(gameRef.current?.score ?? 0)
   }
+
+  /*
+   * The walk to the next level, and then the next level.
+   *
+   * Cutting straight from a finished board to a fresh one loses the one moment
+   * in the game that is purely a reward, so the tap plays a short scene first
+   * and `advanceNow` runs when it is over.
+   */
+  const [wipe, setWipe] = useState<number | null>(null)
+  const nextLevel = () => setWipe((gameRef.current?.level ?? 1) + 1)
+
 
   // Losing a life asks you something and puts you straight back in. A panel
   // saying "you died, press again" in front of it is a tap of nothing.
@@ -712,6 +724,16 @@ function PlayerIcon() {
 
       {ping && !overlay && <Ping ping={ping} />}
 
+      {wipe !== null && (
+        <LevelWipe
+          scene="maze"
+          title={`Level ${wipe}`}
+          onDone={() => {
+            setWipe(null)
+            advanceNow()
+          }}
+        />
+      )}
       {asking && <Interlude onDone={again} reward="the life back" />}
 
       {overlay && (
