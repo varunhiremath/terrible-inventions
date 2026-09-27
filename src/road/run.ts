@@ -109,6 +109,16 @@ export interface Racing {
    * say how long anybody took.
    */
   finished: number | null
+  /**
+   * Seconds of being stopped after hitting something, for a human racer.
+   *
+   * Always nought for one of {papa}'s: they are not allowed to crash, because
+   * a field that wipes itself out in the first level is no race at all — they
+   * back off and lose time instead. A person driving one of them is allowed
+   * to do what people do, and pays for it the way a race makes you pay for
+   * it, which is in seconds rather than in lives.
+   */
+  stunned: number
 }
 
 export type Status = 'driving' | 'crashed' | 'levelDone' | 'gameOver'
@@ -174,6 +184,18 @@ export interface Run {
    * relative to you.
    */
   you: Racer
+  /**
+   * The car a second person is driving, if anybody is.
+   *
+   * Player two takes over one of {papa}'s four rather than becoming a second
+   * player-shaped thing in the model, and that is the whole trick. A racer
+   * already has a position, a lane, a speed and a place in the standings; it
+   * is already drawn, already collided with, already counted at the flag. All
+   * that changes is where its steering comes from. A second `distance` and
+   * `lane` on the run would have meant touching every rule in this file that
+   * says "the player", and every one of those rules is load-bearing.
+   */
+  human: number | null
   grid: readonly Slot[]
   /** Where you started, 1 to `FIELD_SIZE`. */
   started: number
@@ -262,6 +284,8 @@ export interface Entry {
   car?: string
   /** Where you finished the last one, which is where you start this one. */
   started?: number
+  /** Whether somebody else is driving one of the field. */
+  twoPlayer?: boolean
 }
 
 export function newRun(
@@ -280,6 +304,15 @@ export function newRun(
     number,
     you,
     started,
+    /*
+     * Which of them the second person gets.
+     *
+     * The quickest, because the field is banded by pace and the quickest band
+     * is the one that can actually win — handing player two a camper van and
+     * calling it a race would be a joke with one person in on it. Chosen here
+     * once rather than per-frame so it survives the whole level.
+     */
+    human: entry.twoPlayer ? bestOf(gridOf(seed, started, you)) : null,
     // Rebased against your own slot, because you are the origin of the road.
     grid: Array.from({ length: FIELD_SIZE }, (_, i) => {
       const slot = slotFor(i + 1)
@@ -638,6 +671,13 @@ export function missionMet(run: Run): boolean {
  * looks like. That was the one thing the old fixed grid could not do, and it
  * is the reward for winning.
  */
+/** The id of the quickest car in a field. */
+function bestOf(racers: readonly Racing[]): number | null {
+  let best: Racing | null = null
+  for (const racer of racers) if (!best || racer.who.pace > best.who.pace) best = racer
+  return best?.id ?? null
+}
+
 export function gridOf(seed: number, started: number, you: Racer): Racing[] {
   const mine = slotFor(started)
   // Quickest first: a car with no history is ranked by the only thing known
@@ -660,6 +700,7 @@ export function gridOf(seed: number, started: number, you: Racer): Racing[] {
       signal: 0 as -1 | 0 | 1,
       signalFor: 0,
       finished: null,
+      stunned: 0,
     })
     next++
   }
@@ -729,6 +770,8 @@ export function racerLanes(
 export interface Standing {
   name: string
   you: boolean
+  /** Whether this one was driven by the second person. */
+  friend?: boolean
   /** Seconds from the lights to the line. */
   at: number
   /** Whether that time is a real one or a projection from the flag. */
@@ -737,8 +780,11 @@ export interface Standing {
 
 export function standings(run: Run): Standing[] {
   const rows: Standing[] = run.racers.map((r) => ({
-    name: r.who.name,
+    // The second person's car is named after them rather than after itself:
+    // at the flag what matters is who beat whom, and "Cinder" does not say it.
+    name: r.id === run.human ? `Player 2 (${r.who.name})` : r.who.name,
     you: false,
+    friend: r.id === run.human,
     at: timeOf(run, r),
     estimated: r.finished === null,
   }))
@@ -972,6 +1018,79 @@ function steerRacer(run: Run, racer: Racing, dt: number): void {
 }
 
 /** One racer, one slice. */
+/**
+ * One of the field, driven by a person.
+ *
+ * Deliberately not `driveRacer` with the pace swapped out. A racer is built
+ * never to crash — it looks ahead, backs off, and pays for being blocked in
+ * lost seconds — and handing a person the wheel of something that cannot hit
+ * anything is not racing, it is steering a train. So the safe-following sum
+ * and the bumper are both gone here, and hitting something costs what it
+ * costs a person in a race: not a life, which they have none of, but the
+ * seconds it takes to get going again. Losing a race because you put it into
+ * the back of a bus is a fair way to lose a race.
+ *
+ * Everything else is the same physics the player's own car uses, so the two
+ * of them are driving the same road on the same terms.
+ */
+function driveHuman(run: Run, racer: Racing, input: Input, dt: number): void {
+  if (racer.finished !== null) return
+
+  if (racer.stunned > 0) {
+    racer.stunned = Math.max(0, racer.stunned - dt)
+    racer.speed = 0
+    racer.signal = 0
+    return
+  }
+
+  // Steering: straight to where the wheel is pointed, at a racer's rate.
+  const way = (input.left ? -1 : 0) + (input.right ? 1 : 0)
+  racer.lane = Math.max(0, Math.min(LANES - 1, racer.lane + way * RACER_STEER * dt))
+  racer.wants = racer.lane
+  // The indicator follows the wheel, so the other driver gets the same warning
+  // out of them that they get out of everything else on this road.
+  racer.signal = way as -1 | 0 | 1
+
+  const top = topSpeedOn(run.level)
+  if (input.go && !input.brake) racer.speed = Math.min(top, racer.speed + ACCELERATION * dt)
+  else if (input.brake) racer.speed = Math.max(0, racer.speed - BRAKING * dt)
+  else racer.speed = Math.max(0, racer.speed - DRAG * dt)
+
+  racer.y += racer.speed * dt
+
+  /*
+   * What they hit.
+   *
+   * Only things in front, and only while moving: a car that has already
+   * stopped inside something should be let out rather than pinned there.
+   */
+  if (racer.speed <= 0) return
+  const mine = occupies(racer.lane)
+  for (const car of run.cars) {
+    const gap = car.y - racer.y
+    if (gap > longOf(car) || gap < -CAR_LONG) continue
+    if (!overlaps(mine, spread(car))) continue
+    racer.y = car.y - longOf(car) - CAR_LONG * 0.1
+    racer.stunned = 1
+    return
+  }
+  const onto = run.distance - racer.y
+  if (onto <= CAR_LONG && onto >= -CAR_LONG && overlaps(mine, occupies(run.lane))) {
+    racer.y = Math.min(racer.y, run.distance - CAR_LONG * 1.1)
+    racer.stunned = 1
+    return
+  }
+  for (const other of run.racers) {
+    if (other.id === racer.id || other.finished !== null) continue
+    const gap = other.y - racer.y
+    if (gap > CAR_LONG || gap < 0) continue
+    if (!overlaps(mine, occupies(other.lane))) continue
+    racer.y = other.y - CAR_LONG * 1.1
+    racer.stunned = 1
+    return
+  }
+}
+
 function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
   if (racer.finished !== null) return
 
@@ -1041,7 +1160,7 @@ function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
   if (racer.y >= run.level.distance) racer.finished = run.clock
 }
 
-export function step(run: Run, input: Input, dt: number): Run {
+export function step(run: Run, input: Input, dt: number, second: Input = NO_INPUT): Run {
   /*
    * A finished run still has to clear its events.
    *
@@ -1146,7 +1265,10 @@ export function step(run: Run, input: Input, dt: number): Run {
    * simulation must give the same answer for the same inputs, and a racer's
    * pace wobble is part of the simulation.
    */
-  for (const racer of next.racers) driveRacer(next, racer, dt, next.distance / TOP_SPEED)
+  for (const racer of next.racers) {
+    if (racer.id === next.human) driveHuman(next, racer, second, dt)
+    else driveRacer(next, racer, dt, next.distance / TOP_SPEED)
+  }
 
   if (next.speed > 0) {
     next.fuel = Math.max(0, next.fuel - BURN_PER_SECOND * dt * (0.4 + next.speed / TOP_SPEED))

@@ -316,8 +316,16 @@ export function drawGrid(ctx: Ctx, view: View, slots: readonly Slot[]): void {
   const front = Math.max(...slots.map((slot) => slot.row))
   const lineY = roadY(view, front * GRID_ROW + CAR_LONG * 1.3)
   const band = view.depth * 0.9
-  const back = Math.min(...slots.map((slot) => slot.row))
-  if (lineY < -view.depth * 8 || roadY(view, back * GRID_ROW) > view.line + view.depth * 6) return
+  /*
+   * Only skipped when the start line itself is nowhere near.
+   *
+   * It used to bail when the *back* of the grid was off the bottom, which was
+   * fine while there was one camera sitting at the back of it. With the screen
+   * split, the second camera is up at the front — the back of the grid is a
+   * long way behind it by definition — and the whole grid, start line
+   * included, vanished from that half.
+   */
+  if (lineY < -view.depth * 8 || lineY > view.line + view.depth * 10) return
 
   // The start line itself: a solid white band, with a red and white kerb
   // running out to each verge.
@@ -537,9 +545,17 @@ export function drawMine(
   mercy = 0,
   look = 0,
   who: Racer = ROSTER[0],
+  /*
+   * Where up the screen to put it.
+   *
+   * On your own half that is always the sight line, which is what `view.line`
+   * means. On the other player's half your car is just another car on the
+   * road, so it goes wherever the road puts it.
+   */
+  atY?: number,
 ): void {
   const x = laneX(view, lane)
-  const y = view.line
+  const y = atY ?? view.line
   const wide = view.lane * CAR_WIDE
   const long = CAR_LONG * view.depth
 
@@ -843,6 +859,15 @@ export function drawGhost(ctx: Ctx, lane: number, gone: number, view: View): voi
 }
 
 /** Everything on the road, in the order it has to be drawn. */
+/**
+ * Everything on the road, in the order it has to be drawn.
+ *
+ * `mine` says whose half of the screen this is. With one person playing it is
+ * always `'you'` and this is the only picture there is. With two, the screen
+ * is split and this runs twice against the same world — once from each car —
+ * so `mine` decides which one is pinned to the sight line and which is drawn
+ * as traffic to be got past.
+ */
 export function drawRun(
   ctx: Ctx,
   run: Run,
@@ -852,6 +877,7 @@ export function drawRun(
   h: number,
   look = 0,
   ghost: { gone: number; lane: number } | null = null,
+  mine: 'you' | number = 'you',
 ): void {
   drawRoad(ctx, view, w, h)
   drawGrid(ctx, view, run.grid)
@@ -873,10 +899,29 @@ export function drawRun(
     // Further back than the traffic, because the field comes up behind you
     // and headlights in the mirror are half the point of having one.
     if (y < -CAR_LONG * 4 || y > SIGHT * 1.6) continue
+    // Except whichever one this half is looking out of, which is drawn last
+    // and pinned to the sight line like any driver's own car.
+    if (racer.id === mine) continue
     drawRacer(ctx, racer, view)
   }
+  // On the other player's half, your car is one of the things on the road.
+  if (mine !== 'you') {
+    const y = run.distance - view.distance
+    if (y >= -CAR_LONG * 4 && y <= SIGHT * 1.6) {
+      drawMine(ctx, run.lane, view, run.stunned, run.mercy, 0, run.you, roadY(view, run.distance))
+    }
+  }
   if (ghost) drawGhost(ctx, ghost.lane, ghost.gone, view)
-  drawMine(ctx, lane, view, run.stunned, run.mercy, look, run.you)
+  if (mine === 'you') {
+    drawMine(ctx, lane, view, run.stunned, run.mercy, look, run.you)
+  } else {
+    const driver = run.racers.find((r) => r.id === mine)
+    // A stunned racer flashes, the same way a wreck of yours does, so it is
+    // obvious to the person holding the buttons that nothing is listening yet.
+    if (driver && driver.finished === null) {
+      drawMine(ctx, driver.lane, view, driver.stunned, 0, look, driver.who)
+    }
+  }
 }
 
 /**
@@ -895,6 +940,13 @@ export function drawLights(
   w: number,
   top: number,
   h: number,
+  /*
+   * The middle of the road this gantry hangs over.
+   *
+   * The screen's middle for one player, and the middle of each half for two —
+   * where it used to straddle the join, lining up with neither road.
+   */
+  cx = w / 2,
 ): void {
   const done = countdown <= 0
   /*
@@ -919,10 +971,10 @@ export function drawLights(
     // The gantry, which you can see the road through.
     ctx.globalAlpha = 0.72
     ctx.fillStyle = '#12151c'
-    ctx.fillRect(w / 2 - gap * 1.8, cy - size * 1.7, gap * 3.6, size * 3.1)
+    ctx.fillRect(cx - gap * 1.8, cy - size * 1.7, gap * 3.6, size * 3.1)
     ctx.strokeStyle = '#2a3040'
     ctx.lineWidth = Math.max(2, size * 0.12)
-    ctx.strokeRect(w / 2 - gap * 1.8, cy - size * 1.7, gap * 3.6, size * 3.1)
+    ctx.strokeRect(cx - gap * 1.8, cy - size * 1.7, gap * 3.6, size * 3.1)
     ctx.globalAlpha = 1
   }
 
@@ -930,9 +982,9 @@ export function drawLights(
   const lit = done ? 0 : lights - Math.ceil(countdown / every) + 1
 
   for (let i = 0; i < lights; i++) {
-    const cx = w / 2 + (i - (lights - 1) / 2) * gap
+    const at = cx + (i - (lights - 1) / 2) * gap
     ctx.beginPath()
-    ctx.arc(cx, cy, size, 0, Math.PI * 2)
+    ctx.arc(at, cy, size, 0, Math.PI * 2)
     ctx.fillStyle = done ? '#1c2a1c' : i < lit ? '#ff3b2f' : '#2a1414'
     ctx.fill()
     ctx.strokeStyle = '#0a0c11'
@@ -941,12 +993,12 @@ export function drawLights(
 
     // A lit one throws some light about.
     if (!done && i < lit) {
-      const glow = ctx.createRadialGradient(cx, cy, size * 0.4, cx, cy, size * 2.4)
+      const glow = ctx.createRadialGradient(at, cy, size * 0.4, at, cy, size * 2.4)
       glow.addColorStop(0, 'rgba(255,59,47,0.45)')
       glow.addColorStop(1, 'rgba(255,59,47,0)')
       ctx.fillStyle = glow
       ctx.beginPath()
-      ctx.arc(cx, cy, size * 2.4, 0, Math.PI * 2)
+      ctx.arc(at, cy, size * 2.4, 0, Math.PI * 2)
       ctx.fill()
     }
   }

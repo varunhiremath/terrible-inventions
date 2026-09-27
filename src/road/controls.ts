@@ -35,15 +35,30 @@ export function padHeight(width: number, height: number): number {
   return keyRadius(width, height) * 3.25
 }
 
-export function padLayout(width: number, height: number): Key[] {
-  const r = keyRadius(width, height)
+/**
+ * The pad, laid out in a strip of the screen.
+ *
+ * `from` and `span` are the part of the width this pad owns, which is the
+ * whole of it for one player and half of it each for two. Two people sharing
+ * a tablet sit one at each end, so each gets steering on the outside and the
+ * pedals on the inside — the same shape twice, mirrored, rather than one pad
+ * stretched across both of them.
+ */
+export function padLayout(
+  width: number,
+  height: number,
+  from = 0,
+  span = width,
+): Key[] {
+  const r = keyRadius(span, height)
   const edge = r * 0.8
   const bottom = height - edge - r
+  const right = from + span
   return [
-    { id: 'left', cx: edge + r, cy: bottom, r, glyph: 'left' },
-    { id: 'right', cx: edge + r + r * 2.3, cy: bottom, r, glyph: 'right' },
-    { id: 'brake', cx: width - edge - r - r * 2.6, cy: bottom, r: r * 0.86, glyph: 'brake' },
-    { id: 'go', cx: width - edge - r * 1.15, cy: bottom - r * 0.04, r: r * 1.15, glyph: 'go' },
+    { id: 'left', cx: from + edge + r, cy: bottom, r, glyph: 'left' },
+    { id: 'right', cx: from + edge + r + r * 2.3, cy: bottom, r, glyph: 'right' },
+    { id: 'brake', cx: right - edge - r - r * 2.6, cy: bottom, r: r * 0.86, glyph: 'brake' },
+    { id: 'go', cx: right - edge - r * 1.15, cy: bottom - r * 0.04, r: r * 1.15, glyph: 'go' },
   ]
 }
 

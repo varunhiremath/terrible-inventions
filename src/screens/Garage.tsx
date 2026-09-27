@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Btn } from '../ui/bits'
+import { Btn, Toggle } from '../ui/bits'
 import { ROSTER, type Racer } from '../road/level'
 import { drawCarCard } from '../road/draw'
 
@@ -55,10 +55,14 @@ export function Garage({
   picked,
   onPick,
   onClose,
+  twoPlayer,
+  onTwoPlayer,
 }: {
   picked: string
   onPick: (name: string) => void
   onClose: () => void
+  twoPlayer: boolean
+  onTwoPlayer: (on: boolean) => void
 }) {
   return (
     <div
@@ -107,7 +111,26 @@ export function Garage({
           })}
         </div>
 
-        <Btn tone="go" onClick={onClose} className="mt-4 w-full py-3">
+        {/*
+          * Two players, on one screen.
+          *
+          * Somebody else takes the quickest car in the field and the screen
+          * splits down the middle — one picture each, one road, one race. It
+          * wants a tablet or a laptop: half a phone is not enough road to
+          * drive on, and there is nowhere for four more buttons to go.
+          */}
+        <div className="mt-3 flex items-center justify-between gap-4 rounded-xl bg-white/5 p-3">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-chalk">Two players</p>
+            <p className="mt-0.5 text-xs leading-snug text-dim">
+              Somebody else drives the quickest of the four. The screen splits in
+              two — one of you at each end of a tablet.
+            </p>
+          </div>
+          <Toggle label="Two players" on={twoPlayer} onChange={onTwoPlayer} />
+        </div>
+
+        <Btn tone="go" onClick={onClose} className="mt-3 w-full py-3">
           Drive it
         </Btn>
       </div>

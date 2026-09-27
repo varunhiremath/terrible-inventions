@@ -83,6 +83,8 @@ export interface SaveState {
    * them to get past again.
    */
   roadPlace?: number
+  /** Whether somebody else is driving one of the field. */
+  roadTwoPlayer?: boolean
   /**
    * Every question he has ever got right, by id. Never asked again.
    *

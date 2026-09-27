@@ -294,7 +294,7 @@ const TILES: Tile[] = [
       // And one of the field, so the tile shows there is somebody to race.
       drawRacer(ctx, {
         id: 1000, who: ROSTER[1], y: 2.2, lane: 1, wants: 1,
-        speed: 0, signal: 0, signalFor: 0, finished: null,
+        speed: 0, signal: 0, signalFor: 0, finished: null, stunned: 0,
       }, view)
       drawCan(ctx, { id: 3, y: 1.6, lane: 3, taken: false }, view)
       drawMine(ctx, 1, view, 0)

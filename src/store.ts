@@ -92,6 +92,8 @@ interface State {
   pickCar: (name: string) => void
   /** Where he finished, so the next grid can be built out of it. */
   recordPlace: (place: number) => void
+  /** Whether a second person is driving one of the field. */
+  setTwoPlayer: (on: boolean) => void
   /**
    * Coins earned by playing, paid at the end of a run.
    *
@@ -392,6 +394,12 @@ export const useStore = create<State>((set, get) => ({
 
   recordPlace: (place) => {
     const next: SaveState = { ...get().save, roadPlace: place }
+    set({ save: next })
+    void persistSave(next)
+  },
+
+  setTwoPlayer: (on) => {
+    const next: SaveState = { ...get().save, roadTwoPlayer: on }
     set({ save: next })
     void persistSave(next)
   },

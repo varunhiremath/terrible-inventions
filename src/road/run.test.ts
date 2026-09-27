@@ -1063,3 +1063,106 @@ describe('the grid', () => {
     expect(run.you.build).toBe('tow')
   })
 })
+
+/**
+ * Two people, one road.
+ *
+ * Player two takes over one of {papa}'s four rather than becoming a second
+ * player-shaped thing in the model, so most of what needs proving is that the
+ * rest of the file did not notice. The one thing that is genuinely different
+ * is that this car is allowed to crash, and has to pay for it.
+ */
+describe('the second driver', () => {
+  const hold = (over: Partial<Input> = {}): Input => ({ ...NO_INPUT, ...over })
+
+  const away = (run: Run): Run => {
+    let r = run
+    for (let t = 0; t < COUNTDOWN + 0.1; t += FIXED) r = step(r, NO_INPUT, FIXED, NO_INPUT)
+    return r
+  }
+
+  it('hands the second person one of the field, and only when asked', () => {
+    expect(newRun(1, 3, 0, 1).human, 'nobody asked for a passenger').toBe(null)
+
+    const two = newRun(1, 3, 0, 1, { twoPlayer: true })
+    expect(two.human, 'no car for the second person').not.toBe(null)
+    expect(two.racers.some((r) => r.id === two.human), 'that car is not in the field').toBe(true)
+  })
+
+  it('gives them the quickest of the four, not a camper van', () => {
+    const run = newRun(1, 3, 0, 1, { twoPlayer: true })
+    const theirs = run.racers.find((r) => r.id === run.human)!
+    const best = Math.max(...run.racers.map((r) => r.who.pace))
+    expect(theirs.who.pace, `got ${theirs.who.name}`).toBe(best)
+  })
+
+  it('does what it is told rather than what the computer would do', () => {
+    let run = away(newRun(1, 3, 0, 1, { twoPlayer: true }))
+    const id = run.human!
+    const at = (r: Run) => r.racers.find((x) => x.id === id)!
+
+    // Sitting on the brake goes nowhere, whatever a racer would have done.
+    let idle = run
+    for (let t = 0; t < 2; t += FIXED) idle = step(idle, NO_INPUT, FIXED, hold({ brake: true }))
+    expect(at(idle).speed, 'it drove off on its own').toBe(0)
+
+    // And the pedal moves it.
+    let going = run
+    for (let t = 0; t < 2; t += FIXED) going = step(going, NO_INPUT, FIXED, hold({ go: true }))
+    expect(at(going).speed, 'the pedal did nothing').toBeGreaterThan(5)
+    expect(at(going).y).toBeGreaterThan(at(run).y)
+  })
+
+  it('steers where it is pointed, and stays on the road', () => {
+    let run = away(newRun(1, 3, 0, 1, { twoPlayer: true }))
+    const id = run.human!
+    for (let t = 0; t < 4; t += FIXED) run = step(run, NO_INPUT, FIXED, hold({ left: true }))
+    const theirs = run.racers.find((r) => r.id === id)!
+    expect(theirs.lane, 'steered off the left-hand verge').toBeGreaterThanOrEqual(0)
+    expect(theirs.lane, 'did not steer left at all').toBeLessThan(1)
+
+    for (let t = 0; t < 8; t += FIXED) run = step(run, NO_INPUT, FIXED, hold({ right: true }))
+    const after = run.racers.find((r) => r.id === id)!
+    expect(after.lane, 'steered off the right-hand verge').toBeLessThanOrEqual(LANES - 1)
+  })
+
+  it('pays for hitting something in seconds, since it has no lives to lose', () => {
+    // A level's worth of traffic, and the pedal held flat into it.
+    let run = away(newRun(6, 3, 0, 3, { twoPlayer: true }))
+    const id = run.human!
+    let stunned = false
+    for (let t = 0; t < 30 && !stunned; t += FIXED) {
+      run = step(run, NO_INPUT, FIXED, hold({ go: true }))
+      const theirs = run.racers.find((r) => r.id === id)
+      if (theirs && theirs.stunned > 0) stunned = true
+    }
+    expect(stunned, 'drove flat out through a level of traffic without a scratch').toBe(true)
+    // And it is a stop, not a death: the car is still in the race.
+    expect(run.racers.some((r) => r.id === id), 'the car left the race').toBe(true)
+    expect(run.status, 'a crash of theirs cost you something').not.toBe('gameOver')
+  })
+
+  it('never drives through one of his lorries', () => {
+    let run = away(newRun(6, 3, 0, 3, { twoPlayer: true }))
+    const id = run.human!
+    for (let t = 0; t < 30; t += FIXED) {
+      run = step(run, NO_INPUT, FIXED, hold({ go: true }))
+      const theirs = run.racers.find((r) => r.id === id)
+      if (!theirs || theirs.finished !== null) break
+      for (const car of run.cars) {
+        const gap = car.y - theirs.y
+        const sideBySide = Math.abs(car.lane - theirs.lane) < (CAR_WIDE + CAR_WIDE) / 2
+        if (sideBySide && gap > 0 && gap < CAR_LONG * 0.4) {
+          throw new Error(`inside a ${car.kind} at ${theirs.y.toFixed(1)}, gap ${gap.toFixed(2)}`)
+        }
+      }
+    }
+  })
+
+  it('names them in the standings so the flag says who won', () => {
+    const run = away(newRun(1, 3, 0, 1, { twoPlayer: true }))
+    const rows = standings(run)
+    expect(rows.filter((r) => r.friend), 'the second driver is not in the result').toHaveLength(1)
+    expect(rows.find((r) => r.friend)!.name).toMatch(/^Player 2 \(/)
+  })
+})

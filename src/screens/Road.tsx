@@ -114,6 +114,8 @@ export function Road() {
   const earn = useStore((s) => s.earn)
   const savedCar = useStore((s) => s.save.roadCar)
   const savedPlace = useStore((s) => s.save.roadPlace)
+  const savedTwo = useStore((s) => s.save.roadTwoPlayer)
+  const setTwo = useStore((s) => s.setTwoPlayer)
   /*
    * The car and the grid slot, read once when the screen opens.
    *
@@ -122,7 +124,7 @@ export function Road() {
    * open in another tab would make a replay disagree with the race it
    * replayed.
    */
-  const entry = useRef({ car: savedCar, started: savedPlace })
+  const entry = useRef({ car: savedCar, started: savedPlace, twoPlayer: savedTwo ?? false })
   const pickCar = useStore((s) => s.pickCar)
   /*
    * The garage, open on the first visit and on request after that.
@@ -134,6 +136,7 @@ export function Road() {
    */
   const [garage, setGarage] = useState(savedCar === undefined)
   const [car, setCar] = useState(savedCar ?? DEFAULT_CAR)
+  const [twoPlayer, setTwoPlayer] = useState(savedTwo ?? false)
   const kit = useStore((s) => s.save.workshop)
   /*
    * What the workshop has bought, read once when a run starts.
@@ -161,6 +164,16 @@ export function Road() {
   const hintsFrom = useRef(0)
   const clock = useRef(0)
   const buttons = useRef(createLatch())
+  /*
+   * A second set of buttons, for the person at the other end of the tablet.
+   *
+   * Kept apart from the first rather than shared, because a latch is a map
+   * from pointer id to button and two people pressing "go" at once would
+   * otherwise be one press. Which latch a finger belongs to is decided by
+   * which half of the screen it landed on — see `readTouch`.
+   */
+  const buttons2 = useRef(createLatch())
+  const padRef2 = useRef<Key[]>([])
   const [hud, setHud] = useState<Hud>({
     level: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0,
     missionDone: false, place: 1, clock: 0, countdown: 0,
@@ -209,6 +222,10 @@ export function Road() {
         const input: Input = {
           left: held.left, right: held.right, go: held.go, brake: held.brake,
         }
+        const held2 = buttons2.current.read()
+        const input2: Input = {
+          left: held2.left, right: held2.right, go: held2.go, brake: held2.brake,
+        }
         // Which way you are steering, for your car's eyes to follow.
         const steerNow = (held.right ? 1 : 0) - (held.left ? 1 : 0)
 
@@ -222,11 +239,14 @@ export function Road() {
         const heard: RoadEvent[] = []
         const { previous, next, alpha } = pacer.advance(run, elapsed, (s) => {
           stepped = true
-          const after = step(s, input, FIXED)
+          const after = step(s, input, FIXED, input2)
           if (after.events.length > 0) heard.push(...after.events)
           return after
         })
-        if (stepped) buttons.current.consumed()
+        if (stepped) {
+          buttons.current.consumed()
+          buttons2.current.consumed()
+        }
         runRef.current = next
 
         if (heard.length > 0) {
@@ -311,33 +331,84 @@ export function Road() {
          * road looks like from a long way up. This game wants to be held
          * upright.
          */
+        /*
+         * One half of the screen each, when there are two of you.
+         *
+         * The world is one world — one road, one set of traffic, one race —
+         * and only the camera is doubled. Player two is driving one of the
+         * field, so from the model's point of view nothing here is a second
+         * player at all: it is the same run drawn twice, once from each car.
+         *
+         * Split down the middle rather than across, because a tablet is held
+         * sideways and two people sit at the two ends of it, not one above
+         * the other.
+         */
+        const twoUp = next.human !== null
+        const halves = twoUp
+          ? [
+              { x: 0, w: w / 2, mine: 'you' as const },
+              { x: w / 2, w: w / 2, mine: next.human as number },
+            ]
+          : [{ x: 0, w, mine: 'you' as const }]
+
         const depth = middle / SIGHT
         const longEnough = (CAR_LONG * depth) / (1.45 * CAR_WIDE)
-        const lane = Math.min(w / (LANES + 1.4), longEnough)
-        const left = (w - lane * LANES) / 2
+        /*
+         * The readouts size off your own half of the road.
+         *
+         * The fuel gauge stands on the verge beside it and the text is sized
+         * to the lane width, so with the screen split they both belong to the
+         * left-hand picture — which is the right answer, because the fuel is
+         * yours and the other driver has none.
+         */
+        const hudW = twoUp ? w / 2 : w
+        const lane = Math.min(hudW / (LANES + 1.4), longEnough)
+        const left = (hudW - lane * LANES) / 2
 
         // Drawn between steps, so the road does not advance in sixty jerks.
         const distance = previous.distance + (next.distance - previous.distance) * alpha
         const at = previous.lane + (next.lane - previous.lane) * alpha
-        const view: View = {
-          lane, depth, left,
-          // He sits low, so almost all the screen is the road ahead of him.
-          line: capH + middle * 0.82,
-          distance,
-          clock: clock.current,
-        }
-
-        ctx.setTransform(1, 0, 0, 1, 0, 0)
-        ctx.save()
-        ctx.beginPath()
-        ctx.rect(0, capH, w, middle)
-        ctx.clip()
-        // The last two are which way you are steering — for the eyes — and
-        // where the best drive on this level had got to by now.
         const trail = ghostRef.current[next.number]
         const ghost = trail && next.countdown === 0 ? ghostAt(trail, next.clock) : null
-        drawRun(ctx, next, at, view, w, capH + middle, steerNow, ghost)
-        ctx.restore()
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        for (const half of halves) {
+          const lane = Math.min(half.w / (LANES + 1.4), longEnough)
+          const driver =
+            half.mine === 'you' ? null : next.racers.find((r) => r.id === half.mine) ?? null
+          const view: View = {
+            lane,
+            depth,
+            left: half.x + (half.w - lane * LANES) / 2,
+            // He sits low, so almost all the screen is the road ahead of him.
+            line: capH + middle * 0.82,
+            distance: driver ? driver.y : distance,
+            clock: clock.current,
+          }
+
+          ctx.save()
+          ctx.beginPath()
+          ctx.rect(half.x, capH, half.w, middle)
+          ctx.clip()
+          // The last three are which way you are steering — for the eyes —
+          // where the best drive on this level had got to by now, and whose
+          // half of the screen this is.
+          drawRun(
+            ctx, next, at, view, w, capH + middle,
+            half.mine === 'you' ? steerNow : 0,
+            // Only your own half races the ghost. Two pale cars on two halves
+            // of one screen is a busy picture for a small gain.
+            half.mine === 'you' ? ghost : null,
+            half.mine,
+          )
+          ctx.restore()
+        }
+
+        // A hairline down the join, so the two pictures do not read as one.
+        if (twoUp) {
+          ctx.fillStyle = '#0d1016'
+          ctx.fillRect(w / 2 - 1, capH, 2, middle)
+        }
 
         ctx.fillStyle = '#0d1016'
         ctx.fillRect(0, 0, w, capH)
@@ -481,19 +552,34 @@ export function Road() {
 
         // The lights, over the road, while they are on and for a moment after.
         if (next.countdown > 0 || next.clock < 0.9) {
-          drawLights(ctx, next.countdown, LIGHTS, LIGHT_EVERY, w, capH, middle)
+          // One gantry over each road, so it hangs over a road rather than
+          // over the line between two of them.
+          for (const half of halves) {
+            drawLights(
+              ctx, next.countdown, LIGHTS, LIGHT_EVERY, w, capH, middle,
+              half.x + half.w / 2,
+            )
+          }
         }
 
-        padRef.current = padLayout(w, h)
-        const shape = padRef.current.map((k) => k.id).join(',')
+        padRef.current = padLayout(w, h, 0, twoUp ? w / 2 : w)
+        padRef2.current = twoUp ? padLayout(w, h, w / 2, w / 2) : []
+        const shape = `${twoUp}:${padRef.current.map((k) => k.id).join(',')}`
         if (shape !== padShape.current) {
           padShape.current = shape
           hintsFrom.current = clock.current
         }
+        const hints = hintAlpha(clock.current - hintsFrom.current)
         drawPad(ctx, padRef.current, held as unknown as Record<string, boolean>, {
-          alpha: hintAlpha(clock.current - hintsFrom.current),
+          alpha: hints,
           labels: LABELS.road,
         })
+        if (twoUp) {
+          drawPad(ctx, padRef2.current, held2 as unknown as Record<string, boolean>, {
+            alpha: hints,
+            labels: LABELS.road,
+          })
+        }
       }
 
       frame = requestAnimationFrame(loop)
@@ -526,6 +612,22 @@ export function Road() {
   useEffect(() => {
     stock.current = { lives: spareLives({ workshop: kit }), tank: tankScale({ workshop: kit }) }
   }, [kit])
+
+  /*
+   * With two of you, a crash does not stop the race.
+   *
+   * On your own a prang puts up a card, asks you something and hands your car
+   * back — which is a good trade when the only clock running is yours. In a
+   * race against somebody sitting next to you it would freeze their car too,
+   * so the wreck is cleared and the road carries on. The life is still gone;
+   * that is what the crash cost.
+   */
+  useEffect(() => {
+    if (!twoPlayer || hud.status !== 'crashed' || hud.lives <= 0) return
+    const timer = window.setTimeout(() => carryOn(false), 900)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [twoPlayer, hud.status, hud.lives])
 
   /** Coins for the drive, paid once, when the level is done or the cars run out. */
   const banked = useRef('')
@@ -565,20 +667,41 @@ export function Road() {
   }, [hud.status, recordLap, recordPlace])
 
   // --- the glass ------------------------------------------------------------
+  /**
+   * Which pad a finger landed on, and which button of it.
+   *
+   * With two people playing there are two pads side by side and two latches
+   * behind them, so a press has to be routed as well as read. The half of the
+   * screen decides, which is also how the two of them work out where to sit.
+   */
   const readTouch = (e: React.PointerEvent) => {
     const rect = e.currentTarget.getBoundingClientRect()
     const scale = rect.width > 0 ? (canvasRef.current?.width ?? rect.width) / rect.width : 1
-    return keyAt((e.clientX - rect.left) * scale, (e.clientY - rect.top) * scale, padRef.current)
+    const x = (e.clientX - rect.left) * scale
+    const y = (e.clientY - rect.top) * scale
+    const mid = (canvasRef.current?.width ?? 0) / 2
+    const second = padRef2.current.length > 0 && x >= mid
+    return {
+      latch: second ? buttons2.current : buttons.current,
+      key: keyAt(x, y, second ? padRef2.current : padRef.current),
+    }
   }
   const onDown = (e: React.PointerEvent) => {
-    buttons.current.press(e.pointerId, readTouch(e))
+    const { latch, key } = readTouch(e)
+    latch.press(e.pointerId, key)
     ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
   }
   const onMove = (e: React.PointerEvent) => {
-    if (!buttons.current.has(e.pointerId)) return
-    buttons.current.press(e.pointerId, readTouch(e))
+    const { latch, key } = readTouch(e)
+    // Only a finger that is already down on this pad — a drag that started on
+    // the other player's side stays theirs.
+    if (!latch.has(e.pointerId)) return
+    latch.press(e.pointerId, key)
   }
-  const onUp = (e: React.PointerEvent) => buttons.current.release(e.pointerId)
+  const onUp = (e: React.PointerEvent) => {
+    buttons.current.release(e.pointerId)
+    buttons2.current.release(e.pointerId)
+  }
 
   useEffect(() => {
     const keys: Record<string, Button> = {
@@ -646,10 +769,29 @@ export function Road() {
    * car you are driving cannot change halfway down a straight, and the garage
    * is only reachable from the flag or from the first visit anyway.
    */
+  /**
+   * Turning the second seat on or off.
+   *
+   * Like the car, it takes effect at the next set of lights: whether somebody
+   * else is driving decides which of the field is under human control, and
+   * that is settled when the grid is built.
+   */
+  const takeSecond = (on: boolean) => {
+    setTwoPlayer(on)
+    setTwo(on)
+    entry.current = { ...entry.current, twoPlayer: on }
+    rebuild()
+  }
+
   const takeCar = (name: string) => {
     setCar(name)
     pickCar(name)
     entry.current = { ...entry.current, car: name }
+    rebuild()
+  }
+
+  /** Rebuild the un-started run, so a change made in the garage is visible. */
+  const rebuild = () => {
     const run = runRef.current
     // Before the first race there is a run already built with the old car in
     // it, and nothing has happened in it yet, so it is safe to rebuild.
@@ -679,8 +821,15 @@ export function Road() {
    */
   const clearedTheWritten = hud.level === LEVELS.length
   const outOfLives = hud.lives <= 0
-  /** A prang asks you something and puts you straight back on the road. */
-  const asking = hud.status === 'crashed' && !outOfLives
+  /*
+   * A prang asks you something and puts you straight back on the road.
+   *
+   * Except when somebody else is racing you, because the card stops the whole
+   * screen — and stopping the other person's race to ask you the capital of
+   * Australia is not a thing a race does. With two of you, a crash costs what
+   * a crash costs and the road carries on.
+   */
+  const asking = hud.status === 'crashed' && !outOfLives && !twoPlayer
   const overlay = hud.status !== 'driving' && !asking
 
   return (
@@ -702,7 +851,13 @@ export function Road() {
       </div>
 
       {garage && (
-        <Garage picked={car} onPick={takeCar} onClose={() => setGarage(false)} />
+        <Garage
+          picked={car}
+          onPick={takeCar}
+          onClose={() => setGarage(false)}
+          twoPlayer={twoPlayer}
+          onTwoPlayer={takeSecond}
+        />
       )}
 
       <BackButton onClick={() => go('home')} />
@@ -757,7 +912,7 @@ export function Road() {
                         key={row.name}
                         className={`flex items-baseline justify-between rounded-lg px-2 py-1 font-mono text-xs
                                     uppercase tracking-[0.15em] short:py-0.5 ${
-                          row.you ? 'bg-bolt/15 text-bolt' : 'text-dim'
+                          row.you ? 'bg-bolt/15 text-bolt' : row.friend ? 'bg-sky/15 text-sky' : 'text-dim'
                         }`}
                       >
                         <span>
