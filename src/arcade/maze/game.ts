@@ -44,9 +44,25 @@ import {
  * caught is always a cornering mistake rather than simply being outrun.
  */
 const OPENING_PLAYER_SPEED = 3.6
-const OPENING_GHOST_SPEED = 2.9
+/*
+ * Slower off the mark than they were, and they close the gap more gently.
+ *
+ * These were 2.9 and 0.24, and at those numbers the first board could not be
+ * cleared. That is measured rather than felt: `playable.test.ts` walks a bot
+ * round level one that goes for the nearest dot and backs off anything hunting
+ * within a couple of tiles — roughly a person in their first hour — and it lost
+ * all three lives inside a minute, eight times out of eight, with seventy dots
+ * still on the board.
+ *
+ * The opening gap matters more than it looks. At 3.6 against 2.9 the player is
+ * a fifth quicker, which sounds like plenty and is not: a chaser coming the
+ * other way down a corridor closes at the sum of the two speeds, and the only
+ * escape is a junction you have already passed. At 2.3 there is room to turn
+ * round and get out, which is the thing a beginner has to be allowed to learn.
+ */
+const OPENING_GHOST_SPEED = 2.3
 const PLAYER_SPEED_PER_LEVEL = 0.18
-const GHOST_SPEED_PER_LEVEL = 0.24
+const GHOST_SPEED_PER_LEVEL = 0.2
 const TOP_PLAYER_SPEED = 6.4
 /** Kept under the player's, always. */
 const CHASER_HANDICAP = 0.2
@@ -65,7 +81,23 @@ export function ghostSpeed(level: number): number {
 export function frightenedSpeed(level: number): number {
   return ghostSpeed(level) * 0.62
 }
+
 export const FRIGHTENED_SECONDS = 7
+
+/**
+ * How long a pellet lasts, which is not the same on every board.
+ *
+ * Eleven seconds on the first one, easing to the old seven by the fifth. He
+ * asked for more fruit and this is the same wish granted a tidier way: the
+ * boards are hand-drawn and reachability-tested, so scattering extra pellets
+ * across them is a change to ten mazes and their tests, while a pellet that
+ * lasts half again as long buys exactly the same thing — more of the board
+ * spent with nothing to run from — and buys it only where it is needed.
+ */
+export function frightenedSeconds(level: number): number {
+  const eased = Math.max(0, Math.min(1, (Math.max(1, level) - 1) / 4))
+  return 11 - eased * (11 - FRIGHTENED_SECONDS)
+}
 export const EATEN_RESPAWN_SECONDS = 4
 export const STARTING_LIVES = 3
 
@@ -323,7 +355,7 @@ function eat(game: Game): void {
   if (game.power.delete(id)) {
     game.score += 50
     game.events.push('pellet')
-    game.frightenedFor = FRIGHTENED_SECONDS * game.powerUps.pelletBoost
+    game.frightenedFor = frightenedSeconds(game.level) * game.powerUps.pelletBoost
     game.comboStep = 0
     for (const ghost of game.ghosts) {
       if (ghost.eatenFor > 0) continue
@@ -348,7 +380,7 @@ function moveGhost(game: Game, ghost: GhostState, dt: number, frozen: boolean, r
 
   if (frozen) return
 
-  const phase: Phase = ghost.frightened ? 'frightened' : phaseAt(game.elapsed)
+  const phase: Phase = ghost.frightened ? 'frightened' : phaseAt(game.elapsed, game.level)
   let remaining =
     (ghost.frightened ? frightenedSpeed(game.level) : ghostSpeed(game.level)) * dt
 

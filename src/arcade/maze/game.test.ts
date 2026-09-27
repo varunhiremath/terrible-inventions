@@ -11,7 +11,7 @@ import { BOARDS, boardFor, isWall, key, neighbours, wrapCell } from './maze'
 const board = boardFor(1)
 import type { Dir } from './ghosts'
 import {
-  FRIGHTENED_SECONDS,
+  frightenedSeconds,
   READY_SECONDS,
   STARTING_LIVES,
   dotsRemaining,
@@ -223,7 +223,8 @@ describe('eating', () => {
     game = { ...game, player: { ...game.player, cell: { x: pellet[0], y: pellet[1] }, progress: 0 } }
     game = step(game, 1 / 60, roll)
 
-    expect(game.frightenedFor).toBeCloseTo(FRIGHTENED_SECONDS, 1)
+    // Level-dependent now: the first boards hold the fright for longer.
+    expect(game.frightenedFor).toBeCloseTo(frightenedSeconds(game.level), 1)
     expect(game.ghosts.every((g) => g.frightened)).toBe(true)
   })
 
@@ -232,7 +233,7 @@ describe('eating', () => {
     const pellet = [...game.power][0].split(',').map(Number)
     game = { ...game, player: { ...game.player, cell: { x: pellet[0], y: pellet[1] }, progress: 0 } }
     game = step(game, 1 / 60, roll)
-    game = step(game, FRIGHTENED_SECONDS + 0.1, roll)
+    game = step(game, frightenedSeconds(game.level) + 0.1, roll)
 
     expect(game.frightenedFor).toBe(0)
     expect(game.ghosts.some((g) => g.frightened)).toBe(false)
@@ -330,7 +331,7 @@ describe('shop power-ups', () => {
     const pellet = [...game.power][0].split(',').map(Number)
     game = { ...game, player: { ...game.player, cell: { x: pellet[0], y: pellet[1] }, progress: 0 } }
     game = step(game, 1 / 60, roll)
-    expect(game.frightenedFor).toBeCloseTo(FRIGHTENED_SECONDS * 2, 1)
+    expect(game.frightenedFor).toBeCloseTo(frightenedSeconds(game.level) * 2, 1)
   })
 
   it('freezes every chaser where it stands, once per freeze bought', () => {

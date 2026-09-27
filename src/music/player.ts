@@ -33,6 +33,23 @@ const HORIZON = 0.12
 
 let context: AudioContext | null = null
 let master: GainNode | null = null
+/**
+ * The thing between the music and the speaker.
+ *
+ * Reported as "high pitched, a little loud and not soothing", which is a fair
+ * description of a stack of pulse and sawtooth waves going straight out. A
+ * square wave's harmonics fall away slowly, so the interesting part of the
+ * sound is an octave up from the note and the *unpleasant* part is two or
+ * three octaves above that — right in the band the ear is most sensitive to
+ * and least able to ignore over an hour.
+ *
+ * So two filters, and neither is a blanket muffle. One takes about six
+ * decibels out of a narrow band around 3 kHz, which is where "bright" turns
+ * into "piercing". The other rolls off everything above 6 kHz, which on
+ * material made entirely of square waves is fizz rather than music. The tunes
+ * are unchanged and still sound like a chip; they just stop hurting.
+ */
+let softener: BiquadFilterNode | null = null
 let timer: ReturnType<typeof setInterval> | null = null
 let playing: Track | null = null
 /** Where the scheduler has got to, in seconds on the audio clock. */
@@ -54,7 +71,18 @@ let heat = 0
 
 /** The heat at which the harder drum pattern takes over, if a track has one. */
 const HOT_DRUMS = 0.55
-let volume = 0.55
+/*
+ * A good deal quieter than it was.
+ *
+ * 0.55 was chosen against a laptop speaker and is too much on a phone held a
+ * foot from your face, which is where this is actually played. How much lower took
+ * measuring rather than guessing, twice: a first pass cut this to 0.42 while
+ * also nearly doubling every lead's gain, and the two changes together came
+ * out louder than what they replaced. The leads went back to roughly their old
+ * gains and this came down instead, which is the right place for a change that
+ * is about the whole thing being quieter.
+ */
+let volume = 0.27
 let noise: AudioBuffer | null = null
 
 function audio(): AudioContext | null {
@@ -69,7 +97,21 @@ function audio(): AudioContext | null {
     context = new Ctor()
     master = context.createGain()
     master.gain.value = enabled ? volume : 0
-    master.connect(context.destination)
+
+    const harsh = context.createBiquadFilter()
+    harsh.type = 'peaking'
+    harsh.frequency.value = 3100
+    harsh.Q.value = 1.1
+    harsh.gain.value = -6.5
+
+    softener = context.createBiquadFilter()
+    softener.type = 'lowpass'
+    softener.frequency.value = 6000
+    softener.Q.value = 0.6
+
+    master.connect(harsh)
+    harsh.connect(softener)
+    softener.connect(context.destination)
   } catch {
     context = null
   }
@@ -199,8 +241,16 @@ function playNote(
 
   // A hard start and stop clicks. A few milliseconds of fade at each end is
   // the difference between a chiptune and a fault.
-  const attack = 0.006
-  const release = Math.min(0.05, seconds * 0.4)
+  /*
+   * A little longer than it takes to avoid a click.
+   *
+   * Six milliseconds is enough to stop a pop and short enough that every note
+   * still arrives with an edge on it. Eighteen rounds the front of the note
+   * off, which across a whole tune is most of the difference between a chip
+   * and a chip you can listen to. The release is longer for the same reason.
+   */
+  const attack = 0.018
+  const release = Math.min(0.09, seconds * 0.45)
   env.gain.setValueAtTime(0, at)
   env.gain.linearRampToValueAtTime(level, at + attack)
   env.gain.setValueAtTime(level, Math.max(at + attack, at + seconds - release))

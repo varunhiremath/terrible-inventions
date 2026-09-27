@@ -219,11 +219,33 @@ export const PHASE_SCHEDULE: readonly { phase: 'scatter' | 'chase'; seconds: num
   { phase: 'chase', seconds: Number.POSITIVE_INFINITY },
 ]
 
-export function phaseAt(elapsedSeconds: number): 'scatter' | 'chase' {
+/**
+ * How the schedule is stretched on the early boards.
+ *
+ * Scatter is the part of the cycle where nobody is coming for you: the chasers
+ * head for their own corners and the board is yours. On the first level that
+ * breathing space is more than doubled and the hunts between are cut to two
+ * thirds, easing back to the written schedule by the fifth.
+ *
+ * This is the lever that mattered most, and it was the last one tried. Slowing
+ * the chasers helps, and a longer pellet helps, but neither changes the shape
+ * of a level: twenty seconds of unbroken pursuit seven seconds after the start
+ * is a lot to hand somebody who is still learning which way the buttons go. A
+ * beginner needs the pressure to come and *go*, because that is what teaches
+ * that it can be survived.
+ */
+function pace(level: number): { scatter: number; chase: number } {
+  const eased = Math.max(0, Math.min(1, (Math.max(1, level) - 1) / 4))
+  return { scatter: 2.3 - eased * 1.3, chase: 0.62 + eased * 0.38 }
+}
+
+export function phaseAt(elapsedSeconds: number, level = 99): 'scatter' | 'chase' {
+  const { scatter, chase } = pace(level)
   let remaining = elapsedSeconds
   for (const entry of PHASE_SCHEDULE) {
-    if (remaining < entry.seconds) return entry.phase
-    remaining -= entry.seconds
+    const seconds = entry.seconds * (entry.phase === 'scatter' ? scatter : chase)
+    if (remaining < seconds) return entry.phase
+    remaining -= seconds
   }
   return 'chase'
 }

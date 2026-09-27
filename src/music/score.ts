@@ -29,6 +29,27 @@
  */
 export type Wave = 'square' | 'triangle' | 'sawtooth' | 'sine' | 'pulse'
 
+/*
+ * A note on why no *background* voice is a sawtooth any more.
+ *
+ * Every background track used to gain one when the heat climbed past about
+ * two thirds: a held sawtooth line up in the fifth octave, arriving exactly
+ * when the run was going badly. On paper that is the tension voice. In a room
+ * it is the harshest waveform there is, in the register the ear is least able
+ * to ignore, switched on at the moment somebody is already having a hard time
+ * — which is the opposite of what tension is for.
+ *
+ * They are triangles now, a little louder to make up for how much softer a
+ * triangle is, playing the same notes. The heat still does its work through
+ * the extra voice, the tempo and the drums; it just stops doing it by being
+ * unpleasant.
+ *
+ * Two sawtooths survive, in PRANG and STRUCK. Those are one-shot cues a tenth
+ * of a second long that fire when you hit something, and a harsh noise is
+ * exactly what is wanted for a tenth of a second. The problem was never the
+ * waveform; it was a waveform held down for eighty seconds at a time.
+ */
+
 export interface Part {
   wave: Wave
   /** 0..1, before the master volume. */
@@ -161,76 +182,99 @@ export function eighthSeconds(track: Track, heat = 0): number {
  * this tempo it reads as busy rather than sad.
  */
 
+/*
+ * Papa Panic, in a major key.
+ *
+ * It was in A minor, with a melody that climbed to A5 on a nasal pulse wave
+ * and a raised seventh grinding a semitone under the root. All of which is
+ * correct for a chase and none of which is what was asked for, which was
+ * something upbeat and fun that is comfortable to have on for an hour.
+ *
+ * So: C major, the four happiest chords there are, and a melody that skips
+ * about rather than climbing. The top of it is E5 instead of A5 — a fourth
+ * lower, which in the register where bright turns into piercing is most of
+ * the difference — and it is carried by a triangle rather than a quarter-duty
+ * pulse. A triangle has almost nothing above its third harmonic, which is why
+ * it can play the same notes without any of the edge.
+ *
+ * It is still a chase. The tempo, the drums and the voices that arrive with
+ * the heat all do that work, and they do it without anybody wincing.
+ */
 const CHASE_LEAD = [
-  'A4 C5 E5 C5 A4 .  B4 . ',
-  'G4 B4 D5 B4 G4 .  A4 . ',
+  'C5 .  E5 C5 G4 .  A4 . ',
+  'A4 .  C5 A4 E4 .  G4 . ',
   'F4 A4 C5 A4 F4 .  G4 . ',
-  'E4 G#4 B4 G#4 E4 . B4 .',
-  'A5 .  E5 .  C5 .  A4 . ',
-  'B4 D5 G5 .  D5 B4 G4 . ',
-  'C5 .  A4 C5 F5 .  C5 . ',
-  'B4 .  G#4 B4 E5 .  .  .',
+  'G4 B4 D5 B4 G4 .  F4 . ',
+  'E5 .  D5 C5 G4 .  A4 . ',
+  'A4 C5 E5 .  C5 A4 E4 . ',
+  'F4 .  G4 A4 C5 .  A4 . ',
+  'G4 .  F4 D4 C4 .  .  . ',
 ].join(' ')
 
 const CHASE_BASS = [
+  'C2 C2 G2 C2 C2 C2 G2 C2',
   'A2 A2 E3 A2 A2 A2 E3 A2',
-  'G2 G2 D3 G2 G2 G2 D3 G2',
   'F2 F2 C3 F2 F2 F2 C3 F2',
-  'E2 E2 B2 E2 E2 E2 B2 E2',
+  'G2 G2 D3 G2 G2 G2 D3 G2',
+  'C2 C2 G2 C2 C2 C2 G2 C2',
   'A2 A2 E3 A2 A2 A2 E3 A2',
-  'G2 G2 D3 G2 G2 G2 D3 G2',
   'F2 F2 C3 F2 F2 F2 C3 F2',
-  'E2 E2 B2 E2 E2 B2 E2 E2',
+  'G2 G2 D3 G2 G2 D3 G2 G2',
 ].join(' ')
 
 /** A quiet third voice, holding the chord under everything else. */
 const CHASE_PAD = [
+  'E3 .  .  .  G3 .  .  . ',
   'C4 .  .  .  E4 .  .  . ',
-  'B3 .  .  .  D4 .  .  . ',
   'A3 .  .  .  C4 .  .  . ',
-  'G#3 . .  .  B3 .  .  . ',
-  'E4 .  .  .  A4 .  .  . ',
-  'D4 .  .  .  G4 .  .  . ',
-  'C4 .  .  .  F4 .  .  . ',
-  'B3 .  .  .  G#3 . .  . ',
+  'B3 .  .  .  D4 .  .  . ',
+  'E3 .  .  .  G3 .  .  . ',
+  'C4 .  .  .  E4 .  .  . ',
+  'A3 .  .  .  C4 .  .  . ',
+  'B3 .  .  .  D4 .  .  . ',
 ].join(' ')
 
 const CHASE_DRUMS = ('- x - x - x - x ').repeat(7) + '- x - x - x x x'
 
 
 /*
- * The chase, getting worse.
+ * The chase, getting busier.
  *
  * Two voices that are not in the tune as written. The first is an off-beat
  * stab on the root of each chord, which does nothing to the harmony and
- * everything to how hurried it feels. The second is the raised seventh held
- * right up against the root — G# against A, a semitone apart — which is the
- * interval this key was chosen for in the first place.
+ * everything to how hurried it feels. The second holds a long note over the
+ * top of it.
+ *
+ * The second one used to be a grinding semitone — the raised seventh against
+ * the root, which is the interval the old key existed for. In a major key
+ * there is nothing to grind, and the voice does its job by simply being one
+ * more thing playing. Getting busier turns out to work as well as getting
+ * nastier, and is a great deal easier to sit next to.
  *
  * Neither plays at the start of a board. They arrive as the last dots go and
  * the machines speed up, and by the last life the tune is the same eight bars
  * with three more voices in it.
  */
 const CHASE_PUSH = [
+  '.  C3 .  C3 .  C3 .  C3',
   '.  A3 .  A3 .  A3 .  A3',
-  '.  G3 .  G3 .  G3 .  G3',
   '.  F3 .  F3 .  F3 .  F3',
-  '.  E3 .  E3 .  E3 .  E3',
+  '.  G3 .  G3 .  G3 .  G3',
+  '.  C3 .  C3 .  C3 .  C3',
   '.  A3 .  A3 .  A3 .  A3',
-  '.  G3 .  G3 .  G3 .  G3',
   '.  F3 .  F3 .  F3 .  F3',
-  '.  E3 .  E3 .  E3 E3 E3',
+  '.  G3 .  G3 .  G3 G3 G3',
 ].join(' ')
 
 const CHASE_DREAD = [
-  'G#5 . .  .  .  .  .  . ',
-  'A5 .  .  .  .  .  .  . ',
-  'G#5 . .  .  .  .  .  . ',
-  'A5 .  .  .  .  .  .  . ',
-  'G#5 . .  .  .  .  .  A5',
-  'G#5 . .  .  .  .  .  . ',
-  'A5 .  .  .  .  .  .  . ',
-  'G#5 . .  .  .  .  .  . ',
+  'E4 .  .  .  .  .  .  . ',
+  'C4 .  .  .  .  .  .  . ',
+  'A3 .  .  .  .  .  .  . ',
+  'B3 .  .  .  .  .  .  . ',
+  'E4 .  .  .  .  .  .  G4',
+  'C4 .  .  .  .  .  .  . ',
+  'A3 .  .  .  .  .  .  . ',
+  'B3 .  .  .  .  .  .  . ',
 ].join(' ')
 
 const CHASE_HOT_DRUMS = ('x - x x - x x x ').repeat(7) + 'x - x x x x x x'
@@ -243,14 +287,32 @@ export const CHASE: Track = {
   hotDrums: CHASE_HOT_DRUMS,
   parts: [
     {
-      wave: 'pulse',
-      duty: 0.25,
-      gain: 0.15,
+      /*
+       * A triangle, where this was a quarter-duty pulse.
+       *
+       * A pulse that narrow is the most nasal thing the idiom has, and up at
+       * the fifth octave carrying the melody it was the single loudest part of
+       * the tune whatever its gain said — a square wave's harmonics fall away
+       * slowly, so most of what you hear is an octave or two above the note
+       * you are playing. A triangle has almost nothing above its third
+       * harmonic. Same notes, none of the edge.
+       *
+       * It wants a *little* more gain than the pulse did, not a lot. The first
+       * go at this doubled it, on the reasoning that triangles are quieter —
+       * which turns out to be false in the way that matters. Measured against
+       * the ear's own sensitivity curve, a triangle at the same nominal gain
+       * is *louder* than a narrow pulse, because nearly all of it lands in the
+       * fundamental rather than being scattered up into harmonics. What the
+       * pulse had was not loudness, it was presence, and the twenty per cent
+       * here is buying back some of that.
+       */
+      wave: 'triangle',
+      gain: 0.18,
       sustain: 0.85,
-      vibrato: { cents: 22, hz: 5.5, delay: 0.1 },
+      vibrato: { cents: 14, hz: 5, delay: 0.14 },
       pattern: CHASE_LEAD,
     },
-    { wave: 'triangle', gain: 0.3, sustain: 0.6, pattern: CHASE_BASS },
+    { wave: 'triangle', gain: 0.26, sustain: 0.6, pattern: CHASE_BASS },
     {
       // Was a held sine, which is a thing no chip of the era could do. Now it
       // flicks root, fifth, octave inside every note instead, which is how one
@@ -264,7 +326,7 @@ export const CHASE: Track = {
       pattern: CHASE_PAD,
     },
     { wave: 'pulse', duty: 0.5, gain: 0.09, sustain: 0.28, pattern: CHASE_PUSH, from: 0.3 },
-    { wave: 'sawtooth', gain: 0.045, sustain: 1, pattern: CHASE_DREAD, from: 0.68 },
+    { wave: 'triangle', gain: 0.072, sustain: 1, pattern: CHASE_DREAD, from: 0.68 },
   ],
 }
 
@@ -393,12 +455,13 @@ export const PIPES: Track = {
   hotDrums: PIPES_HOT_DRUMS,
   parts: [
     {
-      // The narrowest pulse of the three, which is the brightest and thinnest.
-      wave: 'pulse',
-      duty: 0.125,
-      gain: 0.14,
+      // Was the narrowest pulse of the three, which is the brightest and the
+      // thinnest, and in a tune this quick it was relentless. See the note on
+      // the chase's lead: same notes, warmer voice, twice the gain to match.
+      wave: 'triangle',
+      gain: 0.17,
       sustain: 0.8,
-      vibrato: { cents: 18, hz: 6, delay: 0.14 },
+      vibrato: { cents: 12, hz: 5.5, delay: 0.16 },
       pattern: PIPES_LEAD,
     },
     { wave: 'triangle', gain: 0.28, sustain: 0.55, pattern: PIPES_BASS },
@@ -412,7 +475,7 @@ export const PIPES: Track = {
       pattern: PIPES_PAD,
     },
     { wave: 'pulse', duty: 0.5, gain: 0.08, sustain: 0.26, pattern: PIPES_PUSH, from: 0.34 },
-    { wave: 'sawtooth', gain: 0.04, sustain: 1, pattern: PIPES_DREAD, from: 0.7 },
+    { wave: 'triangle', gain: 0.064, sustain: 1, pattern: PIPES_DREAD, from: 0.7 },
   ],
 }
 
@@ -507,17 +570,16 @@ export const CAVERN: Track = {
   hotDrums: CAVERN_HOT_DRUMS,
   parts: [
     {
-      wave: 'pulse',
-      duty: 0.5,
-      gain: 0.13,
+      wave: 'triangle',
+      gain: 0.16,
       sustain: 0.9,
-      vibrato: { cents: 30, hz: 4.5, delay: 0.2 },
+      vibrato: { cents: 20, hz: 4.5, delay: 0.2 },
       pattern: CAVERN_LEAD,
     },
     { wave: 'triangle', gain: 0.22, sustain: 1, pattern: CAVERN_BASS },
     { wave: 'pulse', duty: 0.125, gain: 0.05, sustain: 0.3, pattern: CAVERN_DRIP },
     { wave: 'pulse', duty: 0.5, gain: 0.08, sustain: 0.28, pattern: CAVERN_PUSH, from: 0.32 },
-    { wave: 'sawtooth', gain: 0.045, sustain: 1, pattern: CAVERN_DREAD, from: 0.7 },
+    { wave: 'triangle', gain: 0.072, sustain: 1, pattern: CAVERN_DREAD, from: 0.7 },
   ],
 }
 
@@ -903,11 +965,10 @@ export const ROAD: Track = {
   hotDrums: ROAD_HOT_DRUMS,
   parts: [
     {
-      wave: 'pulse',
-      duty: 0.25,
-      gain: 0.12,
+      wave: 'triangle',
+      gain: 0.15,
       sustain: 0.8,
-      vibrato: { cents: 18, hz: 5, delay: 0.12 },
+      vibrato: { cents: 12, hz: 5, delay: 0.14 },
       pattern: ROAD_LEAD,
     },
     { wave: 'triangle', gain: 0.26, sustain: 0.55, pattern: ROAD_BASS },
@@ -921,7 +982,7 @@ export const ROAD: Track = {
       pattern: ROAD_PAD,
     },
     { wave: 'pulse', duty: 0.5, gain: 0.08, sustain: 0.26, pattern: ROAD_PUSH, from: 0.3 },
-    { wave: 'sawtooth', gain: 0.045, sustain: 1, pattern: ROAD_DREAD, from: 0.68 },
+    { wave: 'triangle', gain: 0.072, sustain: 1, pattern: ROAD_DREAD, from: 0.68 },
   ],
 }
 
@@ -1092,11 +1153,10 @@ export const SPACE: Track = {
   hotDrums: SPACE_HOT_DRUMS,
   parts: [
     {
-      wave: 'pulse',
-      duty: 0.25,
-      gain: 0.12,
+      wave: 'triangle',
+      gain: 0.15,
       sustain: 0.9,
-      vibrato: { cents: 16, hz: 4.5, delay: 0.16 },
+      vibrato: { cents: 12, hz: 4.5, delay: 0.18 },
       pattern: SPACE_LEAD,
     },
     { wave: 'triangle', gain: 0.26, sustain: 0.9, pattern: SPACE_BASS },
@@ -1110,7 +1170,7 @@ export const SPACE: Track = {
       pattern: SPACE_PAD,
     },
     { wave: 'pulse', duty: 0.5, gain: 0.1, sustain: 0.3, pattern: SPACE_PULSE, from: 0.28 },
-    { wave: 'sawtooth', gain: 0.05, sustain: 1, pattern: SPACE_DREAD, from: 0.66 },
+    { wave: 'triangle', gain: 0.080, sustain: 1, pattern: SPACE_DREAD, from: 0.66 },
   ],
 }
 
