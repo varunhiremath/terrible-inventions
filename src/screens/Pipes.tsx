@@ -461,14 +461,14 @@ export function Pipes() {
             <p className="text-sm font-bold uppercase tracking-wider text-rust">{fill('{papa}')}</p>
             <p className="mt-2 text-xl leading-snug">
               {hud.status === 'outOfTime'
-                ? 'Time! I built that clock myself and it is my finest work.'
+                ? 'Time! Although between us, that clock runs fast. Have another go.'
                 : hud.status === 'won' && lastLevel
                   ? 'You have been through every pipe I own. I am going to need more pipes.'
                   : hud.status === 'won'
-                    ? 'You got the flag. Do not get comfortable, there are more.'
+                    ? 'You got the flag! Well done. There are more, mind you.'
                     : outOfLives
-                      ? 'All out! Back to the beginning with you.'
-                      : 'Down a pipe. That happens.'}
+                      ? 'Out of lives! Those pipes are a menace. Start again?'
+                      : 'Down a pipe! Happens to everyone. Happens to me.'}
             </p>
 
             <div className="mt-5 flex flex-col gap-2">

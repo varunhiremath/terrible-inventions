@@ -537,12 +537,12 @@ export function Dave() {
             <p className="text-sm font-bold uppercase tracking-wider text-rust">{fill('{papa}')}</p>
             <p className="mt-2 text-xl leading-snug">
               {hud.status === 'gameOver'
-                ? 'And that is the end of that! My hideout remains un-raided!'
+                ? 'That hideout is a nightmare, is it not? I got lost in it myself. Again?'
                 : hud.status === 'levelComplete'
                   ? lastLevel
                     ? 'You got through the whole thing! I am going to have a sit down!'
                     : 'Fine! FINE! There are more rooms. I have got LOADS of rooms!'
-                  : 'Ooh! That looked like it hurt!'}
+                  : 'Ooh! Are you all right? Right, off you go.'}
             </p>
 
             <div className="mt-5 flex flex-col gap-2">

@@ -450,8 +450,8 @@ export function Space() {
               {hud.status === 'arrived' && lastWorld
                 ? 'Neptune. There is nothing past Neptune but my patience, and you have used that up too.'
                 : hud.status === 'arrived'
-                  ? `You made ${world.name}. It will not happen again.`
-                  : 'Out of shields, and a very long way from anywhere.'}
+                  ? `You made ${world.name}! Look at that. Do not tell anyone I said so.`
+                  : 'Out of shields! Space is enormous and full of rocks. Go again?'}
             </p>
 
             {/*

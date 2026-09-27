@@ -18,6 +18,7 @@ falls back to the synthesiser at runtime, so nothing ever goes silent.
 
 Voices are Piper's (MIT), from the rhasspy/piper-voices collection.
 """
+import glob
 import hashlib
 import io
 import json
@@ -28,7 +29,7 @@ import wave
 
 import numpy as np
 import soundfile as sf
-from piper import PiperVoice
+from piper import PiperVoice, SynthesisConfig
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(HERE, 'public', 'spoken')
@@ -45,6 +46,59 @@ SPEAKERS = {
 # What the placeholders become. The repo never contains a real name — these
 # are the defaults the app itself shows when nobody has set one.
 FILL = {'{papa}': 'Papa', '{kid}': 'you'}
+
+# --- how Papa talks ----------------------------------------------------------
+#
+# The voice was asked to be funnier, and funny in a read-aloud line is mostly
+# two things: pace and variety. A flat, even delivery is what makes a machine
+# sound like a machine, and it is also what makes a joke die.
+#
+# So three dials, and the third matters most.
+#
+# LIFT       plays the finished clip back faster than it was recorded, which
+#            raises its pitch with it — the oldest trick there is for making a
+#            voice sound daft. Measured rather than guessed: 1.12 takes him
+#            from about 114 Hz to about 128, which is bright and pleased with
+#            itself without tipping into squeaky.
+# PACE       is how slowly Piper is asked to say it in the first place, and it
+#            exists to take the tempo back off the lift. Raising pitch by
+#            speeding a recording up also makes it gallop; asking for a
+#            slightly slower read first means the pitch comes without the
+#            gallop, and what is left over is chosen on purpose. 1.05 against a
+#            1.12 lift leaves him about six per cent quicker than before, which
+#            is roughly the difference between reading a line and performing
+#            one.
+# WOBBLE     is Piper's own variability in how long each sound is held. Turned
+#            up, he stops metering syllables out evenly and starts leaning on
+#            some of them.
+# SWING      varies the pace per line, seeded off the words, so the fifteenth
+#            thing he says does not arrive at the same clip as the first. This
+#            is the one that stops a run of lines sounding like a list being
+#            read out.
+#
+# The narrator gets none of it. He is the straight man, and half of why Papa is
+# funny is that the other voice in the story is not.
+PAPA_LIFT = 1.12
+PAPA_PACE = 1.05
+PAPA_WOBBLE = 1.3
+PAPA_SWING = 0.07
+
+
+def delivery(voice, line):
+    """Piper's settings for one line, and what to do to the audio afterwards."""
+    if voice != 'papa':
+        return SynthesisConfig(), 1.0
+    # Seeded off the line itself, so a given line always sounds the same — a
+    # clip that came out differently on every render would mean re-uploading
+    # ninety files for no reason.
+    swing = (hashlib.sha1(line.encode()).digest()[0] / 255 - 0.5) * 2 * PAPA_SWING
+    return (
+        SynthesisConfig(
+            length_scale=PAPA_PACE * (1 + swing),
+            noise_w_scale=PAPA_WOBBLE,
+        ),
+        PAPA_LIFT,
+    )
 
 
 def lines_from_stories(path):
@@ -133,11 +187,17 @@ def main():
         for token, word in FILL.items():
             spoken = spoken.replace(token, word)
 
+        config, lift = delivery(voice, line)
         buffer = io.BytesIO()
         with wave.open(buffer, 'wb') as w:
-            loaded[model].synthesize_wav(spoken, w)
+            loaded[model].synthesize_wav(spoken, w, syn_config=config)
         buffer.seek(0)
         audio, rate = sf.read(buffer, dtype='float32')
+
+        # And the lift: played back faster than it was recorded, which raises
+        # the pitch with it. See the note on PAPA_LIFT.
+        if lift != 1.0:
+            audio = resample(audio, rate, int(round(rate / lift)))
 
         # Trim the silence Piper leaves at each end, which is most of a second
         # across ninety clips and is dead air in a game.
@@ -152,10 +212,23 @@ def main():
         total += os.path.getsize(out)
         index[key] = round(len(audio) / rate, 2)
 
+    # Anything left over from a line that has since been reworded.
+    #
+    # A clip is named after the words in it, so changing a word writes a new
+    # file and abandons the old one. Nothing read them any more, but they were
+    # still being committed, still being deployed, and still being taken into
+    # the service worker's cache on every phone — sixteen of them after one
+    # pass of rewriting.
+    dropped = 0
+    for path in glob.glob(os.path.join(OUT, '*.opus')):
+        if os.path.basename(path)[:-len('.opus')] not in index:
+            os.remove(path)
+            dropped += 1
+
     with open(os.path.join(OUT, 'index.json'), 'w') as f:
         json.dump(index, f, separators=(',', ':'), sort_keys=True)
 
-    print(f'{len(index)} clips, {total / 1024:.0f} KB')
+    print(f'{len(index)} clips, {total / 1024:.0f} KB, {dropped} stale removed')
     return 0
 
 

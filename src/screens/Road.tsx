@@ -1081,10 +1081,10 @@ export function Road() {
               {hud.status === 'levelDone' && clearedTheWritten
                 ? 'Every road I own, and you drove the lot of them. Fine. I will build more.'
                 : hud.status === 'levelDone'
-                  ? 'Through already? There is more road. There is always more road.'
+                  ? 'Through already? Nicely driven. There is always more road.'
                   : outOfLives
-                    ? 'Out of cars. Back to the start of the motorway with you.'
-                    : 'A prang. I told you I built these myself.'}
+                    ? 'Out of cars! I do build them rather flimsy. Have another go.'
+                    : 'A prang! My fault, I built the thing. Back on the road with you.'}
             </p>
 
             {hud.status === 'levelDone' && (

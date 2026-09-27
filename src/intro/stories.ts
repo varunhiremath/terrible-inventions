@@ -52,8 +52,8 @@ export const STORIES: Record<string, Story> = {
     title: 'THE DUNGEON',
     beats: [
       { seconds: 4.6, scene: 'dungeon', voice: 'narrator', line: 'Thirteen floors down, and one hour on the clock.' },
-      { seconds: 5.5, scene: 'dungeon', voice: 'papa', line: 'One hour! For all thirteen! I timed it myself and I laughed.' },
-      { seconds: 5.2, scene: 'dungeon', voice: 'narrator', line: 'The clock never stops. Not when you die, not between floors. Never.' },
+      { seconds: 5.5, scene: 'dungeon', voice: 'papa', line: 'One hour! For all thirteen! Even I could not do that.' },
+      { seconds: 5.2, scene: 'dungeon', voice: 'narrator', line: 'The clock never stops. Not when you slip, not between floors. Never.' },
       { seconds: 7.1, scene: 'dungeon', voice: 'narrator', line: 'Every move is a commitment. Start a running jump and you are going wherever it lands.' },
       { seconds: 6.3, scene: 'dungeon', voice: 'narrator', line: 'Walk, jump, and a careful step for the edges. Guards want the pointy end.' },
       { seconds: 3.4, scene: 'dungeon', voice: 'papa', line: 'Fifty-nine minutes. Fifty-eight. Oh dear.' },
@@ -97,7 +97,7 @@ export const STORIES: Record<string, Story> = {
       { seconds: 6.4, scene: 'space', voice: 'narrator', line: 'There is always a way through. The purple mines are not one. Fly round those.' },
       { seconds: 6.4, scene: 'space', voice: 'narrator', line: 'Reach a world and it tells you something true about itself. That is the prize.' },
       { seconds: 6.6, scene: 'space', voice: 'narrator', line: 'Everything you break drops a cell. Fly into it, then spend the lot when you land.' },
-      { seconds: 4.6, scene: 'space', voice: 'papa', line: 'Neptune. You will never see Neptune. Off you go.' },
+      { seconds: 4.6, scene: 'space', voice: 'papa', line: 'Neptune. Nobody has ever got that far. Off you go.' },
     ],
   },
 }

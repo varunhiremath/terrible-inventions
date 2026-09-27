@@ -508,12 +508,12 @@ export function Prince() {
             <p className="text-sm font-bold uppercase tracking-wider text-rust">{fill('{papa}')}</p>
             <p className="mt-2 text-xl leading-snug">
               {hud.status === 'outOfTime'
-                ? 'The hour is up! I win by simply WAITING! My favourite way!'
+                ? 'The hour has gone! That clock is far too fast. I should fix it. Another go?'
                 : hud.status === 'won'
                   ? 'You got all the way to the top! I am going to need a bigger tower!'
                   : hud.status === 'levelDone'
                     ? 'Fine! There are twelve more doors and I like ALL of them!'
-                    : 'Ooh. That looked like it smarted.'}
+                    : 'Ooh. These floors are lethal. Sorry. Up you get.'}
             </p>
 
             <div className="mt-5 flex flex-col gap-2">
