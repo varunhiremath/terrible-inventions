@@ -24,6 +24,7 @@ import {
 import {
   BODY_H,
   BODY_W,
+  JET_SECONDS,
   bodyTiles,
   canLeave,
   fillTank,
@@ -108,6 +109,8 @@ export interface Game {
    * noticed, because everything that checked it used the space bar.
    */
   shots: number
+  /** How long a jetpack lasts here, which the workshop can deepen. */
+  jetTank: number
 }
 
 export const key = (x: number, y: number) => `${x},${y}`
@@ -153,6 +156,7 @@ export function newGame(level: Level, number = 1, lives = STARTING_LIVES, score 
     status: 'playing',
     message: null,
     messageFor: 0,
+    jetTank: JET_SECONDS,
     shots: 0,
   }
 }
@@ -224,7 +228,7 @@ function collectAt(game: Game, next: Game): void {
     }
     if (tile === TILE.JETPACK) {
       next.taken.add(id)
-      next.dave = fillTank(next.dave)
+      next.dave = fillTank(next.dave, next.jetTank)
       next.events.push('kit')
       continue
     }

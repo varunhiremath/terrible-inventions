@@ -24,7 +24,9 @@ import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
 import { say, silence } from '../voice'
 import { LABELS, hintAlpha } from '../ui/padHints'
+import { OPENERS } from '../lines'
 import { useStore } from '../store'
+import { jetScale, spareLives } from '../workshop/kit'
 import { Interlude } from './Interlude'
 
 /**
@@ -94,6 +96,10 @@ function openingArms(): boolean {
 
 export function Dave() {
   const go = useStore((s) => s.go)
+  const earn = useStore((s) => s.earn)
+  const kit = useStore((s) => s.save.workshop)
+  /** The workshop's stock, read once when a run starts. */
+  const stock = useRef({ lives: 0, jets: 1 })
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -118,12 +124,17 @@ export function Dave() {
   })
 
   useEffect(() => {
-    const opening = newGame(levelFor(openingCave()), openingCave())
+    const plain = newGame(
+      levelFor(openingCave()),
+      openingCave(),
+      STARTING_LIVES + stock.current.lives,
+    )
+    const opening = { ...plain, jetTank: plain.jetTank * stock.current.jets }
     gameRef.current = openingArms()
       ? { ...opening, dave: { ...opening.dave, hasGun: true } }
       : opening
     clock.current = 0
-    say(fill('Into the hideout, then. Do try not to touch anything hot.'), { as: 'papa' })
+    say(fill(OPENERS.caves), { as: 'papa', raw: OPENERS.caves })
   }, [])
 
   useEffect(() => {
@@ -379,6 +390,24 @@ export function Dave() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    stock.current = {
+      lives: spareLives({ workshop: kit }),
+      jets: jetScale({ workshop: kit }),
+    }
+  }, [kit])
+
+  /** Coins for the trip underground, paid once, when it ends. */
+  const banked = useRef('')
+  useEffect(() => {
+    const game = gameRef.current
+    if (!game || game.status === 'playing') return
+    const mark = `${game.number}:${game.status}:${game.score}`
+    if (banked.current === mark) return
+    banked.current = mark
+    earn(game.score)
+  }, [hud.status, earn])
+
   // --- the glass ------------------------------------------------------------
   const readTouch = (e: React.PointerEvent) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -450,7 +479,10 @@ export function Dave() {
     if (!game) return
     silence()
     const number = game.number + 1
-    gameRef.current = newGame(levelFor(number), number, game.lives, game.score)
+    gameRef.current = {
+      ...newGame(levelFor(number), number, game.lives, game.score),
+      jetTank: game.jetTank,
+    }
     clock.current = 0
     setHud((h) => ({ ...h, status: 'playing', level: number, message: null }))
   }

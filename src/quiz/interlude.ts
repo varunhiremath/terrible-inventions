@@ -97,9 +97,17 @@ export function pickQuestion(
   const topics = asking.topics ?? (['maths', ...FACT_TOPICS] as Topic[])
   const wantsMaths = topics.includes('maths')
 
-  // Generated sums only when maths is on the table at all, and then only now
-  // and again: they are the ones that actually move his rating.
-  if (wantsMaths && (topics.length === 1 || roll < GENERATED)) {
+  /*
+   * Generated sums only when maths is on the table, and then only now and
+   * again: they are the ones that actually move his rating.
+   *
+   * In the workshop, where maths is the only thing on the table, it is most of
+   * the time rather than all of it — the written maths questions are about
+   * ideas rather than arithmetic, and a session of nothing but typed answers
+   * is a worksheet.
+   */
+  const share = topics.length === 1 && wantsMaths ? 0.7 : GENERATED
+  if (wantsMaths && roll < share) {
     return { kind: 'maths', problem: mathsAt(rating, (roll * 5.1) % 1, seed) }
   }
 

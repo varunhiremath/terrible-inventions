@@ -1,4 +1,5 @@
 import { type Cue } from './audio'
+import { playClip, stopClip } from './clips'
 import { duckMusic, speakingSeconds } from './music/player'
 import { NARRATOR, PAPA, profileFor, speak, stopSpeaking, type VoiceProfile } from './speech'
 
@@ -43,7 +44,7 @@ export function getVoiceMode(): VoiceMode {
  */
 export function say(
   text: string,
-  options: { cue?: Cue; seed?: number; as?: 'papa' } = {},
+  options: { cue?: Cue; seed?: number; as?: 'papa'; raw?: string } = {},
 ): void {
   if (mode === 'off') return
 
@@ -52,7 +53,19 @@ export function say(
 
   const profile =
     options.as === 'papa' ? PAPA : options.seed === undefined ? NARRATOR : profileFor(options.seed)
-  speak(text, profile)
+
+  /*
+   * A rendered clip if there is one, the synthesiser if there is not.
+   *
+   * The clip is looked up by the line *as written* — placeholders and all —
+   * because that is what the renderer saw. `raw` carries it when the caller
+   * has already filled the name in; without it we would be hashing a line
+   * that only exists on this one device.
+   */
+  const written = options.raw ?? text
+  void playClip(options.as === 'papa' ? 'papa' : 'narrator', written).then((seconds) => {
+    if (seconds === null) speak(text, profile)
+  })
 }
 
 /**
@@ -66,6 +79,7 @@ export function sting(_cue: Cue): void {}
 
 export function silence(): void {
   stopSpeaking()
+  stopClip()
 }
 
 export type { VoiceProfile }

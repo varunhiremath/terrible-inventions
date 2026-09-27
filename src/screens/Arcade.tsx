@@ -153,7 +153,8 @@ function PlayerIcon() {
     levelRef.current = run.level
     fruitRef.current?.(run.level)
     setMessage(null)
-    say(fill(taunt('levelStart')), { as: 'papa' })
+    const opening = taunt('levelStart')
+    say(fill(opening), { as: 'papa', raw: opening })
   }, [run])
 
   /*
@@ -388,9 +389,10 @@ function PlayerIcon() {
         if (next.status !== before && before === 'playing') {
           const moment: TauntMoment =
             next.status === 'gameOver' ? 'gameOver' : next.status === 'levelComplete' ? 'levelDone' : 'caught'
-          const line = fill(taunt(moment))
+          const written = taunt(moment)
+          const line = fill(written)
           setMessage(line)
-          say(line, { as: 'papa' })
+          say(line, { as: 'papa', raw: written })
         }
 
         /*

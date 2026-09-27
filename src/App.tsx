@@ -7,6 +7,7 @@ import { STORIES } from './intro/stories'
 import { Pipes } from './screens/Pipes'
 import { Road } from './screens/Road'
 import { Space } from './screens/Space'
+import { Workshop } from './screens/Workshop'
 import { Prince } from './screens/Prince'
 import { Note } from './screens/Note'
 import { Settings } from './screens/Settings'
@@ -62,6 +63,9 @@ export default function App() {
       : screen === 'pipes' ? 'pipes'
       : screen === 'road' ? 'road'
       : screen === 'space' ? 'space'
+      // The workshop gets the thinking tune: it is the one screen where
+      // somebody is sitting still working something out.
+      : screen === 'workshop' ? 'thinking'
       : null
     if (tune) startMusic(tune)
     else stopMusic()
@@ -90,6 +94,8 @@ export default function App() {
       return <Road />
     case 'space':
       return <Space />
+    case 'workshop':
+      return <Workshop />
     case 'note':
       return <Note />
     case 'settings':

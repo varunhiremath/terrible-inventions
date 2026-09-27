@@ -13,6 +13,7 @@ import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
 import { LABELS, hintAlpha } from '../ui/padHints'
 import { useStore } from '../store'
+import { spareShields } from '../workshop/kit'
 import { pickFact, type Fact } from '../space/facts'
 import { FactCard, Shop } from './SpaceShop'
 
@@ -77,6 +78,10 @@ function opening(): { world: number; scrap: number } {
 
 export function Space() {
   const go = useStore((s) => s.go)
+  const earn = useStore((s) => s.earn)
+  const kit = useStore((s) => s.save.workshop)
+  /** What the workshop has sold him, read once when a run starts. */
+  const stock = useRef(0)
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const runRef = useRef<Run | null>(null)
@@ -117,7 +122,7 @@ export function Space() {
 
     if (!runRef.current) {
       const from = opening()
-      runRef.current = newRun(from.world, STARTING_SHIELDS, 0, 1, from.scrap)
+      runRef.current = newRun(from.world, STARTING_SHIELDS + stock.current, 0, 1, from.scrap)
     }
     const pacer = createPacer<Run>(FIXED, MAX_CATCHUP)
     let frame = 0
@@ -333,6 +338,21 @@ export function Space() {
    * worse than no card.
    */
   useEffect(() => {
+    stock.current = spareShields({ workshop: kit })
+  }, [kit])
+
+  /** Coins for the flight, paid once, when it ends one way or the other. */
+  const banked = useRef('')
+  useEffect(() => {
+    const run = runRef.current
+    if (!run || (hud.status !== 'arrived' && hud.status !== 'lost')) return
+    const mark = `${run.number}:${hud.status}:${run.score}`
+    if (banked.current === mark) return
+    banked.current = mark
+    earn(run.score)
+  }, [hud.status, earn])
+
+  useEffect(() => {
     if (hud.status !== 'knocked' || hud.shields <= 0) return
     setFact((already) => {
       if (already) return already
@@ -378,7 +398,7 @@ export function Space() {
   }
 
   const startOver = () => {
-    runRef.current = newRun(1)
+    runRef.current = newRun(1, STARTING_SHIELDS + stock.current)
     read.current = []
     setFact(null)
     setHud({

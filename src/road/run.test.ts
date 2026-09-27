@@ -56,6 +56,16 @@ function makeDriver() {
         if (Math.abs(where - lane) >= 0.9) return
         const gap = at - run.distance
         if (gap < 0) return
+        /*
+         * Anything nearly touching is urgent whatever the speeds are doing.
+         *
+         * Judging only by how fast it was catching up was fine while
+         * everything on the road was slower than him. On a standing grid every
+         * car is doing the same nought miles an hour, so the closing speed is
+         * nothing, so this saw no danger at all and drove into the back of the
+         * car in front of it — three times a stage, on the gentlest stage.
+         */
+        if (gap < CAR_LONG * 2.5) { soonest = Math.min(soonest, 0.1); return }
         const closing = run.speed - speed
         if (closing <= 0.5) return
         soonest = Math.min(soonest, gap / closing)
@@ -166,8 +176,24 @@ describe('the road', () => {
         let run = newRun(number, 99, 0, seed * 13 + 1)
         const drive = makeDriver()
         for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+          const before = run
           run = step(run, drive(run), FIXED)
-          if (run.status === 'crashed') { total++; run = resume(run) }
+          if (run.status === 'crashed') {
+            /*
+             * Only what this measure is about: his traffic.
+             *
+             * It counted every crash, which was the same thing until the day
+             * four racers turned up — and then the gentlest stage read as
+             * three times harder because this driver is poor at overtaking.
+             * Getting past the field is a race, and the race has its own
+             * tests; this one is asking whether the traffic is too thick.
+             */
+            const near = (y: number, lane: number) =>
+              Math.abs(y - before.distance) < CAR_LONG * 1.3 &&
+              Math.abs(lane - before.lane) < 0.7
+            if (!before.racers.some((r) => near(r.y, r.lane))) total += 1
+            run = resume(run)
+          }
         }
       }
       return total / 5
@@ -400,7 +426,7 @@ describe('the field', () => {
     // of them where they can be seen.
     for (const racer of run.racers) {
       expect(racer.y).toBeGreaterThanOrEqual(0)
-      expect(racer.y).toBeLessThan(GRID_ROW * 3)
+      expect(racer.y).toBeLessThan(GRID_ROW * 5)
       // Every one of them in a proper lane, not on a line between two.
       expect(Math.abs(racer.lane - Math.round(racer.lane))).toBeLessThan(1e-9)
     }

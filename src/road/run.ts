@@ -169,6 +169,14 @@ export interface Run {
   countdown: number
   /** The clock reading when you crossed the line. */
   yourTime: number | null
+  /**
+   * How much this car's tank holds.
+   *
+   * On the run rather than a constant because the workshop sells a bigger one,
+   * and a bigger tank that the next can of fuel quietly caps back to the
+   * standard size is not a bigger tank.
+   */
+  tank: number
 }
 
 export function newRun(number = 1, lives = STARTING_LIVES, score = 0, seed = 1): Run {
@@ -181,6 +189,7 @@ export function newRun(number = 1, lives = STARTING_LIVES, score = 0, seed = 1):
     lane: POLE.lane,
     speed: 0,
     fuel: TANK,
+    tank: TANK,
     cars: [],
     cans: [],
     racers: gridOf(stage),
@@ -223,7 +232,7 @@ export function resume(run: Run): Run {
     events: [],
     // Enough in the tank to get going again. Coming back with an empty one
     // would just lose the next life to the same thing.
-    fuel: Math.max(run.fuel, TANK * 0.55),
+    fuel: Math.max(run.fuel, run.tank * 0.55),
     // Anything close enough to hit again is gone. Being dropped back in front
     // of the same car you just hit is how a game loses somebody for good.
     cars: run.cars.filter((car) => car.y - run.distance > SIGHT * 0.6),
@@ -955,7 +964,7 @@ export function step(run: Run, input: Input, dt: number): Run {
      * at least an answer.
      */
     // A word before it matters, once, so running dry is never a surprise.
-    if (!next.warned && next.fuel > 0 && next.fuel < TANK * 0.25) {
+    if (!next.warned && next.fuel > 0 && next.fuel < next.tank * 0.25) {
       next.warned = true
       next.events.push('warn')
     }
@@ -1009,11 +1018,11 @@ export function step(run: Run, input: Input, dt: number): Run {
     if (gap > CAR_LONG || gap < -CAR_LONG) continue
     if (!overlaps(mine, occupies(can.lane))) continue
     can.taken = true
-    next.fuel = Math.min(TANK, next.fuel + CAN_WORTH)
+    next.fuel = Math.min(next.tank, next.fuel + CAN_WORTH)
     next.cansTaken += 1
     next.score += 50
     // Topped up: the warning may be given again if it gets low a second time.
-    if (next.fuel > TANK * 0.3) next.warned = false
+    if (next.fuel > next.tank * 0.3) next.warned = false
     next.events.push('can')
   }
 

@@ -93,7 +93,12 @@ export function Intro({ story, onDone }: { story: Story; onDone: () => void }) {
         setVoice(now.beat.voice)
         silence()
         duckMusic(3)
-        say(text, now.beat.voice === 'papa' ? { as: 'papa' } : {})
+        // `raw` is the line as written, placeholders and all: that is what
+        // the rendered clip was keyed by.
+        say(text, {
+          ...(now.beat.voice === 'papa' ? { as: 'papa' as const } : {}),
+          raw: now.beat.line,
+        })
       }
 
       if (now.done && !finished) {

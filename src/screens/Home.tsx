@@ -397,6 +397,31 @@ export function Home() {
         ))}
       </div>
 
+      {/*
+        * The workshop.
+        *
+        * A strip rather than a seventh tile: it is not a game and it should
+        * not look like one. It carries the purse, because the purse is the
+        * reason to go in.
+        */}
+      <button
+        type="button"
+        onClick={() => go('workshop')}
+        className="block-btn flex items-center justify-between gap-3 px-3 py-2.5 text-left"
+      >
+        <span>
+          <span className="block font-mono text-xs font-bold uppercase tracking-wider text-chalk">
+            The Workshop
+          </span>
+          <span className="mt-0.5 block text-xs text-dim">
+            Spend what you have earned. Sums pay best.
+          </span>
+        </span>
+        <span className="shrink-0 font-mono text-base font-bold tabular-nums text-bolt">
+          ◆ {save.coins}
+        </span>
+      </button>
+
       {save.note && !save.note.seen && (
         <button
           type="button"

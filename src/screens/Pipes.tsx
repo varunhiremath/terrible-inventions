@@ -18,6 +18,7 @@ import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
 import { LABELS, hintAlpha } from '../ui/padHints'
 import { useStore } from '../store'
+import { extraSeconds, spareLives } from '../workshop/kit'
 import { Interlude } from './Interlude'
 
 /**
@@ -81,6 +82,10 @@ interface Hud {
 
 export function Pipes() {
   const go = useStore((s) => s.go)
+  const earn = useStore((s) => s.earn)
+  const kit = useStore((s) => s.save.workshop)
+  /** The workshop's stock, read once when a run starts. */
+  const stock = useRef({ lives: 0, seconds: 0 })
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -106,7 +111,7 @@ export function Pipes() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    runRef.current = newRun(levelFor(1), 1)
+    runRef.current = newRun(levelFor(1), 1, 3 + stock.current.lives, stock.current.seconds)
     camera.current = 0
     let shown: Hud = { level: 1, lives: 3, coins: 0, score: 0, seconds: 300, status: 'playing' }
 
@@ -325,6 +330,24 @@ export function Pipes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    stock.current = {
+      lives: spareLives({ workshop: kit }),
+      seconds: extraSeconds({ workshop: kit }),
+    }
+  }, [kit])
+
+  /** Coins for the run, paid once, when it ends. */
+  const banked = useRef('')
+  useEffect(() => {
+    const run = runRef.current
+    if (!run || run.status === 'playing') return
+    const mark = `${run.number}:${run.status}:${run.score}`
+    if (banked.current === mark) return
+    banked.current = mark
+    earn(run.score)
+  }, [hud.status, earn])
+
   // --- the glass ------------------------------------------------------------
   const readTouch = (e: React.PointerEvent) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -371,7 +394,7 @@ export function Pipes() {
     const run = runRef.current
     if (!run) return
     const lives = right ? Math.min(3, run.lives + 1) : run.lives
-    runRef.current = newRun(run.level, run.number, Math.max(1, lives))
+    runRef.current = newRun(run.level, run.number, Math.max(1, lives), stock.current.seconds)
     camera.current = 0
     setHud((h) => ({ ...h, status: 'playing', seconds: 300, lives: runRef.current?.lives ?? h.lives }))
   }
@@ -384,13 +407,13 @@ export function Pipes() {
       runRef.current = { ...run, status: 'won' }
       return
     }
-    runRef.current = newRun(levelFor(number), number, run.lives)
+    runRef.current = newRun(levelFor(number), number, run.lives, stock.current.seconds)
     camera.current = 0
     setHud((h) => ({ ...h, status: 'playing', level: number, seconds: 300 }))
   }
 
   const startOver = () => {
-    runRef.current = newRun(levelFor(1), 1)
+    runRef.current = newRun(levelFor(1), 1, 3 + stock.current.lives, stock.current.seconds)
     camera.current = 0
     setHud({ level: 1, lives: 3, coins: 0, score: 0, seconds: 300, status: 'playing' })
   }

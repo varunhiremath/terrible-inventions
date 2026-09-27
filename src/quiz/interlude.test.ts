@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { BANK } from './bank'
-import { idOf, mathsAt, pickQuestion, shuffle, topicOf } from './interlude'
+import { FACT_TOPICS, idOf, mathsAt, pickQuestion, shuffle, topicOf } from './interlude'
+import { BY_TOPIC } from './bank'
 import type { Topic } from './types'
 
 const rolls = Array.from({ length: 300 }, (_, i) => i / 300)
@@ -112,5 +113,78 @@ describe('shuffling', () => {
   it('keeps everything it was given', () => {
     const items = ['a', 'b', 'c', 'd']
     for (const roll of rolls) expect([...shuffle(items, roll)].sort()).toEqual(items)
+  })
+})
+
+/**
+ * What the games ask, and what the workshop asks.
+ *
+ * They were the same thing and are not any more. Being handed a sum at the
+ * moment you lose a life is a punishment wearing a reward's coat, so the games
+ * ask about facts and the maths lives behind a door you choose to go through.
+ */
+describe('who asks what', () => {
+  const rolls = Array.from({ length: 200 }, (_, i) => i / 200)
+
+  it('never puts a sum in front of somebody mid-game', () => {
+    for (const roll of rolls) {
+      const q = pickQuestion(1000, roll, 7, { topics: FACT_TOPICS })
+      expect(q.kind, `roll ${roll}`).toBe('ask')
+      expect(topicOf(q), `roll ${roll}`).not.toBe('maths')
+    }
+  })
+
+  it('asks nothing but maths in the workshop', () => {
+    for (const roll of rolls) {
+      const q = pickQuestion(1000, roll, 7, { topics: ['maths'] })
+      expect(topicOf(q), `roll ${roll}`).toBe('maths')
+    }
+  })
+
+  it('mixes typed sums with written ones in the workshop', () => {
+    // All generated would be a worksheet; all written would never move the
+    // rating. Both have to turn up.
+    const kinds = new Set(
+      rolls.map((roll) => pickQuestion(1000, roll, 7, { topics: ['maths'] }).kind),
+    )
+    expect(kinds).toContain('maths')
+    expect(kinds).toContain('ask')
+  })
+
+  it('never asks a question that has already been answered', () => {
+    /*
+     * The point of the bank. Walk the whole of one topic, striking off each
+     * question as it comes up, and nothing should repeat until the topic is
+     * exhausted.
+     */
+    const solved: string[] = []
+    const pool = BY_TOPIC.geography.length
+    for (let i = 0; i < pool; i++) {
+      const q = pickQuestion(1000, (i * 0.0173) % 1, i, {
+        topics: ['geography'],
+        solved,
+      })
+      if (q.kind !== 'ask') continue
+      expect(solved, `repeat after ${i}`).not.toContain(q.item.id)
+      solved.push(q.item.id)
+    }
+  })
+
+  it('keeps asking once every question has been answered', () => {
+    // A game that stops asking is worse than one that repeats itself.
+    const all = BY_TOPIC.trivia.map((ask) => ask.id)
+    const q = pickQuestion(1000, 0.5, 1, { topics: ['trivia'], solved: all })
+    expect(q.kind).toBe('ask')
+  })
+
+  it('has enough facts that a long campaign does not run dry', () => {
+    /*
+     * One question per life lost. A bad session is a dozen; a determined
+     * child over a holiday is a few hundred. The bank has to be in that
+     * region or "never asked again" quietly becomes "never asked anything
+     * new".
+     */
+    const facts = FACT_TOPICS.reduce((n, topic) => n + BY_TOPIC[topic].length, 0)
+    expect(facts).toBeGreaterThanOrEqual(200)
   })
 })

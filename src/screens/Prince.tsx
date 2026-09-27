@@ -37,6 +37,7 @@ import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
 import { say, silence } from '../voice'
 import { LABELS, hintAlpha } from '../ui/padHints'
+import { OPENERS } from '../lines'
 import { useStore } from '../store'
 import { Interlude } from './Interlude'
 
@@ -85,7 +86,7 @@ export function Prince() {
   useEffect(() => {
     runRef.current = newRun(levelFor(1), 1)
     clock.current = 0
-    say(fill('Down you go. You have got an hour, and I have got all the guards.'), { as: 'papa' })
+    say(fill(OPENERS.dungeon), { as: 'papa', raw: OPENERS.dungeon })
   }, [])
 
   useEffect(() => {

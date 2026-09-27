@@ -3,6 +3,7 @@ import { fill, getProfile } from '../config/profile'
 import { STORIES, STORY_ORDER } from '../intro/stories'
 import { Btn, Panel, Screen } from '../ui/bits'
 import { exportSave, importSave } from '../engine/storage'
+import { OPENERS } from '../lines'
 import { useStore } from '../store'
 import { availableVoices, chooseVoice, chosenVoice, currentVoiceName } from '../speech'
 import { say } from '../voice'
@@ -43,7 +44,7 @@ export function Settings() {
   const tryVoice = (name: string | null) => {
     chooseVoice(name)
     setPicked(name)
-    say(fill('Right then. {kid} versus {papa}. Off we go.'), { as: 'papa' })
+    say(fill(OPENERS.coop), { as: 'papa', raw: OPENERS.coop })
   }
 
   const field =

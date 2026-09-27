@@ -16,6 +16,7 @@ import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
 import { LABELS, hintAlpha } from '../ui/padHints'
 import { useStore } from '../store'
+import { spareLives, tankScale } from '../workshop/kit'
 import { Interlude } from './Interlude'
 
 /**
@@ -87,15 +88,36 @@ function opening(): { stage: number; sprint: boolean } {
   }
 }
 
-function firstRun(): Run {
+function firstRun(stock: { lives: number; tank: number }): Run {
   const from = opening()
-  const run = newRun(from.stage)
+  const run = withStock(newRun(from.stage), stock)
   return from.sprint ? { ...run, stage: { ...run.stage, distance: 40 } } : run
+}
+
+/** Whatever the workshop has sold him, applied to a fresh run. */
+function withStock(run: Run, stock: { lives: number; tank: number }): Run {
+  if (stock.lives === 0 && stock.tank === 1) return run
+  return {
+    ...run,
+    lives: run.lives + stock.lives,
+    tank: run.tank * stock.tank,
+    fuel: run.fuel * stock.tank,
+  }
 }
 
 export function Road() {
   const go = useStore((s) => s.go)
   const recordLap = useStore((s) => s.recordLap)
+  const earn = useStore((s) => s.earn)
+  const kit = useStore((s) => s.save.workshop)
+  /*
+   * What the workshop has bought, read once when a run starts.
+   *
+   * In a ref because the loop lives outside React, and captured rather than
+   * watched: buying something mid-run and having it appear in your hands would
+   * be odd, and there is no way to buy anything mid-run anyway.
+   */
+  const stock = useRef({ lives: 0, tank: 1 })
   const bestSoFar = useStore((s) => s.save.roadBest)
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -136,7 +158,7 @@ export function Road() {
     const observer = new ResizeObserver(resize)
     observer.observe(wrap)
 
-    if (!runRef.current) runRef.current = firstRun()
+    if (!runRef.current) runRef.current = firstRun(stock.current)
     const pacer = createPacer<Run>(FIXED, MAX_CATCHUP)
     let frame = 0
     let last = performance.now()
@@ -188,7 +210,7 @@ export function Road() {
          */
         const deep = (next.number - 1) / Math.max(1, STAGES.length - 1)
         const thin = 1 - (next.lives - 1) / Math.max(1, STARTING_LIVES - 1)
-        const dry = Math.max(0, 1 - next.fuel / (TANK * 0.35))
+        const dry = Math.max(0, 1 - next.fuel / (next.tank * 0.35))
         setHeat(Math.max(deep * 0.5 + (next.distance / next.stage.distance) * 0.25, thin * 0.8, dry))
 
         const standing = placeOf(next)
@@ -357,7 +379,7 @@ export function Road() {
         ctx.lineWidth = Math.max(1, gaugeW * 0.12)
         ctx.strokeRect(gaugeX - gaugeW * 0.25, gaugeY - gaugeW * 0.25, gaugeW * 1.5, gaugeH + gaugeW * 0.5)
 
-        const share = Math.max(0, Math.min(1, next.fuel / TANK))
+        const share = Math.max(0, Math.min(1, next.fuel / next.tank))
         // Red when it is getting serious, which is the only warning there is
         // besides the sound.
         ctx.fillStyle = share < 0.25 ? '#ff6b53' : '#ffc84a'
@@ -433,6 +455,21 @@ export function Road() {
     bestRef.current = { ...(bestSoFar ?? {}) }
   }, [bestSoFar])
 
+  useEffect(() => {
+    stock.current = { lives: spareLives({ workshop: kit }), tank: tankScale({ workshop: kit }) }
+  }, [kit])
+
+  /** Coins for the drive, paid once, when the stage is done or the cars run out. */
+  const banked = useRef('')
+  useEffect(() => {
+    const run = runRef.current
+    if (!run || (hud.status !== 'stageDone' && hud.status !== 'gameOver')) return
+    const mark = `${run.number}:${hud.status}:${run.score}`
+    if (banked.current === mark) return
+    banked.current = mark
+    earn(run.score)
+  }, [hud.status, earn])
+
   /**
    * A finished lap, offered to the record book.
    *
@@ -506,7 +543,7 @@ export function Road() {
       // problem every time a question came up, and fuel is supposed to bite.
       ? {
           ...back,
-          fuel: Math.max(back.fuel, TANK * 0.5),
+          fuel: Math.max(back.fuel, back.tank * 0.5),
           warned: false,
           lives: Math.min(STARTING_LIVES, back.lives + 1),
         }
@@ -519,6 +556,8 @@ export function Road() {
     if (!run) return
     const number = run.number + 1
     if (number > STAGES.length) return
+    // A stage is not a fresh run: the lives and the tank carry from the last
+    // one, so the workshop's stock is not handed out again at every flag.
     runRef.current = newRun(number, run.lives, run.score, run.seed)
     setBeatIt(false)
     setHud((h) => ({ ...h, status: 'driving', stage: number, clock: 0, countdown: COUNTDOWN }))

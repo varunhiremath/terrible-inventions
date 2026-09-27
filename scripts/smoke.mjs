@@ -131,7 +131,17 @@ const homeText = await page.innerText('body')
 for (const game of GAMES) {
   if (!new RegExp(game, 'i').test(homeText)) problems.push(`${game} is not on the front screen`)
 }
-if (/shop/i.test(homeText)) problems.push('the shop is still being offered')
+/*
+ * The workshop is allowed on the front screen; a gate is not.
+ *
+ * This used to forbid the word "shop" outright, from the days when maths
+ * bought your way into the games and the front door was a till. The workshop
+ * is the opposite arrangement — the games are all right there, and it is a
+ * side door for spending what they earn — so what is checked now is that
+ * every game can be reached without going through it, which the loop below
+ * does by walking into all six.
+ */
+if (!/workshop/i.test(homeText)) problems.push('the workshop is not on the front screen')
 if ((await page.locator('canvas').count()) !== GAMES.length) {
   problems.push('the four tiles are not each drawing their own emblem')
 }

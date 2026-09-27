@@ -419,13 +419,21 @@ export interface Slot {
 }
 
 export const GRID: readonly Slot[] = [
-  { lane: 1, row: 4 },
-  { lane: 2, row: 3 },
-  { lane: 1, row: 2 },
-  { lane: 2, row: 1 },
+  { lane: 0, row: 4 },
+  { lane: 3, row: 3 },
+  { lane: 0, row: 2 },
+  { lane: 3, row: 1 },
 ]
 
-/** Yours: the back of the grid, on the left-hand column. */
+/**
+ * Yours: the back of the grid, tucked inboard with clear road in front.
+ *
+ * The field sits in the two outside columns and you sit between them. It was
+ * laid out down the middle first, exactly like a real one, and it turned the
+ * gentlest stage into a three-crash pile-up: you cannot see past a car that is
+ * doing the same nought miles an hour as you are, and every lane ahead had one
+ * in it. Racing from the back is meant to be a chase, not a queue.
+ */
 export const POLE: Slot = { lane: 1, row: 0 }
 
 /** How far back each row sits, in car lengths. */

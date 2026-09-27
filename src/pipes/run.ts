@@ -103,7 +103,7 @@ const GRAVITY = 60
 
 const key = (col: number, row: number) => `${col},${row}`
 
-export function newRun(level: Level, number: number, lives = 3): Run {
+export function newRun(level: Level, number: number, lives = 3, extraSeconds = 0): Run {
   return {
     level,
     number,
@@ -124,7 +124,7 @@ export function newRun(level: Level, number: number, lives = 3): Run {
     coins: 0,
     score: 0,
     lives,
-    seconds: LEVEL_SECONDS,
+    seconds: LEVEL_SECONDS + extraSeconds,
     mercy: 0,
     status: 'playing',
     events: [],

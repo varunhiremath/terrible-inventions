@@ -10,10 +10,12 @@ import { loadVoice } from './audio'
 import { setVoiceMode, type VoiceMode } from './voice'
 import { setMusicEnabled } from './music/player'
 import { emptyPowerUps, type PowerUps } from './arcade/maze/game'
+import { COINS_PER, spareLives } from './workshop/kit'
 import type { Attempt, Problem } from './engine/types'
 
 export type Screen =
-  | 'home' | 'arcade' | 'dave' | 'prince' | 'pipes' | 'road' | 'space' | 'coop' | 'note' | 'settings'
+  | 'home' | 'arcade' | 'dave' | 'prince' | 'pipes' | 'road' | 'space'
+  | 'workshop' | 'coop' | 'note' | 'settings'
 
 /** How far above his solo level a two-player puzzle is pitched. */
 export const COOP_BONUS = 200
@@ -85,6 +87,20 @@ interface State {
    * told they have set a personal best when they have not.
    */
   recordLap: (stage: number, seconds: number) => boolean
+  /**
+   * Coins earned by playing, paid at the end of a run.
+   *
+   * Every game pays in the same currency, because the workshop that spends it
+   * upgrades all of them. Rounded down from the score, so a good run in any
+   * game is worth a little of whatever you are saving for.
+   */
+  earn: (score: number) => number
+  /** Coins paid directly, for things that are not a score. */
+  addCoins: (coins: number) => void
+  /** Solving a sum in the workshop. Records it for the rating and pays out. */
+  solveForCoins: (problem: Problem, correct: boolean, coins: number) => void
+  /** Buys a workshop upgrade if it can be afforded, and says whether it did. */
+  buyUpgrade: (id: string, cost: number, most: number) => boolean
   replaceSave: (save: SaveState) => void
 }
 
@@ -132,8 +148,17 @@ export const useStore = create<State>((set, get) => ({
     void persistSave(save)
   },
 
-  beginRun: () =>
-    set({ run: { level: get().save.arcade.level, powerUps: get().save.arcade.powerUps }, screen: 'arcade' }),
+  beginRun: () => {
+    const { save } = get()
+    // The workshop's spare lives stack on top of whatever the arcade's own
+    // shop has sold him. Both are "one more go"; there is no sense in the two
+    // fighting over the same field.
+    const powerUps = {
+      ...save.arcade.powerUps,
+      spareLives: save.arcade.powerUps.spareLives + spareLives(save),
+    }
+    set({ run: { level: save.arcade.level, powerUps }, screen: 'arcade' })
+  },
 
   advanceLevel: (score) => {
     const { save, run } = get()
@@ -152,6 +177,8 @@ export const useStore = create<State>((set, get) => ({
     const { save } = get()
     const next: SaveState = {
       ...save,
+      // The maze pays into the same purse as everything else.
+      coins: save.coins + Math.max(0, Math.floor(score / COINS_PER)),
       arcade: { level: 1, highScore: Math.max(save.arcade.highScore, score), powerUps: emptyPowerUps() },
     }
     set({ save: next, run: null })
@@ -172,6 +199,18 @@ export const useStore = create<State>((set, get) => ({
   answerInterlude: (problem, correct, id, topic) => {
     const { save, recentQuestions } = get()
     set({ recentQuestions: [id, ...recentQuestions].slice(0, RECENT), lastTopic: topic })
+
+    /*
+     * A question answered correctly is never asked again.
+     *
+     * Only the written ones: a generated sum's id is its kind, and striking
+     * off "addition" the first time he gets one right would end the maths.
+     */
+    if (correct && !problem && !save.solved.includes(id)) {
+      const marked: SaveState = { ...save, solved: [...save.solved, id] }
+      set({ save: marked })
+      void persistSave(marked)
+    }
     if (!problem) return
 
     const ratingAfter = updateRating(save.rating, problem.rating, correct, save.attempts)
@@ -265,6 +304,62 @@ export const useStore = create<State>((set, get) => ({
     const next: SaveState = { ...get().save, rewards }
     set({ save: next })
     void persistSave(next)
+  },
+
+  earn: (score) => {
+    const coins = Math.max(0, Math.floor(score / COINS_PER))
+    if (coins === 0) return 0
+    const next: SaveState = { ...get().save, coins: get().save.coins + coins }
+    set({ save: next })
+    void persistSave(next)
+    return coins
+  },
+
+  addCoins: (coins) => {
+    if (coins <= 0) return
+    const next: SaveState = { ...get().save, coins: get().save.coins + coins }
+    set({ save: next })
+    void persistSave(next)
+  },
+
+  solveForCoins: (problem, correct, coins) => {
+    const { save } = get()
+    const ratingAfter = updateRating(save.rating, problem.rating, correct, save.attempts)
+    const attempt: Attempt = {
+      problemId: problem.id,
+      kind: problem.kind,
+      problemRating: problem.rating,
+      ratingBefore: save.rating,
+      ratingAfter,
+      correct,
+      hintsUsed: 0,
+      elapsedMs: 0,
+      stretch: false,
+      at: Date.now(),
+    }
+    const next: SaveState = {
+      ...save,
+      rating: ratingAfter,
+      attempts: save.attempts + 1,
+      log: [...save.log, attempt],
+      coins: save.coins + (correct ? coins : 0),
+    }
+    set({ save: next })
+    void persistSave(next)
+  },
+
+  buyUpgrade: (id, cost, most) => {
+    const { save } = get()
+    const owned = save.workshop[id] ?? 0
+    if (owned >= most || save.coins < cost) return false
+    const next: SaveState = {
+      ...save,
+      coins: save.coins - cost,
+      workshop: { ...save.workshop, [id]: owned + 1 },
+    }
+    set({ save: next })
+    void persistSave(next)
+    return true
   },
 
   recordLap: (stage, seconds) => {

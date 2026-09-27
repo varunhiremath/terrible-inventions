@@ -201,9 +201,15 @@ export function step(level: Level, dave: Dave, input: Input, dt: number): Dave {
   return next
 }
 
-/** A full tank, from picking a jetpack up. */
-export function fillTank(dave: Dave): Dave {
-  return { ...dave, hasJetpack: true, fuel: JET_SECONDS }
+/**
+ * A full tank, from picking a jetpack up.
+ *
+ * How full is an argument rather than the constant, because the workshop sells
+ * a deeper one and a deeper tank that the next jetpack refills to the standard
+ * size is not a deeper tank.
+ */
+export function fillTank(dave: Dave, seconds = JET_SECONDS): Dave {
+  return { ...dave, hasJetpack: true, fuel: seconds }
 }
 
 /** Where the view should sit, in tiles, to keep Dave on screen. */

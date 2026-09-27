@@ -44,10 +44,30 @@ enforced continuously on the one body that can break it — a racer will not sit
 open lane of the stretch you are arriving in, and gets out of it without waiting to
 indicate. There is a test that plays every stage watching for a wall.
 
-**The maths is not in every game.** It is in five of them, between lives. The sixth was
-asked to drop it, and what replaced it has to be worth the interruption on its own: losing
-a shield puts up something true about the sky you are in, and then you carry on. Nothing to
-answer, nothing to get wrong.
+## The maths, and the workshop
+
+**No game asks a sum.** Being handed one at the moment you lose a life is a punishment
+wearing a reward's coat, so what interrupts a game now is a fact — something true you did
+not know — and it is never marked. **A question answered correctly is never asked again**,
+which turns the bank of two hundred-odd into a supply rather than a rotation.
+
+The maths lives in the workshop, behind a door you only go through when you want
+something. Every game pays coins into one purse; sums pay faster. The shelf sells the same
+few permanent upgrades whichever game you play — a spare life, a bigger tank, a deeper
+jetpack — each one a single number a game reads once when a run starts. That is the whole
+design: **maths is the shortcut, never the toll.**
+
+## The voice
+
+The lines are rendered in advance by a neural voice that runs on the machine doing the
+building, and shipped as small Opus clips — `python3 scripts/render-voice.py`, with
+[Piper](https://github.com/rhasspy/piper) and two voices from its collection. Anything not
+in the set still falls back to the browser's synthesiser, so a line written after the
+clips were made is spoken rather than skipped.
+
+The synthesiser was the original answer, and on Android every voice it offers is the same
+engine wearing a different accent. Three reports of "the voice is not good" and one
+"they all sound the same" is a clear enough verdict.
 
 ## The music
 
