@@ -11,6 +11,7 @@ import { setVoiceMode, type VoiceMode } from './voice'
 import { setMusicEnabled } from './music/player'
 import { emptyPowerUps, type PowerUps } from './arcade/maze/game'
 import { COINS_PER, spareLives } from './workshop/kit'
+import type { Trail } from './road/run'
 import type { Attempt, Problem } from './engine/types'
 
 export type Screen =
@@ -86,7 +87,7 @@ interface State {
    * Returns whether it was: the screen wants to say so, and nobody wants to be
    * told they have set a personal best when they have not.
    */
-  recordLap: (stage: number, seconds: number) => boolean
+  recordLap: (stage: number, seconds: number, trail?: Trail) => boolean
   /**
    * Coins earned by playing, paid at the end of a run.
    *
@@ -362,11 +363,18 @@ export const useStore = create<State>((set, get) => ({
     return true
   },
 
-  recordLap: (stage, seconds) => {
+  recordLap: (stage, seconds, trail) => {
     const best = get().save.roadBest ?? {}
     const before = best[stage]
     if (before !== undefined && before <= seconds) return false
-    const next: SaveState = { ...get().save, roadBest: { ...best, [stage]: seconds } }
+    const next: SaveState = {
+      ...get().save,
+      roadBest: { ...best, [stage]: seconds },
+      // The quickest drive is the one worth keeping to race against.
+      roadGhost: trail
+        ? { ...(get().save.roadGhost ?? {}), [stage]: trail }
+        : (get().save.roadGhost ?? {}),
+    }
     set({ save: next })
     void persistSave(next)
     return true

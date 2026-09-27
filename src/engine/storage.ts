@@ -61,6 +61,14 @@ export interface SaveState {
    */
   roadBest: Record<number, number>
   /**
+   * The drive that set each best time, so it can be raced against.
+   *
+   * This is as close to playing together as anything gets without a server:
+   * one of you sets a time, and the other races the car that set it. Stored
+   * as three flat arrays of a few hundred numbers per stage.
+   */
+  roadGhost: Record<number, { at: number[]; gone: number[]; lane: number[] }>
+  /**
    * Every question he has ever got right, by id. Never asked again.
    *
    * Kept apart from `log`, which is the record of attempts and drives the
@@ -96,6 +104,7 @@ export function emptySave(): SaveState {
     arcade: { level: 1, highScore: 0, powerUps: emptyPowerUps() },
     seenIntro: {},
     roadBest: {},
+    roadGhost: {},
     solved: [],
     coins: 0,
     workshop: {},

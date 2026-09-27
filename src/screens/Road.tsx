@@ -4,8 +4,8 @@ import {
   TANK, kmh, missionSays, stageFor,
 } from '../road/level'
 import {
-  FIXED, STARTING_LIVES, missionMet, newRun, placeOf, resume, standings, step,
-  type Input, type RoadEvent, type Run, type Status,
+  FIXED, STARTING_LIVES, ghostAt, missionMet, newRun, placeOf, resume, standings, step,
+  type Input, type RoadEvent, type Run, type Status, type Trail,
 } from '../road/run'
 import { createLatch, keyAt, padHeight, padLayout, type Button, type Key } from '../road/controls'
 import { drawLights, drawPad, drawRun, type View } from '../road/draw'
@@ -118,7 +118,16 @@ export function Road() {
    * be odd, and there is no way to buy anything mid-run anyway.
    */
   const stock = useRef({ lives: 0, tank: 1 })
+  /*
+   * The drive to race against, if there is one for this stage.
+   *
+   * In a ref for the same reason as everything else the loop needs: the loop
+   * runs outside React. Re-read whenever a new best is set, so beating your
+   * own time immediately gives you a quicker thing to chase.
+   */
+  const ghostRef = useRef<Record<number, Trail>>({})
   const bestSoFar = useStore((s) => s.save.roadBest)
+  const ghosts = useStore((s) => s.save.roadGhost)
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const runRef = useRef<Run | null>(null)
@@ -298,8 +307,11 @@ export function Road() {
         ctx.beginPath()
         ctx.rect(0, capH, w, middle)
         ctx.clip()
-        // The last argument is which way you are steering, for the eyes.
-        drawRun(ctx, next, at, view, w, capH + middle, steerNow)
+        // The last two are which way you are steering — for the eyes — and
+        // where the best drive on this stage had got to by now.
+        const trail = ghostRef.current[next.number]
+        const ghost = trail && next.countdown === 0 ? ghostAt(trail, next.clock) : null
+        drawRun(ctx, next, at, view, w, capH + middle, steerNow, ghost)
         ctx.restore()
 
         ctx.fillStyle = '#0d1016'
@@ -456,6 +468,10 @@ export function Road() {
   }, [bestSoFar])
 
   useEffect(() => {
+    ghostRef.current = { ...(ghosts ?? {}) }
+  }, [ghosts])
+
+  useEffect(() => {
     stock.current = { lives: spareLives({ workshop: kit }), tank: tankScale({ workshop: kit }) }
   }, [kit])
 
@@ -484,7 +500,7 @@ export function Road() {
     const mark = `${run.number}:${run.yourTime.toFixed(3)}`
     if (logged.current === mark) return
     logged.current = mark
-    setBeatIt(recordLap(run.number, run.yourTime))
+    setBeatIt(recordLap(run.number, run.yourTime, run.trail))
   }, [hud.status, recordLap])
 
   // --- the glass ------------------------------------------------------------
@@ -676,9 +692,9 @@ export function Road() {
                     beatIt ? 'text-moss' : 'text-dim'
                   }`}>
                     {beatIt
-                      ? `Your best yet — ${(hud.clock).toFixed(2)}s`
+                      ? `Your best yet — ${(hud.clock).toFixed(2)}s. Race it next time.`
                       : bestRef.current[hud.stage] !== undefined
-                        ? `Your best here: ${bestRef.current[hud.stage].toFixed(2)}s`
+                        ? `Best here: ${bestRef.current[hud.stage].toFixed(2)}s — the pale car is it`
                         : 'No time to beat here yet'}
                   </p>
                 </>

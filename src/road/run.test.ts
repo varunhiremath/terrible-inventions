@@ -4,8 +4,8 @@ import {
   TOP_SPEED, stageFor,
 } from './level'
 import {
-  FIXED, NO_INPUT, blockedLanes, missionMet, newRun, placeOf, racerLanes, resume,
-  standings, step, timeOf, type Input, type Run,
+  FIXED, NO_INPUT, TRAIL_EVERY, blockedLanes, ghostAt, missionMet, newRun, placeOf,
+  racerLanes, resume, standings, step, timeOf, type Input, type Run,
 } from './run'
 
 /**
@@ -836,5 +836,74 @@ describe('the getaway', () => {
     for (const racer of run.racers) {
       expect(racer.y, `${racer.who.name} went backwards`).toBeGreaterThanOrEqual(0)
     }
+  })
+})
+
+/**
+ * The ghost.
+ *
+ * The best drive on a stage, kept and replayed against you. It is the nearest
+ * thing to playing together that works with one phone, no server and nobody
+ * else in the room: one of you sets a time and the other races the car that
+ * set it.
+ */
+describe('the recorded drive', () => {
+  it('samples the whole run, and not too often to store', () => {
+    const driver = makeDriver()
+    let run = newRun(1, 99, 0, 7)
+    for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+      run = step(run, driver(run), FIXED)
+      if (run.status === 'crashed') run = resume(run)
+    }
+    expect(run.status).toBe('stageDone')
+
+    const { at, gone, lane } = run.trail
+    expect(at.length).toBe(gone.length)
+    expect(at.length).toBe(lane.length)
+    // Roughly four a second for the length of the lap, and no more.
+    expect(at.length).toBeGreaterThan(run.yourTime! / TRAIL_EVERY - 4)
+    expect(at.length).toBeLessThan(run.yourTime! / TRAIL_EVERY + 4)
+
+    // Always forwards in time, and always forwards down the road.
+    for (let i = 1; i < at.length; i++) {
+      expect(at[i]).toBeGreaterThan(at[i - 1])
+      expect(gone[i]).toBeGreaterThanOrEqual(gone[i - 1])
+    }
+  })
+
+  it('records nothing before the lights go out', () => {
+    const run = drive(newRun(1), { ...NO_INPUT, go: true }, COUNTDOWN - FIXED * 2)
+    expect(run.trail.at).toHaveLength(0)
+  })
+
+  it('reads back a position for any moment of the lap', () => {
+    const trail = { at: [0, 1, 2], gone: [0, 10, 30], lane: [1, 1, 3] }
+    expect(ghostAt(trail, 0)).toEqual({ gone: 0, lane: 1 })
+    expect(ghostAt(trail, 1.5)).toEqual({ gone: 20, lane: 2 })
+    expect(ghostAt(trail, 2)).toEqual({ gone: 30, lane: 3 })
+  })
+
+  it('is not there before the start or after the finish', () => {
+    // A ghost that hangs about on the line after crossing it looks like a bug.
+    const trail = { at: [1, 2], gone: [0, 10], lane: [1, 1] }
+    expect(ghostAt(trail, 0.5)).toBeNull()
+    expect(ghostAt(trail, 2.5)).toBeNull()
+    expect(ghostAt({ at: [], gone: [], lane: [] }, 1)).toBeNull()
+  })
+
+  it('stays small enough to keep in a save file', () => {
+    /*
+     * Six stages of it live in the same record as everything else, and that
+     * record is rewritten on every change. A lap of the longest stage is
+     * about a minute, so a few hundred numbers.
+     */
+    const driver = makeDriver()
+    let run = newRun(6, 99, 0, 3)
+    for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+      run = step(run, driver(run), FIXED)
+      if (run.status === 'crashed') run = resume(run)
+    }
+    const bytes = JSON.stringify(run.trail).length
+    expect(bytes, `a lap costs ${bytes} bytes`).toBeLessThan(20_000)
   })
 })

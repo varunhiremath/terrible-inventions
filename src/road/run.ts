@@ -112,6 +112,50 @@ export interface Racing {
 
 export type Status = 'driving' | 'crashed' | 'stageDone' | 'gameOver'
 
+/**
+ * A recorded run: where the car was, every so often, from the lights.
+ *
+ * Two flat arrays rather than an array of pairs. It is stored in a save file
+ * that gets written on every change, and halving the number of objects in it
+ * is worth the small ugliness.
+ */
+export interface Trail {
+  /** Seconds from the lights. */
+  at: number[]
+  /** How far down the road, and which lane. */
+  gone: number[]
+  lane: number[]
+}
+
+/** How often the trail is sampled, in seconds. */
+export const TRAIL_EVERY = 0.25
+
+export const noTrail = (): Trail => ({ at: [], gone: [], lane: [] })
+
+/**
+ * Where a recorded run had got to at a given moment.
+ *
+ * Interpolated between samples, so a ghost drawn from four samples a second
+ * still moves smoothly at sixty frames a second. Returns null before the run
+ * started and after it finished — a ghost that hangs about on the line after
+ * crossing it is a ghost that looks like a bug.
+ */
+export function ghostAt(trail: Trail, clock: number): { gone: number; lane: number } | null {
+  const n = trail.at.length
+  if (n === 0 || clock < trail.at[0] || clock > trail.at[n - 1]) return null
+  // Walking it is fine: a stage is a few hundred samples and this runs once a
+  // frame. A binary search here would be arithmetic nobody has to read.
+  let i = 1
+  while (i < n && trail.at[i] < clock) i += 1
+  const from = i - 1
+  const span = trail.at[i] - trail.at[from] || 1
+  const part = (clock - trail.at[from]) / span
+  return {
+    gone: trail.gone[from] + (trail.gone[i] - trail.gone[from]) * part,
+    lane: trail.lane[from] + (trail.lane[i] - trail.lane[from]) * part,
+  }
+}
+
 export interface Run {
   stage: Stage
   number: number
@@ -170,6 +214,16 @@ export interface Run {
   /** The clock reading when you crossed the line. */
   yourTime: number | null
   /**
+   * Where you have been, sampled, so the run can be raced against later.
+   *
+   * This is the closest thing to playing together that needs no server at all:
+   * one of you drives and the other races what they did. Kept coarse — a
+   * handful of samples a second — because it has to fit in a save file and
+   * because a car's position between two tenths of a second is not
+   * interesting.
+   */
+  trail: Trail
+  /**
    * How much this car's tank holds.
    *
    * On the run rather than a constant because the workshop sells a bigger one,
@@ -211,6 +265,7 @@ export function newRun(number = 1, lives = STARTING_LIVES, score = 0, seed = 1):
     clock: 0,
     countdown: COUNTDOWN,
     yourTime: null,
+    trail: noTrail(),
     canCooldown: CAN_EVERY * 0.4,
   }
 }
@@ -911,6 +966,22 @@ export function step(run: Run, input: Input, dt: number): Run {
 
   next.clock += dt
   next.mercy = Math.max(0, next.mercy - dt)
+
+  /*
+   * A sample for the trail, four times a second.
+   *
+   * Written into the same arrays rather than copied, because copying three
+   * growing arrays sixty times a second is the sort of thing that turns a
+   * pure simulation into a slow one. The run object itself is fresh each
+   * step; the arrays inside it are shared with the step before, which is safe
+   * here because nothing ever reads an earlier run's trail.
+   */
+  const due = Math.floor(next.clock / TRAIL_EVERY)
+  if (due > next.trail.at.length - 1) {
+    next.trail.at.push(next.clock)
+    next.trail.gone.push(next.distance)
+    next.trail.lane.push(next.lane)
+  }
 
   // --- the pedals ----------------------------------------------------------
   if (next.stunned > 0) {

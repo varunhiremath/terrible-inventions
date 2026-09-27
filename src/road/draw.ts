@@ -751,6 +751,35 @@ export function drawRacer(ctx: Ctx, racer: Racing, view: View): void {
   }
 }
 
+/**
+ * The car that set the best time, drawn where it was at this moment.
+ *
+ * See-through, because it is not there: you cannot hit it and it cannot hit
+ * you. It is the quickest drive anybody has managed on this stage, replaying
+ * against you — which is the nearest thing to racing somebody else that works
+ * with one phone, no server and nobody else in the room.
+ */
+export function drawGhost(ctx: Ctx, lane: number, gone: number, view: View): void {
+  const y = roadY(view, gone)
+  if (y < -view.depth * 3 || y > view.line + view.depth * 3) return
+
+  const x = laneX(view, lane)
+  const wide = view.lane * CAR_WIDE
+  const long = CAR_LONG * view.depth
+
+  ctx.save()
+  ctx.globalAlpha = 0.4
+  ctx.fillStyle = '#bcd9ff'
+  body(ctx, x, y, wide, long, RACER, wide * 0.16)
+  ctx.fill()
+  ctx.globalAlpha = 0.75
+  ctx.strokeStyle = '#eaf3ff'
+  ctx.lineWidth = Math.max(1.5, wide * 0.06)
+  body(ctx, x, y, wide, long, RACER, wide * 0.16)
+  ctx.stroke()
+  ctx.restore()
+}
+
 /** Everything on the road, in the order it has to be drawn. */
 export function drawRun(
   ctx: Ctx,
@@ -760,6 +789,7 @@ export function drawRun(
   w: number,
   h: number,
   look = 0,
+  ghost: { gone: number; lane: number } | null = null,
 ): void {
   drawRoad(ctx, view, w, h)
   drawGrid(ctx, view)
@@ -783,6 +813,7 @@ export function drawRun(
     if (y < -CAR_LONG * 4 || y > SIGHT * 1.6) continue
     drawRacer(ctx, racer, view)
   }
+  if (ghost) drawGhost(ctx, ghost.lane, ghost.gone, view)
   drawMine(ctx, lane, view, run.stunned, run.mercy, look)
 }
 

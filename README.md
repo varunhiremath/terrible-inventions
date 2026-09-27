@@ -32,8 +32,11 @@ Both games got that wrong first in the same way — a guarantee made when someth
 spawned does not survive anything moving relative to anything else afterwards — and both
 are fixed the same way, by freezing the relative geometry the moment it is laid down.
 
-The road is a race proper: a staggered grid, three red lights, and a clock that
-starts when they go out and does not stop for a crash. The result is read the way a
+The road is a race proper: a staggered grid painted on the tarmac, three red lights, and
+a clock that starts when they go out and does not stop for a crash. The drive that set
+each best time is kept and replayed as a pale car alongside you — which is the nearest
+thing to racing another person that works with one phone, no server and nobody else in
+the room: one of you sets a time and the other races the car that set it. The result is read the way a
 result is read — the winner's time, and everybody else's gap to it — and your best time
 on each stage is kept on the device, so the thing to beat is your own from yesterday.
 
