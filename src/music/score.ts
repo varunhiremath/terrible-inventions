@@ -100,6 +100,14 @@ export interface Track {
   /** Drums that only arrive once the heat does. */
   hotDrums?: string
   /**
+   * Beats a minute this gains when the player is flat out.
+   *
+   * Absent means the tune does not follow them, which is right for a game
+   * where nobody has a speed — the maze runner moves at one pace and the
+   * question card is not a race.
+   */
+  quicker?: number
+  /**
    * How many times round before the tune stops for a moment.
    *
    * A loop that never stops stops being music and becomes a room tone: after
@@ -219,9 +227,25 @@ export function loopLength(track: Track): number {
   return Math.max(0, ...parts, drums)
 }
 
-/** Seconds per eighth note, hurried along by the heat if the track allows it. */
-export function eighthSeconds(track: Track, heat = 0): number {
-  const bpm = track.beatsPerMinute + (track.hotter ?? 0) * Math.max(0, Math.min(1, heat))
+/**
+ * Seconds per eighth note.
+ *
+ * Two things hurry it along and they are not the same thing. `heat` is how
+ * badly the run is going — the last level, the last life, the last stretch —
+ * and it climbs slowly and stays up. `pace` is how fast the player is moving
+ * *right now*, and it goes up and down all the time.
+ *
+ * Tying the tempo to movement is the thing that makes a tune feel like it is
+ * yours rather than something playing near you: stop and it settles, put your
+ * foot down and it comes with you. It is a small number on purpose — around
+ * eight beats a minute at full tilt — because the tune has to stay the same
+ * tune. Anything bigger and it is a novelty the second time.
+ */
+export function eighthSeconds(track: Track, heat = 0, pace = 0): number {
+  const bpm =
+    track.beatsPerMinute +
+    (track.hotter ?? 0) * Math.max(0, Math.min(1, heat)) +
+    (track.quicker ?? 0) * Math.max(0, Math.min(1, pace))
   return 60 / bpm / 2
 }
 
@@ -503,6 +527,7 @@ export const PIPES: Track = {
   name: 'The Pipes',
   beatsPerMinute: 148,
   hotter: 11,
+  quicker: 8,
   drums: PIPES_DRUMS,
   hotDrums: PIPES_HOT_DRUMS,
   parts: [
@@ -619,6 +644,7 @@ export const CAVERN: Track = {
   name: "Dave's Caves",
   beatsPerMinute: 104,
   hotter: 14,
+  quicker: 8,
   hotDrums: CAVERN_HOT_DRUMS,
   parts: [
     {
@@ -710,18 +736,24 @@ export const TRAGIC: Track = {
   name: 'Tragic End',
   beatsPerMinute: 66,
   parts: [
-    { wave: 'triangle', gain: 0.16, sustain: 0.95, pattern: 'A4 .  G4 .  F#4 . Eb4 .  .  .  .  . ' },
-    { wave: 'sine', gain: 0.12, sustain: 1, pattern: 'D3 .  .  .  .  .  Bb2 .  .  .  .  . ' },
+    { wave: 'triangle', gain: 0.16, sustain: 0.95,
+      pattern: 'A4 .  .  G4 .  .  F#4 .  .  .  Eb4 .  .  D4 .  .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.11, sustain: 1,
+      pattern: 'D3 .  .  .  .  .  Bb2 .  .  .  .  .  .  .  D2 .  .  .  .  . ' },
   ],
 }
 
 /** A level done. The same phrase as the dungeon cue, climbing instead. */
 export const VICTORY: Track = {
   name: 'Victory',
-  beatsPerMinute: 120,
+  beatsPerMinute: 144,
   parts: [
-    { wave: 'pulse', duty: 0.25, gain: 0.13, sustain: 0.7, pattern: 'D4 Eb4 F#4 G4 A4 .  D5 .  .  . ' },
-    { wave: 'triangle', gain: 0.2, sustain: 0.8, pattern: 'D3 .  .  .  A3 .  D4 .  .  . ' },
+    { wave: 'triangle', gain: 0.18, sustain: 0.75,
+      pattern: 'D4 D4 D4 .  G4 .  Bb4 . D5 .  .  Bb4 D5 .  G5 .  .  .  .  . ' },
+    { wave: 'pulse', gain: 0.07, sustain: 0.6,
+      pattern: '.  .  .  .  D4 .  G4 .  Bb4 . .  G4 Bb4 . D5 .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.12, sustain: 1,
+      pattern: 'G2 .  .  .  G2 .  .  .  D3 .  .  .  .  .  G3 .  .  .  .  . ' },
   ],
 }
 
@@ -792,20 +824,26 @@ export const GROW: Track = {
 /** A life lost. Falls, and keeps falling. */
 export const FALL: Track = {
   name: 'Fall',
-  beatsPerMinute: 100,
+  beatsPerMinute: 94,
   parts: [
-    { wave: 'triangle', gain: 0.16, sustain: 0.9, pattern: 'C5 .  A4 .  F4 .  D4 .  C4 .  .  . ' },
-    { wave: 'sine', gain: 0.1, sustain: 1, pattern: 'C3 .  .  .  .  .  G2 .  .  .  .  . ' },
+    { wave: 'triangle', gain: 0.17, sustain: 0.9,
+      pattern: 'C5 .  B4 .  A4 .  .  .  G4 .  F4 .  E4 .  .  .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.11, sustain: 1,
+      pattern: 'A2 .  .  .  .  .  .  .  F2 .  .  .  .  .  .  .  C2 .  .  . ' },
   ],
 }
 
 /** The flag. The only thing in the game worth a fanfare. */
 export const FLAG: Track = {
   name: 'Flag',
-  beatsPerMinute: 140,
+  beatsPerMinute: 146,
   parts: [
-    { wave: 'pulse', duty: 0.25, gain: 0.14, sustain: 0.7, pattern: 'G4 C5 E5 G5 .  E5 G5 C6 .  .  .  . ' },
-    { wave: 'triangle', gain: 0.18, sustain: 0.8, pattern: 'C3 .  .  .  G3 .  .  C4 .  .  .  . ' },
+    { wave: 'triangle', gain: 0.18, sustain: 0.75,
+      pattern: 'G4 G4 G4 .  C5 .  E5 .  G5 .  .  E5 G5 .  C6 .  .  .  .  . ' },
+    { wave: 'pulse', gain: 0.07, sustain: 0.6,
+      pattern: '.  .  .  .  C4 .  E4 .  G4 .  .  E4 G4 .  C5 .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.12, sustain: 1,
+      pattern: 'C3 .  .  .  C3 .  .  .  G3 .  .  .  .  .  C4 .  .  .  .  . ' },
   ],
 }
 
@@ -852,10 +890,12 @@ export const CATCH: Track = {
 /** Caught. Down the whole scale, one note at a time, no hurry. */
 export const CAUGHT: Track = {
   name: 'Caught',
-  beatsPerMinute: 120,
+  beatsPerMinute: 96,
   parts: [
-    { wave: 'triangle', gain: 0.16, sustain: 0.85, pattern: 'A4 G4 F4 E4 D4 C4 B3 A3 .  . ' },
-    { wave: 'sine', gain: 0.1, sustain: 1, pattern: 'A3 .  .  .  E3 .  .  .  A2 . ' },
+    { wave: 'triangle', gain: 0.17, sustain: 0.9,
+      pattern: 'A4 .  G4 .  F4 .  .  .  E4 .  D4 .  C4 .  .  .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.11, sustain: 1,
+      pattern: 'A2 .  .  .  .  .  .  .  F2 .  .  .  .  .  .  .  A1 .  .  . ' },
   ],
 }
 
@@ -864,8 +904,12 @@ export const CLEARED: Track = {
   name: 'Cleared',
   beatsPerMinute: 150,
   parts: [
-    { wave: 'pulse', duty: 0.25, gain: 0.14, sustain: 0.7, pattern: 'A4 C5 E5 A5 .  G#5 B5 E6 .  .  .  . ' },
-    { wave: 'triangle', gain: 0.18, sustain: 0.8, pattern: 'A2 .  .  .  E3 .  .  A3 .  .  .  . ' },
+    { wave: 'triangle', gain: 0.18, sustain: 0.75,
+      pattern: 'G4 G4 G4 .  C5 .  E5 .  G5 .  .  E5 G5 .  C6 .  .  .  .  . ' },
+    { wave: 'pulse', gain: 0.07, sustain: 0.6,
+      pattern: '.  .  .  .  E4 .  G4 .  C5 .  .  G4 C5 .  E5 .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.12, sustain: 1,
+      pattern: 'C3 .  .  .  C3 .  .  .  G3 .  .  .  .  .  C4 .  .  .  .  . ' },
   ],
 }
 
@@ -896,10 +940,14 @@ export const TROPHY: Track = {
 /** The door, once the trophy is his. */
 export const EXIT: Track = {
   name: 'Exit',
-  beatsPerMinute: 145,
+  beatsPerMinute: 148,
   parts: [
-    { wave: 'pulse', duty: 0.5, gain: 0.13, sustain: 0.7, pattern: 'A4 D5 F5 A5 .  D6 .  .  .  . ' },
-    { wave: 'triangle', gain: 0.18, sustain: 0.85, pattern: 'D3 .  .  .  A3 .  D4 .  .  . ' },
+    { wave: 'triangle', gain: 0.18, sustain: 0.75,
+      pattern: 'A4 A4 A4 .  D5 .  F5 .  A5 .  .  F5 A5 .  D6 .  .  .  .  . ' },
+    { wave: 'pulse', gain: 0.07, sustain: 0.6,
+      pattern: '.  .  .  .  A4 .  D5 .  F5 .  .  D5 F5 .  A5 .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.12, sustain: 1,
+      pattern: 'D3 .  .  .  D3 .  .  .  A3 .  .  .  .  .  D4 .  .  .  .  . ' },
   ],
 }
 
@@ -920,10 +968,12 @@ export const JETPACK: Track = {
 /** Fire, water, a tentacle, or a very long drop. */
 export const LOST: Track = {
   name: 'Lost',
-  beatsPerMinute: 110,
+  beatsPerMinute: 92,
   parts: [
-    { wave: 'triangle', gain: 0.16, sustain: 0.85, pattern: 'D5 C5 Bb4 A4 G4 F4 E4 D4 .  . ' },
-    { wave: 'sine', gain: 0.1, sustain: 1, pattern: 'D3 .  .  .  A2 .  .  .  D2 . ' },
+    { wave: 'triangle', gain: 0.17, sustain: 0.9,
+      pattern: 'D5 .  C5 .  Bb4 . .  .  A4 .  G4 .  F4 .  .  .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.11, sustain: 1,
+      pattern: 'D3 .  .  .  .  .  .  .  Bb2 .  .  .  .  .  .  .  D2 .  .  . ' },
   ],
 }
 
@@ -1013,6 +1063,7 @@ export const ROAD: Track = {
   name: 'The Road',
   beatsPerMinute: 148,
   hotter: 12,
+  quicker: 9,
   drums: ROAD_DRUMS,
   hotDrums: ROAD_HOT_DRUMS,
   parts: [
@@ -1058,10 +1109,12 @@ export const REFUEL: Track = {
 /** Hitting something, or running the tank dry. Down, and not pleasant. */
 export const PRANG: Track = {
   name: 'Prang',
-  beatsPerMinute: 115,
+  beatsPerMinute: 98,
   parts: [
-    { wave: 'sawtooth', gain: 0.14, sustain: 0.8, pattern: 'E4 D4 C4 B3 A3 G3 E3 .  . ' },
-    { wave: 'sine', gain: 0.1, sustain: 1, pattern: 'E2 .  .  B1 .  .  E1 .  . ' },
+    { wave: 'triangle', gain: 0.17, sustain: 0.9,
+      pattern: 'E5 .  D5 .  B4 .  .  .  A4 .  G4 .  F#4 .  .  .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.11, sustain: 1,
+      pattern: 'A2 .  .  .  .  .  .  .  F#2 .  .  .  .  .  .  .  B1 .  .  . ' },
   ],
 }
 
@@ -1111,8 +1164,12 @@ export const ARRIVE: Track = {
   name: 'Arrive',
   beatsPerMinute: 150,
   parts: [
-    { wave: 'pulse', duty: 0.25, gain: 0.14, sustain: 0.7, pattern: 'E4 G4 B4 E5 .  D5 F#5 B5 .  .  .  . ' },
-    { wave: 'triangle', gain: 0.18, sustain: 0.8, pattern: 'E2 .  .  .  B2 .  .  E3 .  .  .  . ' },
+    { wave: 'triangle', gain: 0.18, sustain: 0.75,
+      pattern: 'G4 G4 G4 .  B4 .  D5 .  G5 .  .  D5 G5 .  B5 .  .  .  .  . ' },
+    { wave: 'pulse', gain: 0.07, sustain: 0.6,
+      pattern: '.  .  .  .  G4 .  B4 .  D5 .  .  B4 D5 .  G5 .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.12, sustain: 1,
+      pattern: 'G2 .  .  .  G2 .  .  .  D3 .  .  .  .  .  G3 .  .  .  .  . ' },
   ],
 }
 
@@ -1253,10 +1310,12 @@ export const BURST: Track = {
 /** Taking one on the hull. Down, and a long way down. */
 export const STRUCK: Track = {
   name: 'Struck',
-  beatsPerMinute: 115,
+  beatsPerMinute: 94,
   parts: [
-    { wave: 'sawtooth', gain: 0.14, sustain: 0.8, pattern: 'E4 D4 C4 B3 A3 G3 F3 E3 .  . ' },
-    { wave: 'sine', gain: 0.1, sustain: 1, pattern: 'E2 .  .  B1 .  .  E1 .  .  . ' },
+    { wave: 'triangle', gain: 0.17, sustain: 0.9,
+      pattern: 'E5 .  D5 .  B4 .  .  .  A4 .  G4 .  F4 .  .  .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.11, sustain: 1,
+      pattern: 'A2 .  .  .  .  .  .  .  F2 .  .  .  .  .  .  .  A1 .  .  . ' },
   ],
 }
 

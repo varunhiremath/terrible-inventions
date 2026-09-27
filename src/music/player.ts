@@ -69,6 +69,8 @@ let enabled = true
  * track starts: a screen that never touches it gets the tune as written.
  */
 let heat = 0
+/** How fast the player is going, 0 to 1. Set by whichever game has a speed. */
+let pace = 0
 
 /** The heat at which the harder drum pattern takes over, if a track has one. */
 const HOT_DRUMS = 0.55
@@ -295,7 +297,7 @@ function schedule(): void {
    * silent ones, so the bar count does not change as voices come in — a loop
    * that changes length mid-run goes out of phase with its own bass line.
    */
-  const step = eighthSeconds(track, heat)
+  const step = eighthSeconds(track, heat, pace)
   const bars = loopLength(track)
   if (bars === 0) return
 
@@ -347,6 +349,19 @@ export function setHeat(next: number): void {
   heat = Math.max(0, Math.min(1, next))
 }
 
+/**
+ * How fast the player is moving, 0 to 1, set as often as a game likes.
+ *
+ * Eased rather than taken as given. A speed read off a car changes sixty times
+ * a second and a tempo that followed it exactly would wobble audibly on every
+ * bump; this catches up over about a second, which is slow enough to sound
+ * like the music deciding and quick enough to feel like it is following.
+ */
+export function setPace(next: number): void {
+  const want = Math.max(0, Math.min(1, next))
+  pace += (want - pace) * 0.08
+}
+
 export function heatNow(): number {
   return heat
 }
@@ -369,6 +384,7 @@ export function startMusic(name: TrackName): void {
   // A new track starts cold. Otherwise the tension from the level you just
   // failed follows you onto the menu.
   heat = 0
+  pace = 0
   eighth = 0
   cursor = ctx.currentTime + 0.08
   try {

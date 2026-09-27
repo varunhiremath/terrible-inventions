@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LEVEL_TILES_X, VIEW_TILES_X, VIEW_TILES_Y } from '../dave/level'
 import { JET_SECONDS, NO_INPUT, cameraFor, type Input } from '../dave/physics'
 import { STARTING_LIVES, newGame, respawn, shoot, step, type CaveEvent, type Game } from '../dave/game'
-import { playCue, setHeat } from '../music/player'
+import { playCue, setHeat, setPace } from '../music/player'
 import type { CueName } from '../music/score'
 import { LEVELS, levelFor } from '../dave/levels'
 import { createPacer } from '../arcade/pacing'
@@ -238,6 +238,13 @@ export function Dave() {
         const deep = (next.number - 1) / Math.max(1, LEVELS.length - 1)
         const thin = 1 - (next.lives - 1) / 2
         setHeat(Math.max(deep * 0.5 + (next.dave.hasTrophy ? 0.35 : 0), thin * 0.85))
+        /*
+         * Dave is either running or he is not, so this is nearly a switch
+         * rather than a dial — which is fine, and is most of the effect: the
+         * tune leans forward while he moves and settles when he stops to look
+         * at something.
+         */
+        setPace(Math.min(1, Math.abs(next.dave.vx) / 6))
 
         if (
           // The level number is in here because it can change on its own —

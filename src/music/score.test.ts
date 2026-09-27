@@ -297,3 +297,44 @@ describe('the gap, beat by beat', () => {
    * a property nothing relies on.
    */
 })
+
+/**
+ * The tune keeping up with the player.
+ *
+ * Two things push the tempo and they are different: heat is how badly the run
+ * is going and climbs slowly, pace is how fast the player is moving right now
+ * and moves all the time. These check the second one is real, small, and only
+ * on the games where somebody actually has a speed.
+ */
+describe('tempo following the player', () => {
+  it('is quicker flat out than stopped', () => {
+    for (const track of [ROAD, PIPES, CAVERN]) {
+      const still = eighthSeconds(track, 0, 0)
+      const flying = eighthSeconds(track, 0, 1)
+      expect(flying, `${track.name} does not follow the player`).toBeLessThan(still)
+    }
+  })
+
+  it('stays the same tune, rather than becoming a novelty', () => {
+    for (const track of [ROAD, PIPES, CAVERN]) {
+      const change = eighthSeconds(track, 0, 0) / eighthSeconds(track, 0, 1)
+      expect(change, `${track.name} speeds up by ${((change - 1) * 100).toFixed(0)}%`)
+        .toBeLessThan(1.1)
+    }
+  })
+
+  it('leaves the games where nobody has a speed alone', () => {
+    // The maze runner moves at one pace whatever he does, and the question
+    // card is not a race.
+    for (const track of [CHASE, THINKING]) {
+      expect(eighthSeconds(track, 0, 1)).toBe(eighthSeconds(track, 0, 0))
+    }
+  })
+
+  it('still lets the heat push on top of it', () => {
+    const calm = eighthSeconds(ROAD, 0, 0)
+    const both = eighthSeconds(ROAD, 1, 1)
+    expect(both).toBeLessThan(eighthSeconds(ROAD, 1, 0))
+    expect(both).toBeLessThan(calm)
+  })
+})

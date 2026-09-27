@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { VIEW_ROWS } from '../pipes/level'
 import { NO_INPUT, type Input } from '../pipes/physics'
 import { EVENTS, FIXED, newRun, stepRun, type PipeEvent, type Run, type Status } from '../pipes/run'
-import { playCue, setHeat } from '../music/player'
+import { playCue, setHeat, setPace } from '../music/player'
 import type { CueName } from '../music/score'
 import { LEVELS, levelFor } from '../pipes/levels'
 import {
@@ -183,6 +183,8 @@ export function Pipes() {
         const late = Math.max(0, 1 - next.seconds / 100)
         const thin = 1 - (next.lives - 1) / 2
         setHeat(Math.max(late, thin * 0.7))
+        // Same again: walking, running, or standing still deciding.
+        setPace(Math.min(1, Math.abs(next.body.vx) / 7))
 
         if (
           next.number !== shown.level || next.lives !== shown.lives ||

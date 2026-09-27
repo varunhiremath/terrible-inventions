@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   CAR_LONG, CAR_WIDE, COUNTDOWN, LANES, LIGHTS, LIGHT_EVERY, MISSION_BONUS, SIGHT, LEVELS,
-  DEFAULT_CAR, TANK, kmh, missionSays, levelFor,
+  DEFAULT_CAR, TANK, kmh, missionSays, levelFor, topSpeedOn,
 } from '../road/level'
 import {
   FIXED, NO_INPUT, STARTING_LIVES, ghostAt, missionMet, newRun, noTrail, placeOf, resume,
@@ -11,7 +11,7 @@ import {
 } from '../road/run'
 import { createLatch, keyAt, padHeight, padLayout, type Button, type Key } from '../road/controls'
 import { drawLights, drawPad, drawRun, type View } from '../road/draw'
-import { playCue, setHeat } from '../music/player'
+import { playCue, setHeat, setPace } from '../music/player'
 import type { CueName } from '../music/score'
 import { createPacer } from '../arcade/pacing'
 import { fill } from '../config/profile'
@@ -366,6 +366,16 @@ export function Road() {
         const thin = 1 - (next.lives - 1) / Math.max(1, STARTING_LIVES - 1)
         const dry = Math.max(0, 1 - next.fuel / (next.tank * 0.35))
         setHeat(Math.max(deep * 0.5 + (next.distance / next.level.distance) * 0.25, thin * 0.8, dry))
+        /*
+         * And the tune keeps up with the car.
+         *
+         * The road is the one game here with a speed worth following: it is
+         * continuous, the player controls it directly, and the whole feel of
+         * the game is the difference between crawling behind a lorry and
+         * having the road to yourself. Against the level's own top speed, so
+         * flat out is flat out whichever level it is.
+         */
+        setPace(next.speed / Math.max(1, topSpeedOn(next.level)))
 
         /*
          * Whose race the readouts are about.
