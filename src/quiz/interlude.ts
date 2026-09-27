@@ -61,6 +61,27 @@ export function shuffle<T>(items: readonly T[], roll: number): T[] {
  */
 const GENERATED = 0.25
 
+/** The three that are facts rather than sums. */
+export const FACT_TOPICS: readonly Topic[] = ['history', 'geography', 'trivia']
+
+export interface Asking {
+  /** Questions never to ask again, because they have already been answered. */
+  solved?: readonly string[]
+  /** Questions not to ask for a while, because they came up recently. */
+  recent?: readonly string[]
+  /** The topic of the last one, so the same subject does not come round twice. */
+  lastTopic?: Topic
+  /**
+   * Which topics are on the table.
+   *
+   * The games ask for facts only. Sums are real work with a number pad, and
+   * being made to do real work at the moment you lose a life is a punishment
+   * dressed up as a reward — so the maths now lives in the workshop, where
+   * going in is a choice and the answer buys something.
+   */
+  topics?: readonly Topic[]
+}
+
 /**
  * What to ask next.
  *
@@ -71,13 +92,20 @@ export function pickQuestion(
   rating: number,
   roll: number,
   seed: number,
-  recent: readonly string[] = [],
-  lastTopic?: Topic,
+  asking: Asking = {},
 ): Question {
-  if (roll < GENERATED) return { kind: 'maths', problem: mathsAt(rating, (roll * 5.1) % 1, seed) }
+  const topics = asking.topics ?? (['maths', ...FACT_TOPICS] as Topic[])
+  const wantsMaths = topics.includes('maths')
 
-  const topic = topicFor((roll * 11.7) % 1, lastTopic)
-  const item = askFrom(BY_TOPIC[topic], rating, (roll * 7.3) % 1, recent)
+  // Generated sums only when maths is on the table at all, and then only now
+  // and again: they are the ones that actually move his rating.
+  if (wantsMaths && (topics.length === 1 || roll < GENERATED)) {
+    return { kind: 'maths', problem: mathsAt(rating, (roll * 5.1) % 1, seed) }
+  }
+
+  const choosable = wantsMaths ? topics : topics.filter((t) => t !== 'maths')
+  const topic = topicFor((roll * 11.7) % 1, asking.lastTopic, choosable)
+  const item = askFrom(BY_TOPIC[topic], rating, (roll * 7.3) % 1, asking.recent, asking.solved)
   return {
     kind: 'ask',
     item,

@@ -390,8 +390,13 @@ export const FIELD: readonly Racer[] = [
  * of them have to straddle a white line, which takes up two lanes each — so
  * three quarters of the road is shut at the start, and a car that never quite
  * tidies itself up keeps a lane shut for the whole race. One line was tried
- * and that is exactly what it did. A proper grid is two by two by one, every
- * car in a lane of its own, which is also what a real one looks like.
+ * and that is exactly what it did.
+ *
+ * So it is laid out the way a real one is: two columns, each car a length or
+ * so behind the one on the other side of it. Pole is at the front
+ * of the left column, and the boxes are painted on the tarmac. The two outside
+ * lanes are left empty, which is where everybody goes the moment the lights
+ * go out.
  *
  * You start at the back of it, and every one of them is ahead of you where you
  * can see them. That is deliberate and it is the whole point of the change:
@@ -414,13 +419,13 @@ export interface Slot {
 }
 
 export const GRID: readonly Slot[] = [
-  { lane: 0, row: 2 },
-  { lane: 3, row: 2 },
+  { lane: 1, row: 4 },
+  { lane: 2, row: 3 },
+  { lane: 1, row: 2 },
   { lane: 2, row: 1 },
-  { lane: 1, row: 1 },
 ]
 
-/** Yours: the back of the grid, second lane in, with room either side. */
+/** Yours: the back of the grid, on the left-hand column. */
 export const POLE: Slot = { lane: 1, row: 0 }
 
 /** How far back each row sits, in car lengths. */

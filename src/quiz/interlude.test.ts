@@ -49,7 +49,7 @@ describe('the question between lives', () => {
     const first = pickQuestion(1000, 0.6, 9)
     if (first.kind !== 'ask') throw new Error('expected a bank question at this roll')
     for (const roll of rolls) {
-      const again = pickQuestion(1000, roll, 9, [first.item.id])
+      const again = pickQuestion(1000, roll, 9, { recent: [first.item.id] })
       if (again.kind === 'ask') expect(again.item.id, String(roll)).not.toBe(first.item.id)
     }
   })
@@ -57,7 +57,7 @@ describe('the question between lives', () => {
   it('does not ask the same topic twice running', () => {
     for (const roll of rolls) {
       for (const last of ['maths', 'history', 'geography', 'trivia'] as Topic[]) {
-        const q = pickQuestion(1000, roll, 4, [], last)
+        const q = pickQuestion(1000, roll, 4, { lastTopic: last })
         // A generated sum is always maths, and is the one exception: it is a
         // different activity from a multiple-choice number question.
         if (q.kind === 'ask') expect(q.item.topic, `${last} at ${roll}`).not.toBe(last)

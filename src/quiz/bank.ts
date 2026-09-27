@@ -49,8 +49,23 @@ export function askFrom(
   rating: number,
   roll: number,
   recent: readonly string[] = [],
+  solved: readonly string[] = [],
 ): Ask {
-  const fresh = pool.filter((ask) => !recent.includes(ask.id))
+  /*
+   * A question he has already got right is never asked again.
+   *
+   * `recent` is a short memory that stops the same thing twice in a sitting.
+   * `solved` is permanent and is the point of the bank: there is no value in
+   * asking somebody the capital of Australia for the fourth time, and there is
+   * a good deal of value in the fourth question being one he has not met.
+   *
+   * When a topic is exhausted — every question in it answered — the door does
+   * not close. Everything comes back on the table, oldest first, because a
+   * game that stops asking is worse than one that repeats itself.
+   */
+  const unseen = pool.filter((ask) => !solved.includes(ask.id) && !recent.includes(ask.id))
+  const unsolved = pool.filter((ask) => !solved.includes(ask.id))
+  const fresh = unseen.length > 0 ? unseen : unsolved
   const usable = fresh.length > 0 ? fresh : pool
 
   const near = [...usable].sort(
@@ -67,9 +82,15 @@ export function askFrom(
  * dropped from the draw. Two in a row of the same thing is what makes a set of
  * questions feel like a worksheet.
  */
-export function topicFor(roll: number, lastTopic?: Topic): Topic {
-  const all: Topic[] = ['maths', 'history', 'geography', 'trivia']
-  const choices = lastTopic ? all.filter((t) => t !== lastTopic) : all
+export function topicFor(
+  roll: number,
+  lastTopic?: Topic,
+  from: readonly Topic[] = ['maths', 'history', 'geography', 'trivia'],
+): Topic {
+  const dropped = lastTopic ? from.filter((t) => t !== lastTopic) : from
+  // Unless dropping it would leave nothing, which it does when a caller has
+  // asked for one topic only.
+  const choices = dropped.length > 0 ? dropped : from
   return choices[Math.floor(roll * choices.length) % choices.length]
 }
 

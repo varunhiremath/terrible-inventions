@@ -14,7 +14,8 @@
  */
 import { drawHint } from '../ui/padHints'
 import {
-  CAR_LONG, CAR_WIDE, LANES, LENGTH_OF, SIGHT, WIDTH_OF, type Build, type CarKind, type Face,
+  CAR_LONG, CAR_WIDE, GRID, GRID_ROW, LANES, LENGTH_OF, POLE, SIGHT, WIDTH_OF,
+  type Build, type CarKind, type Face,
 } from './level'
 import type { Can, Car, Racing, Run } from './run'
 
@@ -289,6 +290,62 @@ export function drawFinish(ctx: Ctx, at: number, view: View): void {
   ctx.fillStyle = '#eef2f8'
   ctx.fillRect(view.left - view.lane * 0.22, y - band * 1.1, view.lane * 0.16, band * 2.2)
   ctx.fillRect(view.left + road + view.lane * 0.06, y - band * 1.1, view.lane * 0.16, band * 2.2)
+}
+
+/**
+ * The grid, painted on the tarmac.
+ *
+ * A start line with kerbs either side, and a numbered box for every slot, laid
+ * out in the two staggered columns a real grid uses. It is paint, so it is
+ * drawn under everything and scrolls away behind you like the lane markings —
+ * which is the right behaviour: the grid is a place on the road, not a screen
+ * the game shows you before it starts.
+ *
+ * Only near the line, because there is no sense drawing a start line a
+ * kilometre behind.
+ */
+export function drawGrid(ctx: Ctx, view: View): void {
+  const road = roadWidth(view)
+  // In front of pole, not behind the last car: the grid lines up behind the
+  // start line, which is the whole reason it is called that.
+  const lineY = roadY(view, GRID_ROW * 4 + CAR_LONG * 1.3)
+  const band = view.depth * 0.9
+  if (lineY < -view.depth * 8 || roadY(view, 0) > view.line + view.depth * 6) return
+
+  // The start line itself: a solid white band, with a red and white kerb
+  // running out to each verge.
+  ctx.fillStyle = '#eef2f8'
+  ctx.fillRect(view.left, lineY - band / 2, road, band)
+  const kerb = view.lane * 0.5
+  for (const side of [view.left - kerb, view.left + road]) {
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = i % 2 === 0 ? '#d94a3d' : '#eef2f8'
+      ctx.fillRect(side + (i * kerb) / 4, lineY - band / 2, kerb / 4, band)
+    }
+  }
+
+  /*
+   * And a box for each slot.
+   *
+   * Open at the front, like the real ones, so a car sitting in it looks parked
+   * in it rather than fenced in by it.
+   */
+  const slots = [POLE, ...GRID]
+  ctx.strokeStyle = 'rgba(238,242,248,0.9)'
+  ctx.lineWidth = Math.max(1.5, view.lane * 0.05)
+  for (const slot of slots) {
+    const y = roadY(view, slot.row * GRID_ROW)
+    if (y < -view.depth * 4 || y > view.line + view.depth * 4) continue
+    const x = laneX(view, slot.lane)
+    const w = view.lane * CAR_WIDE * 1.5
+    const h = CAR_LONG * view.depth * 1.15
+    ctx.beginPath()
+    ctx.moveTo(x - w / 2, y - h / 2)
+    ctx.lineTo(x - w / 2, y + h / 2)
+    ctx.lineTo(x + w / 2, y + h / 2)
+    ctx.lineTo(x + w / 2, y - h / 2)
+    ctx.stroke()
+  }
 }
 
 /** One of {papa}'s, coming the other way. */
@@ -705,6 +762,7 @@ export function drawRun(
   look = 0,
 ): void {
   drawRoad(ctx, view, w, h)
+  drawGrid(ctx, view)
   drawFinish(ctx, run.stage.distance, view)
   for (const can of run.cans) {
     if (can.taken) continue
@@ -748,7 +806,9 @@ export function drawLights(
   const done = countdown <= 0
   const size = Math.min(w * 0.075, h * 0.1)
   const gap = size * 2.6
-  const cy = top + h * 0.3
+  // High up, clear of the front of the grid — the gantry was landing on top of
+  // whoever was on pole.
+  const cy = top + Math.max(size * 2.4, h * 0.14)
 
   if (!done) {
     // The gantry.

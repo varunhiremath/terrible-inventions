@@ -3,7 +3,7 @@ import { FlagBox } from '../ui/FlagBox'
 import { ProblemView } from '../ui/ProblemView'
 import { fill } from '../config/profile'
 import { musicPlaying, startMusic, stopMusic } from '../music/player'
-import { idOf, pickQuestion, topicOf } from '../quiz/interlude'
+import { FACT_TOPICS, idOf, pickQuestion, topicOf } from '../quiz/interlude'
 import { FLAG_OF } from '../quiz/flags'
 import { TOPICS } from '../quiz/types'
 import { useStore } from '../store'
@@ -40,13 +40,22 @@ export function Interlude({
   // question that changed under you as you thought about it would be cruel.
   const question = useMemo(
     () =>
-      pickQuestion(
-        save.rating,
-        Math.random(),
-        Math.floor(Math.random() * 1e9),
+      pickQuestion(save.rating, Math.random(), Math.floor(Math.random() * 1e9), {
         recent,
         lastTopic,
-      ),
+        solved: save.solved,
+        /*
+         * Facts, never sums.
+         *
+         * This is the card that interrupts a game. Sums are real work with a
+         * number pad and being handed one at the moment you lose a life is a
+         * punishment wearing a reward's coat — so the maths moved to the
+         * workshop, where going in is a choice and a right answer buys
+         * something. What is left here is the part worth being interrupted
+         * for: something true you did not know.
+         */
+        topics: FACT_TOPICS,
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )

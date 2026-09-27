@@ -60,6 +60,25 @@ export interface SaveState {
    * you are the only person who plays.
    */
   roadBest: Record<number, number>
+  /**
+   * Every question he has ever got right, by id. Never asked again.
+   *
+   * Kept apart from `log`, which is the record of attempts and drives the
+   * rating. This is the one that decides what he sees next: there is nothing
+   * to be learned from being asked the capital of Australia a fourth time, and
+   * a good deal to be gained from the fourth question being a new one.
+   */
+  solved: string[]
+  /**
+   * Coins, and what they have bought.
+   *
+   * One purse for all six games. Playing earns them, maths in the workshop
+   * earns them faster, and they buy the same few permanent upgrades whichever
+   * game you spend them on — which is what makes maths worth doing when it is
+   * not being forced on you mid-game.
+   */
+  coins: number
+  workshop: Record<string, number>
 }
 
 export function emptySave(): SaveState {
@@ -77,6 +96,9 @@ export function emptySave(): SaveState {
     arcade: { level: 1, highScore: 0, powerUps: emptyPowerUps() },
     seenIntro: {},
     roadBest: {},
+    solved: [],
+    coins: 0,
+    workshop: {},
   }
 }
 
