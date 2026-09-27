@@ -54,11 +54,11 @@ export interface Part {
   /**
    * The heat this voice waits for, 0 to 1. Absent means it plays throughout.
    *
-   * A game raises its own heat as things get worse — the last stage, the last
+   * A game raises its own heat as things get worse — the last level, the last
    * life, the last stretch before the finish — and voices marked this way come
    * in as it climbs. It is the cheapest way to make a loop that has to run for
    * eighty seconds say something about how the run is going, and it is why the
-   * fifth stage sounds nothing like the first while still being the same tune.
+   * fifth level sounds nothing like the first while still being the same tune.
    */
   from?: number
 }
@@ -820,7 +820,7 @@ export const LOST: Track = {
  * from, so a cue interrupts the tune rather than arriving from somewhere else.
  *
  * The overtake is the hard one, as the chomp was in the maze: you pass a car
- * every couple of seconds for the length of a stage, so it is two notes and
+ * every couple of seconds for the length of a level, so it is two notes and
  * gone before it is noticed.
  */
 
@@ -993,7 +993,7 @@ export const GREEN: Track = {
   ],
 }
 
-/** The end of a stage. */
+/** The end of a level. */
 export const ARRIVE: Track = {
   name: 'Arrive',
   beatsPerMinute: 150,

@@ -434,8 +434,18 @@ if (await enter('The Pipes')) {
 if (await enter('The Road')) {
   await page.waitForTimeout(1200)
 
+  // The garage opens by itself the first time anybody drives, so take
+  // whatever it is offering and get on with it.
+  const driveIt = page.getByRole('button', { name: /drive it/i })
+  if (await driveIt.count()) {
+    await driveIt.first().click()
+    await page.waitForTimeout(600)
+  } else {
+    problems.push('the garage did not open on the first visit to the road')
+  }
+
   const roadHud = async () => (await page.textContent('header')).replace(/\s+/g, ' ').trim()
-  if (!/stage 1\b/i.test(await roadHud())) problems.push('the road did not open on stage 1')
+  if (!/level 1\b/i.test(await roadHud())) problems.push('the road did not open on level 1')
   if (!/lives 3\b/i.test(await roadHud())) problems.push('the road did not start with three cars')
 
   // The pedal is the big button in the bottom right corner.

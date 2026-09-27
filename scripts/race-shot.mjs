@@ -24,7 +24,7 @@ for (const size of [{ w: 412, h: 915, tag: 'portrait' }, { w: 915, h: 412, tag: 
   await page.waitForTimeout(6000)
   await page.screenshot({ path: `/tmp/race/road-${size.tag}.png` })
 
-  // Then run the stage out for the finishing order.
+  // Then run the level out for the finishing order.
   let done = false
   for (let wait = 0; wait < 90 && !done; wait++) {
     await page.waitForTimeout(1000)

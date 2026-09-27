@@ -87,7 +87,11 @@ interface State {
    * Returns whether it was: the screen wants to say so, and nobody wants to be
    * told they have set a personal best when they have not.
    */
-  recordLap: (stage: number, seconds: number, trail?: Trail) => boolean
+  recordLap: (level: number, seconds: number, trail?: Trail) => boolean
+  /** Which car he drives on the road, by name. */
+  pickCar: (name: string) => void
+  /** Where he finished, so the next grid can be built out of it. */
+  recordPlace: (place: number) => void
   /**
    * Coins earned by playing, paid at the end of a run.
    *
@@ -363,21 +367,33 @@ export const useStore = create<State>((set, get) => ({
     return true
   },
 
-  recordLap: (stage, seconds, trail) => {
+  recordLap: (level, seconds, trail) => {
     const best = get().save.roadBest ?? {}
-    const before = best[stage]
+    const before = best[level]
     if (before !== undefined && before <= seconds) return false
     const next: SaveState = {
       ...get().save,
-      roadBest: { ...best, [stage]: seconds },
+      roadBest: { ...best, [level]: seconds },
       // The quickest drive is the one worth keeping to race against.
       roadGhost: trail
-        ? { ...(get().save.roadGhost ?? {}), [stage]: trail }
+        ? { ...(get().save.roadGhost ?? {}), [level]: trail }
         : (get().save.roadGhost ?? {}),
     }
     set({ save: next })
     void persistSave(next)
     return true
+  },
+
+  pickCar: (name) => {
+    const next: SaveState = { ...get().save, roadCar: name }
+    set({ save: next })
+    void persistSave(next)
+  },
+
+  recordPlace: (place) => {
+    const next: SaveState = { ...get().save, roadPlace: place }
+    set({ save: next })
+    void persistSave(next)
   },
 
   replaceSave: (save) => {

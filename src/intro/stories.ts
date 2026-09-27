@@ -84,7 +84,7 @@ export const STORIES: Record<string, Story> = {
       { seconds: 6.4, scene: 'road', voice: 'narrator', line: 'Getting to the end is not the job. Getting there first is the job.' },
       { seconds: 6.2, scene: 'road', voice: 'narrator', line: 'Watch the tank. Run it dry and it costs a car, same as a prang.' },
       { seconds: 5.8, scene: 'question', voice: 'narrator', line: 'Pranged? The maths door opens. Sums buy you another go.' },
-      { seconds: 4.2, scene: 'road', voice: 'papa', line: 'Six stages. Off you go.' },
+      { seconds: 4.2, scene: 'road', voice: 'papa', line: 'Level after level. Off you go.' },
     ],
   },
   space: {

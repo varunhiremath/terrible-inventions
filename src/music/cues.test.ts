@@ -258,8 +258,8 @@ describe('the road cues', () => {
     }
   })
 
-  it('keeps the overtake out of the way, because it fires all stage long', () => {
-    // You get past a car every couple of seconds for the length of a stage.
+  it('keeps the overtake out of the way, because it fires all level long', () => {
+    // You get past a car every couple of seconds for the length of a level.
     expect(loopLength(CUES.overtake) * eighthSeconds(CUES.overtake)).toBeLessThan(0.25)
     for (const part of CUES.overtake.parts) expect(part.gain ?? 1).toBeLessThan(0.08)
   })

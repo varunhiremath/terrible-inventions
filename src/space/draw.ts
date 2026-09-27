@@ -170,6 +170,25 @@ export function drawWorld(ctx: Ctx, world: World, progress: number, view: View):
 }
 
 /** One piece of rubble. */
+/**
+ * A stable handful of numbers for one piece of rubble.
+ *
+ * Every rock has to look the same on every frame, so nothing here may use
+ * `Math.random`: the shape is a pure function of the piece's id. Each `which`
+ * is a different dial on the same rock — corner count, roughness, the angle of
+ * the fourth crater — and hashing id and dial together is what stops the
+ * dials moving in step, which is what made the first version's rocks all
+ * variations on one rock.
+ */
+function seeded(id: number): (which: number) => number {
+  return (which) => {
+    let t = (id * 0x9e3779b1 + which * 0x85ebca6b) >>> 0
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 export function drawRubble(ctx: Ctx, rock: Rubble, view: View): void {
   const x = px(view, rock.x)
   const y = py(view, rock.y)
@@ -234,28 +253,59 @@ export function drawRubble(ctx: Ctx, rock: Rubble, view: View): void {
     return
   }
 
-  // A rock: a lumpy polygon, the same lumps every time for a given piece.
+  /*
+   * A rock: a lumpy polygon, the same lumps every time for a given piece.
+   *
+   * The first version was nine points with a sine wobble off the id, three
+   * craters at a fixed radius, and no rotation. Every asteroid in the sky was
+   * therefore the same nearly-round blob at the same angle with the same three
+   * dents in it, and it was reported exactly that way: they start looking the
+   * same. One number varying is not variety — the eye reads the silhouette,
+   * and the silhouette was identical.
+   *
+   * So five things vary now: how many corners it has, how deep the dents
+   * between them go, how stretched it is, which way up it is, and how
+   * cratered. A seven-cornered sharp one and a thirteen-cornered smooth one
+   * are different rocks at a glance, which is the whole job.
+   */
+  const roll = seeded(rock.id)
+  const corners = 7 + Math.floor(roll(1) * 7)
+  // How far the corners swing in and out. Low is a pebble, high is a shard.
+  const rough = 0.16 + roll(2) * 0.34
+  // Stretched one way or the other, then turned, so no two sit the same way up.
+  const stretch = 0.76 + roll(3) * 0.5
+  const turn = roll(4) * Math.PI * 2
+
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(turn)
+
   ctx.fillStyle = lit ? '#ffffff' : INK.rock
   ctx.beginPath()
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * Math.PI * 2
-    const wobble = 0.72 + ((Math.sin(rock.id * 3.1 + i * 2.7) + 1) / 2) * 0.42
-    const rx = x + Math.cos(a) * size * wobble
-    const ry = y + Math.sin(a) * size * wobble
+  for (let i = 0; i < corners; i++) {
+    const a = (i / corners) * Math.PI * 2
+    const wobble = 1 - rough + roll(10 + i) * rough * 2
+    const rx = Math.cos(a) * size * wobble * stretch
+    const ry = Math.sin(a) * size * wobble
     if (i === 0) ctx.moveTo(rx, ry)
     else ctx.lineTo(rx, ry)
   }
   ctx.closePath()
   ctx.fill()
 
-  // Craters, so a rock is not a blob.
+  // Craters, so a rock is not a blob — a different number in different places
+  // on each one, and small enough to stay inside the outline.
   ctx.fillStyle = INK.rockDark
-  for (let i = 0; i < 3; i++) {
-    const a = rock.id * 1.7 + i * 2.1
+  const pits = 2 + Math.floor(roll(5) * 4)
+  for (let i = 0; i < pits; i++) {
+    const a = roll(30 + i) * Math.PI * 2
+    const out = 0.16 + roll(50 + i) * 0.42
+    const wide = size * (0.09 + roll(70 + i) * 0.13)
     ctx.beginPath()
-    ctx.arc(x + Math.cos(a) * size * 0.4, y + Math.sin(a) * size * 0.4, size * 0.17, 0, Math.PI * 2)
+    ctx.arc(Math.cos(a) * size * out * stretch, Math.sin(a) * size * out, wide, 0, Math.PI * 2)
     ctx.fill()
   }
+  ctx.restore()
 
   /*
    * How much is left in it — but only once it has been hit.

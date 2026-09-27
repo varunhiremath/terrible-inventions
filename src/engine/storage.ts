@@ -52,9 +52,9 @@ export interface SaveState {
    */
   seenIntro: Record<string, boolean>
   /**
-   * The quickest anybody has got round each stage of the road, in seconds.
+   * The quickest anybody has got round each level of the road, in seconds.
    *
-   * Keyed by stage number. Kept on the device with everything else, so the
+   * Keyed by level number. Kept on the device with everything else, so the
    * time to beat is his own from yesterday rather than a number somebody
    * decided was good — which is the only kind of target worth chasing when
    * you are the only person who plays.
@@ -65,9 +65,24 @@ export interface SaveState {
    *
    * This is as close to playing together as anything gets without a server:
    * one of you sets a time, and the other races the car that set it. Stored
-   * as three flat arrays of a few hundred numbers per stage.
+   * as three flat arrays of a few hundred numbers per level.
    */
   roadGhost: Record<number, { at: number[]; gone: number[]; lane: number[] }>
+  /**
+   * Which car out of the garage he drives, by name.
+   *
+   * A name rather than an index, so reordering the roster or slipping a new
+   * car into the middle of it does not quietly hand him somebody else's car.
+   */
+  roadCar?: string
+  /**
+   * Where he finished the last race, which is where he starts the next one.
+   *
+   * The whole reason the grid is worth painting: win and you line up on pole
+   * next time with nothing in front of you, come last and you have the lot of
+   * them to get past again.
+   */
+  roadPlace?: number
   /**
    * Every question he has ever got right, by id. Never asked again.
    *

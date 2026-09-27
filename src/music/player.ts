@@ -306,7 +306,7 @@ export function startMusic(name: TrackName): void {
   unlockAudio()
 
   playing = track
-  // A new track starts cold. Otherwise the tension from the stage you just
+  // A new track starts cold. Otherwise the tension from the level you just
   // failed follows you onto the menu.
   heat = 0
   eighth = 0

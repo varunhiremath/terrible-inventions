@@ -2,7 +2,7 @@
  * Race a lap, then race it again and look for the ghost.
  *
  * The ghost only exists once somebody has set a time, so this has to do the
- * stage twice: the first run records it, the second should have a pale car on
+ * level twice: the first run records it, the second should have a pale car on
  * the road alongside.
  */
 import { chromium } from 'playwright'

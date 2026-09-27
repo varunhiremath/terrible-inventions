@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  CAR_LONG, CAR_WIDE, COUNTDOWN, LANES, LIGHTS, LIGHT_EVERY, MISSION_BONUS, SIGHT, STAGES,
-  TANK, kmh, missionSays, stageFor,
+  CAR_LONG, CAR_WIDE, COUNTDOWN, LANES, LIGHTS, LIGHT_EVERY, MISSION_BONUS, SIGHT, LEVELS,
+  DEFAULT_CAR, TANK, kmh, missionSays, levelFor,
 } from '../road/level'
 import {
   FIXED, STARTING_LIVES, ghostAt, missionMet, newRun, placeOf, resume, standings, step,
+  type Entry,
   type Input, type RoadEvent, type Run, type Status, type Trail,
 } from '../road/run'
 import { createLatch, keyAt, padHeight, padLayout, type Button, type Key } from '../road/controls'
@@ -17,6 +18,7 @@ import { BackButton, Btn } from '../ui/bits'
 import { LABELS, hintAlpha } from '../ui/padHints'
 import { useStore } from '../store'
 import { spareLives, tankScale } from '../workshop/kit'
+import { Garage } from './Garage'
 import { Interlude } from './Interlude'
 
 /**
@@ -28,7 +30,7 @@ import { Interlude } from './Interlude'
  * towards you. What makes it a game is where the gaps are.
  *
  * The one promise it makes is that there is always a gap. That is enforced in
- * the model and tested on every stage, because a wall of traffic across all
+ * the model and tested on every level, because a wall of traffic across all
  * four lanes is not difficulty, it is a coin toss you lose.
  */
 const MAX_CATCHUP = 0.25
@@ -39,7 +41,7 @@ const NOISE: Record<RoadEvent, CueName> = {
   can: 'refuel',
   crash: 'prang',
   dry: 'prang',
-  stageDone: 'arrive',
+  levelDone: 'arrive',
   skid: 'overtake',
   warn: 'warn',
   siren: 'siren',
@@ -49,13 +51,13 @@ const NOISE: Record<RoadEvent, CueName> = {
 
 /** Loudest thing first: one sound a frame, and never the overtake. */
 const LOUDEST: RoadEvent[] =
-  ['stageDone', 'crash', 'dry', 'green', 'light', 'warn', 'can', 'siren', 'pass', 'skid']
+  ['levelDone', 'crash', 'dry', 'green', 'light', 'warn', 'can', 'siren', 'pass', 'skid']
 if (LOUDEST.length !== Object.keys(NOISE).length) {
   throw new Error('a road event with no place in the order')
 }
 
 interface Hud {
-  stage: number
+  level: number
   score: number
   speed: number
   fuel: number
@@ -71,27 +73,27 @@ interface Hud {
 }
 
 /**
- * Probe hooks: `?stage=4` starts there, `?sprint=1` makes the stage 40 lengths.
+ * Probe hooks: `?level=4` starts there, `?sprint=1` makes the level 40 lengths.
  *
  * The finishing order only exists once somebody crosses the line, and crossing
  * the line takes a minute of driving that nothing but a person can do well.
- * A forty-length stage takes six seconds, which is how the panel gets looked
+ * A forty-length level takes six seconds, which is how the panel gets looked
  * at. Nothing in the app writes either of these and there is no way to them
  * from inside it.
  */
-function opening(): { stage: number; sprint: boolean } {
+function opening(): { level: number; sprint: boolean } {
   const asked = new URLSearchParams(window.location.search)
-  const stage = Number(asked.get('stage'))
+  const level = Number(asked.get('level'))
   return {
-    stage: Number.isFinite(stage) ? Math.min(STAGES.length, Math.max(1, Math.floor(stage))) : 1,
+    level: Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1,
     sprint: asked.get('sprint') === '1',
   }
 }
 
-function firstRun(stock: { lives: number; tank: number }): Run {
+function firstRun(stock: { lives: number; tank: number }, entry: Entry): Run {
   const from = opening()
-  const run = withStock(newRun(from.stage), stock)
-  return from.sprint ? { ...run, stage: { ...run.stage, distance: 40 } } : run
+  const run = withStock(newRun(from.level, STARTING_LIVES, 0, 1, entry), stock)
+  return from.sprint ? { ...run, level: { ...run.level, distance: 40 } } : run
 }
 
 /** Whatever the workshop has sold him, applied to a fresh run. */
@@ -108,7 +110,30 @@ function withStock(run: Run, stock: { lives: number; tank: number }): Run {
 export function Road() {
   const go = useStore((s) => s.go)
   const recordLap = useStore((s) => s.recordLap)
+  const recordPlace = useStore((s) => s.recordPlace)
   const earn = useStore((s) => s.earn)
+  const savedCar = useStore((s) => s.save.roadCar)
+  const savedPlace = useStore((s) => s.save.roadPlace)
+  /*
+   * The car and the grid slot, read once when the screen opens.
+   *
+   * In a ref for the same reason the workshop's stock is: the loop lives
+   * outside React, and a car that changed mid-race because the garage was
+   * open in another tab would make a replay disagree with the race it
+   * replayed.
+   */
+  const entry = useRef({ car: savedCar, started: savedPlace })
+  const pickCar = useStore((s) => s.pickCar)
+  /*
+   * The garage, open on the first visit and on request after that.
+   *
+   * Opened by default when nothing has been picked, because a choice nobody
+   * is offered is not a choice — and closed for good afterwards, since being
+   * asked which car you want every single time you open the road would get
+   * old by the third race.
+   */
+  const [garage, setGarage] = useState(savedCar === undefined)
+  const [car, setCar] = useState(savedCar ?? DEFAULT_CAR)
   const kit = useStore((s) => s.save.workshop)
   /*
    * What the workshop has bought, read once when a run starts.
@@ -119,7 +144,7 @@ export function Road() {
    */
   const stock = useRef({ lives: 0, tank: 1 })
   /*
-   * The drive to race against, if there is one for this stage.
+   * The drive to race against, if there is one for this level.
    *
    * In a ref for the same reason as everything else the loop needs: the loop
    * runs outside React. Re-read whenever a new best is set, so beating your
@@ -137,7 +162,7 @@ export function Road() {
   const clock = useRef(0)
   const buttons = useRef(createLatch())
   const [hud, setHud] = useState<Hud>({
-    stage: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0,
+    level: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0,
     missionDone: false, place: 1, clock: 0, countdown: 0,
   })
   /** Whether the lap just finished was the quickest one yet. */
@@ -167,7 +192,7 @@ export function Road() {
     const observer = new ResizeObserver(resize)
     observer.observe(wrap)
 
-    if (!runRef.current) runRef.current = firstRun(stock.current)
+    if (!runRef.current) runRef.current = firstRun(stock.current, entry.current)
     const pacer = createPacer<Run>(FIXED, MAX_CATCHUP)
     let frame = 0
     let last = performance.now()
@@ -212,26 +237,26 @@ export function Road() {
         /*
          * How tense the music is.
          *
-         * Three things make a drive bad: being deep into the stages, being
+         * Three things make a drive bad: being deep into the levels, being
          * down to your last car, and being nearly out of fuel. The worst of
          * the three wins, so the tune answers whichever is actually happening
          * rather than averaging them into nothing.
          */
-        const deep = (next.number - 1) / Math.max(1, STAGES.length - 1)
+        const deep = Math.min(1, (next.number - 1) / Math.max(1, LEVELS.length - 1))
         const thin = 1 - (next.lives - 1) / Math.max(1, STARTING_LIVES - 1)
         const dry = Math.max(0, 1 - next.fuel / (next.tank * 0.35))
-        setHeat(Math.max(deep * 0.5 + (next.distance / next.stage.distance) * 0.25, thin * 0.8, dry))
+        setHeat(Math.max(deep * 0.5 + (next.distance / next.level.distance) * 0.25, thin * 0.8, dry))
 
         const standing = placeOf(next)
         if (
-          next.number !== hud.stage || next.status !== hud.status ||
+          next.number !== hud.level || next.status !== hud.status ||
           Math.round(next.score) !== hud.score || Math.round(next.fuel) !== Math.round(hud.fuel) ||
           kmh(next.speed) !== hud.speed || next.lives !== hud.lives || standing !== hud.place ||
           Math.round(next.clock * 10) !== Math.round(hud.clock * 10) ||
           Math.ceil(next.countdown) !== Math.ceil(hud.countdown)
         ) {
           setHud({
-            stage: next.number,
+            level: next.number,
             score: next.score,
             speed: kmh(next.speed),
             fuel: next.fuel,
@@ -308,7 +333,7 @@ export function Road() {
         ctx.rect(0, capH, w, middle)
         ctx.clip()
         // The last two are which way you are steering — for the eyes — and
-        // where the best drive on this stage had got to by now.
+        // where the best drive on this level had got to by now.
         const trail = ghostRef.current[next.number]
         const ghost = trail && next.countdown === 0 ? ghostAt(trail, next.clock) : null
         drawRun(ctx, next, at, view, w, capH + middle, steerNow, ghost)
@@ -322,13 +347,13 @@ export function Road() {
         const gap = lane * 0.4
         const backRoom = 70 * (canvas.width / Math.max(1, canvas.clientWidth))
         const score = `${next.score}`.padStart(6, '0')
-        const stage = `STAGE ${next.number}`
+        const level = `LEVEL ${next.number}`
         const speed = `${kmh(next.speed)} KM/H`
         let text = Math.min(lane * 0.42, capH * 0.6)
         const fits = () => {
           ctx.font = `bold ${text}px ui-monospace, monospace`
           const side = Math.max(ctx.measureText(score).width, ctx.measureText(speed).width)
-          return side * 2 + ctx.measureText(stage).width + gap * 2 + backRoom * 2 <= w
+          return side * 2 + ctx.measureText(level).width + gap * 2 + backRoom * 2 <= w
         }
         while (text > 9 && !fits()) text -= 1
 
@@ -337,18 +362,18 @@ export function Road() {
         ctx.textAlign = 'left'
         ctx.fillText(score, backRoom, capH / 2)
         ctx.textAlign = 'center'
-        ctx.fillText(stage, w / 2, capH / 2)
+        ctx.fillText(level, w / 2, capH / 2)
         ctx.textAlign = 'right'
         ctx.fillText(speed, w - gap, capH / 2)
 
         /*
          * The job, and how it is going.
          *
-         * A stage with only a distance to it is a treadmill. Saying what is
+         * A level with only a distance to it is a treadmill. Saying what is
          * being asked, and counting it as you go, is what makes the last
          * stretch worth driving rather than just worth surviving.
          */
-        const mission = next.stage.mission
+        const mission = next.level.mission
         const progress =
           mission.kind === 'pass' ? `${Math.min(next.passed, mission.count)}/${mission.count} PASSED`
           : mission.kind === 'cans' ? `${Math.min(next.cansTaken, mission.count)}/${mission.count} CANS`
@@ -365,11 +390,38 @@ export function Road() {
          * matters and it changes while you are looking at the road rather than
          * at the readout. Green while you are winning it.
          */
+        /*
+         * On a plate, and big enough to read without looking for it.
+         *
+         * It was already here — small, pale orange, tucked under the score —
+         * and it was asked for again, which is the clearest possible report
+         * that it was not being seen. So it gets a dark plate of its own, a
+         * label, and twice the size: in a race the position is not one of the
+         * readouts, it is the readout, and everything else on this bar is
+         * detail by comparison.
+         */
         const field = next.racers.length + 1
-        ctx.font = `bold ${text * 1.25}px ui-monospace, monospace`
-        ctx.textAlign = 'left'
+        const plateH = text * 2.1
+        const plateW = text * 4.2
+        const plateX = gap
+        const plateY = capH + text * 0.55
+        ctx.fillStyle = 'rgba(10,12,17,0.72)'
+        ctx.beginPath()
+        ctx.roundRect(plateX, plateY, plateW, plateH, text * 0.35)
+        ctx.fill()
+        ctx.strokeStyle = standing === 1 ? '#4ade80' : 'rgba(238,242,248,0.28)'
+        ctx.lineWidth = Math.max(1.5, text * 0.09)
+        ctx.stroke()
+
+        ctx.textAlign = 'center'
+        ctx.fillStyle = '#8a91ab'
+        ctx.font = `bold ${Math.max(8, text * 0.48)}px ui-monospace, monospace`
+        ctx.fillText('POSITION', plateX + plateW / 2, plateY + text * 0.45)
+
+        ctx.font = `bold ${text * 1.15}px ui-monospace, monospace`
         ctx.fillStyle = standing === 1 ? '#4ade80' : standing <= 2 ? '#eef2f8' : '#ff9d7a'
-        ctx.fillText(`P${standing}/${field}`, backRoom * 0.5, capH + text * 2.1)
+        ctx.fillText(`${standing}/${field}`, plateX + plateW / 2, plateY + text * 1.42)
+        ctx.textAlign = 'left'
 
         // --- the fuel gauge, down the side of the road ------------------------
         const gaugeH = middle * 0.5
@@ -475,11 +527,11 @@ export function Road() {
     stock.current = { lives: spareLives({ workshop: kit }), tank: tankScale({ workshop: kit }) }
   }, [kit])
 
-  /** Coins for the drive, paid once, when the stage is done or the cars run out. */
+  /** Coins for the drive, paid once, when the level is done or the cars run out. */
   const banked = useRef('')
   useEffect(() => {
     const run = runRef.current
-    if (!run || (hud.status !== 'stageDone' && hud.status !== 'gameOver')) return
+    if (!run || (hud.status !== 'levelDone' && hud.status !== 'gameOver')) return
     const mark = `${run.number}:${hud.status}:${run.score}`
     if (banked.current === mark) return
     banked.current = mark
@@ -489,19 +541,28 @@ export function Road() {
   /**
    * A finished lap, offered to the record book.
    *
-   * Only once per finish — the status stays on `stageDone` while the panel is
+   * Only once per finish — the status stays on `levelDone` while the panel is
    * up, and offering the same lap sixty times a second would be harmless but
    * would also mean the "your best yet" line flickered off after the first.
    */
   const logged = useRef('')
   useEffect(() => {
     const run = runRef.current
-    if (hud.status !== 'stageDone' || !run || run.yourTime === null) return
+    if (hud.status !== 'levelDone' || !run || run.yourTime === null) return
     const mark = `${run.number}:${run.yourTime.toFixed(3)}`
     if (logged.current === mark) return
     logged.current = mark
     setBeatIt(recordLap(run.number, run.yourTime, run.trail))
-  }, [hud.status, recordLap])
+    /*
+     * And where he came, which is where the next grid puts him.
+     *
+     * Saved at the flag rather than when the next level starts, because the
+     * next level might be tomorrow — and a grid that forgot yesterday's result
+     * overnight would be the one thing this is meant not to do.
+     */
+    recordPlace(run.place)
+    entry.current = { ...entry.current, started: run.place }
+  }, [hud.status, recordLap, recordPlace])
 
   // --- the glass ------------------------------------------------------------
   const readTouch = (e: React.PointerEvent) => {
@@ -567,28 +628,56 @@ export function Road() {
     setHud((h) => ({ ...h, status: 'driving', lives: runRef.current!.lives }))
   }
 
-  const nextStage = () => {
+  const nextLevel = () => {
     const run = runRef.current
     if (!run) return
     const number = run.number + 1
-    if (number > STAGES.length) return
-    // A stage is not a fresh run: the lives and the tank carry from the last
+    // A level is not a fresh run: the lives and the tank carry from the last
     // one, so the workshop's stock is not handed out again at every flag.
-    runRef.current = newRun(number, run.lives, run.score, run.seed)
+    runRef.current = newRun(number, run.lives, run.score, run.seed, entry.current)
     setBeatIt(false)
-    setHud((h) => ({ ...h, status: 'driving', stage: number, clock: 0, countdown: COUNTDOWN }))
+    setHud((h) => ({ ...h, status: 'driving', level: number, clock: 0, countdown: COUNTDOWN }))
+  }
+
+  /**
+   * Taking a different car out.
+   *
+   * It takes effect at the next set of lights rather than immediately: the
+   * car you are driving cannot change halfway down a straight, and the garage
+   * is only reachable from the flag or from the first visit anyway.
+   */
+  const takeCar = (name: string) => {
+    setCar(name)
+    pickCar(name)
+    entry.current = { ...entry.current, car: name }
+    const run = runRef.current
+    // Before the first race there is a run already built with the old car in
+    // it, and nothing has happened in it yet, so it is safe to rebuild.
+    if (run && run.clock === 0 && run.distance === 0) {
+      runRef.current = withStock(
+        newRun(run.number, run.lives, run.score, run.seed, entry.current),
+        stock.current,
+      )
+    }
   }
 
   const startOver = () => {
-    runRef.current = newRun(1)
+    runRef.current = newRun(1, STARTING_LIVES, 0, 1, entry.current)
     setHud({
-      stage: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0,
+      level: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0,
       missionDone: false, place: 1, clock: 0, countdown: 0,
     })
     setBeatIt(false)
   }
 
-  const lastStage = hud.stage >= STAGES.length
+  /**
+   * Whether the six written levels are behind you.
+   *
+   * Not "the last level" any more — there isn't one. It only decides which
+   * thing {papa} says at the flag: getting to the end of the road he actually
+   * built is worth a line, and everything past it is the road he didn't.
+   */
+  const clearedTheWritten = hud.level === LEVELS.length
   const outOfLives = hud.lives <= 0
   /** A prang asks you something and puts you straight back on the road. */
   const asking = hud.status === 'crashed' && !outOfLives
@@ -603,7 +692,7 @@ export function Road() {
       onPointerCancel={onUp}
     >
       <header className="sr-only" aria-live="polite">
-        STAGE {hud.stage} SCORE {hud.score} SPEED {hud.speed} LIVES {hud.lives}{' '}
+        LEVEL {hud.level} SCORE {hud.score} SPEED {hud.speed} LIVES {hud.lives}{' '}
         FUEL {Math.round(hud.fuel)} PLACE {hud.place}{' '}
         {hud.countdown > 0 ? `LIGHTS ${Math.ceil(hud.countdown)}` : `TIME ${hud.clock.toFixed(1)}`}
       </header>
@@ -611,6 +700,10 @@ export function Road() {
       <div ref={wrapRef} className="relative min-h-0 flex-1">
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
       </div>
+
+      {garage && (
+        <Garage picked={car} onPick={takeCar} onClose={() => setGarage(false)} />
+      )}
 
       <BackButton onClick={() => go('home')} />
 
@@ -626,34 +719,34 @@ export function Road() {
           <div className="block-panel w-full max-w-md p-5">
             <p className="text-sm font-bold uppercase tracking-wider text-rust">{fill('{papa}')}</p>
             <p className="mt-2 text-xl leading-snug">
-              {hud.status === 'stageDone' && lastStage
-                ? 'Every road I own, and you drove the lot of them. I am appalled.'
-                : hud.status === 'stageDone'
+              {hud.status === 'levelDone' && clearedTheWritten
+                ? 'Every road I own, and you drove the lot of them. Fine. I will build more.'
+                : hud.status === 'levelDone'
                   ? 'Through already? There is more road. There is always more road.'
                   : outOfLives
                     ? 'Out of cars. Back to the start of the motorway with you.'
                     : 'A prang. I told you I built these myself.'}
             </p>
 
-            {hud.status === 'stageDone' && (
+            {hud.status === 'levelDone' && (
               <p className={`mt-3 font-mono text-xs font-bold uppercase tracking-[0.2em] ${
                 hud.missionDone ? 'text-moss' : 'text-dim'
               }`}>
                 {hud.missionDone
-                  ? `${missionSays(stageFor(hud.stage).mission)} — done. ${MISSION_BONUS} bonus.`
-                  : `${missionSays(stageFor(hud.stage).mission)} — not this time.`}
+                  ? `${missionSays(levelFor(hud.level).mission)} — done. ${MISSION_BONUS} bonus.`
+                  : `${missionSays(levelFor(hud.level).mission)} — not this time.`}
               </p>
             )}
 
             {/*
               * The finishing order.
               *
-              * The whole reason the field is there. A stage that ends with a
-              * distance and a bonus is a stage you survived; one that ends
+              * The whole reason the field is there. A level that ends with a
+              * distance and a bonus is a level you survived; one that ends
               * with four names and yours somewhere among them is one you
               * either won or did not.
               */}
-            {hud.status === 'stageDone' && runRef.current && (() => {
+            {hud.status === 'levelDone' && runRef.current && (() => {
               const order = standings(runRef.current)
               const winner = order[0].at
               return (
@@ -676,7 +769,7 @@ export function Road() {
                           * which is how a result is read everywhere else in
                           * the world. A tilde on the ones still out on the
                           * road when you crossed: their time is worked out
-                          * from where they had got to, because the stage ends
+                          * from where they had got to, because the level ends
                           * when you finish and they genuinely had not.
                           */}
                         <span className="tabular-nums">
@@ -693,8 +786,8 @@ export function Road() {
                   }`}>
                     {beatIt
                       ? `Your best yet — ${(hud.clock).toFixed(2)}s. Race it next time.`
-                      : bestRef.current[hud.stage] !== undefined
-                        ? `Best here: ${bestRef.current[hud.stage].toFixed(2)}s — the pale car is it`
+                      : bestRef.current[hud.level] !== undefined
+                        ? `Best here: ${bestRef.current[hud.level].toFixed(2)}s — the pale car is it`
                         : 'No time to beat here yet'}
                   </p>
                 </>
@@ -702,12 +795,15 @@ export function Road() {
             })()}
 
             <div className="mt-5 flex flex-col gap-2">
-              {hud.status === 'stageDone' && !lastStage && (
-                <Btn tone="go" onClick={nextStage} className="py-4 text-lg">
-                  On to stage {hud.stage + 1}
+              {hud.status === 'levelDone' && (
+                <Btn tone="go" onClick={nextLevel} className="py-4 text-lg">
+                  On to level {hud.level + 1}
                 </Btn>
               )}
-              {(outOfLives || (hud.status === 'stageDone' && lastStage)) && (
+              {hud.status === 'levelDone' && (
+                <Btn onClick={() => setGarage(true)}>Change car</Btn>
+              )}
+              {outOfLives && (
                 <Btn tone="go" onClick={startOver} className="py-4 text-lg">
                   Start again
                 </Btn>

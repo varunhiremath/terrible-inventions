@@ -14,7 +14,8 @@
  */
 import { drawHint } from '../ui/padHints'
 import {
-  CAR_LONG, CAR_WIDE, GRID, GRID_ROW, LANES, LENGTH_OF, POLE, SIGHT, WIDTH_OF,
+  CAR_LONG, CAR_WIDE, GRID_ROW, LANES, LENGTH_OF, ROSTER, SIGHT, WIDTH_OF,
+  type Racer, type Slot,
   type Build, type CarKind, type Face,
 } from './level'
 import type { Can, Car, Racing, Run } from './run'
@@ -168,6 +169,9 @@ export const BUILD_OF: Record<Build, Shape> = {
   tow: TOW,
   coupe: COUPE,
   camper: CAMPER,
+  // The open-wheeler. Pointed nose, wings at both ends, and the only thing on
+  // the grid whose shape says "fastest here" before its colour says anything.
+  racer: RACER,
 }
 
 const SHAPE_OF: Record<CarKind, Shape> = {
@@ -267,9 +271,9 @@ export function drawRoad(ctx: Ctx, view: View, w: number, h: number): void {
 /**
  * The line, and the banner over it.
  *
- * A stage used to simply stop: you were driving, and then you were reading a
+ * A level used to simply stop: you were driving, and then you were reading a
  * panel. Seeing the chequers coming from a long way off is most of what makes
- * the last twenty lengths of a stage worth driving.
+ * the last twenty lengths of a level worth driving.
  */
 export function drawFinish(ctx: Ctx, at: number, view: View): void {
   const y = roadY(view, at)
@@ -304,13 +308,16 @@ export function drawFinish(ctx: Ctx, at: number, view: View): void {
  * Only near the line, because there is no sense drawing a start line a
  * kilometre behind.
  */
-export function drawGrid(ctx: Ctx, view: View): void {
+export function drawGrid(ctx: Ctx, view: View, slots: readonly Slot[]): void {
+  if (slots.length === 0) return
   const road = roadWidth(view)
   // In front of pole, not behind the last car: the grid lines up behind the
   // start line, which is the whole reason it is called that.
-  const lineY = roadY(view, GRID_ROW * 4 + CAR_LONG * 1.3)
+  const front = Math.max(...slots.map((slot) => slot.row))
+  const lineY = roadY(view, front * GRID_ROW + CAR_LONG * 1.3)
   const band = view.depth * 0.9
-  if (lineY < -view.depth * 8 || roadY(view, 0) > view.line + view.depth * 6) return
+  const back = Math.min(...slots.map((slot) => slot.row))
+  if (lineY < -view.depth * 8 || roadY(view, back * GRID_ROW) > view.line + view.depth * 6) return
 
   // The start line itself: a solid white band, with a red and white kerb
   // running out to each verge.
@@ -325,27 +332,43 @@ export function drawGrid(ctx: Ctx, view: View): void {
   }
 
   /*
-   * And a box for each slot.
+   * And a box for each slot, with the position painted in it.
    *
    * Open at the front, like the real ones, so a car sitting in it looks parked
-   * in it rather than fenced in by it.
+   * in it rather than fenced in by it. The numbers are the point of painting
+   * them at all: the grid is the last race's result written on the tarmac, and
+   * a box with a 1 in it says that in a way no panel of text does.
    */
-  const slots = [POLE, ...GRID]
-  ctx.strokeStyle = 'rgba(238,242,248,0.9)'
   ctx.lineWidth = Math.max(1.5, view.lane * 0.05)
-  for (const slot of slots) {
+  slots.forEach((slot, i) => {
     const y = roadY(view, slot.row * GRID_ROW)
-    if (y < -view.depth * 4 || y > view.line + view.depth * 4) continue
+    if (y < -view.depth * 4 || y > view.line + view.depth * 4) return
     const x = laneX(view, slot.lane)
     const w = view.lane * CAR_WIDE * 1.5
     const h = CAR_LONG * view.depth * 1.15
+    ctx.strokeStyle = 'rgba(238,242,248,0.9)'
     ctx.beginPath()
     ctx.moveTo(x - w / 2, y - h / 2)
     ctx.lineTo(x - w / 2, y + h / 2)
     ctx.lineTo(x + w / 2, y + h / 2)
     ctx.lineTo(x + w / 2, y - h / 2)
     ctx.stroke()
-  }
+
+    /*
+     * The number goes on the tarmac behind the box, not inside it.
+     *
+     * Inside is where a real one is painted and it is no use here, because a
+     * car parked in the box covers almost exactly the area the number would
+     * occupy — the box is only a sixth longer than the car. Behind it, the
+     * number sits on the open road between one row and the next and is the
+     * clearest thing on the grid.
+     */
+    ctx.fillStyle = 'rgba(238,242,248,0.8)'
+    ctx.font = `bold ${Math.max(9, h * 0.3)}px ui-monospace, monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(`${i + 1}`, x, y + h * 0.72)
+  })
 }
 
 /** One of {papa}'s, coming the other way. */
@@ -513,6 +536,7 @@ export function drawMine(
   stunned: number,
   mercy = 0,
   look = 0,
+  who: Racer = ROSTER[0],
 ): void {
   const x = laneX(view, lane)
   const y = view.line
@@ -525,30 +549,20 @@ export function drawMine(
   // the game is in should be visible without being explained.
   if (stunned <= 0 && mercy > 0 && Math.floor(mercy * 9) % 2 === 0) return
 
-  ctx.fillStyle = INK.shadow
-  body(ctx, x + wide * 0.07, y + long * 0.05, wide, long, RACER, wide * 0.16)
-  ctx.fill()
-
-  wheels(ctx, x, y, wide * 0.86, long, wide * 0.06)
-
-  ctx.fillStyle = INK.mine
-  body(ctx, x, y, wide, long, RACER, wide * 0.16)
-  ctx.fill()
-
-  // Front wing, cockpit, rear wing.
-  ctx.fillStyle = '#c99a1f'
-  ctx.fillRect(x - wide * 0.46, y - long * 0.52, wide * 0.92, long * 0.08)
-  ctx.fillRect(x - wide * 0.5, y + long * 0.42, wide, long * 0.1)
-
   /*
-   * Your own face, looking where you are steering.
+   * Painted exactly the way the field is painted, because it is one of them.
    *
-   * It would be an odd world where four of his machines had faces and the one
-   * you are driving did not. `look` comes from the steering, so the eyes go
-   * where you go — which, when you are threading a gap, is oddly good at
-   * telling you that you have committed to it.
+   * It used to be a single-seater and nothing else could be, which was fine
+   * while the car was a given. Now it is a choice, and a garage you can pick
+   * a tow truck out of has to be able to draw you in a tow truck. The
+   * single-seater is still in there, still the default, and still the one
+   * whose shape says "fastest here" before its colour says anything.
+   *
+   * `look` comes from the steering, so the eyes go where you go — which, when
+   * you are threading a gap, is oddly good at telling you that you have
+   * committed to it.
    */
-  drawFace(ctx, x, y, wide, long, 'eager', look)
+  paintCar(ctx, x, y, wide, long, who, look)
 }
 
 /**
@@ -582,7 +596,7 @@ export function drawFace(
    * nothing in particular, so the eyes were half again as wide as the window
    * they were supposed to be behind and every car looked like a skittle.
    */
-  const at = { keen: -0.1, cheerful: -0.16, eager: -0.12, sleepy: -0.22 }[face]
+  const at = { keen: -0.1, cheerful: -0.16, eager: -0.12, sleepy: -0.22, grumpy: -0.12, sly: -0.14 }[face]
   const cy = y + long * at
   /*
    * A windscreen, not a head.
@@ -604,8 +618,8 @@ export function drawFace(
   ctx.ellipse(x - glassW * 0.32, cy - glassH * 0.34, glassW * 0.28, glassH * 0.26, 0, 0, Math.PI * 2)
   ctx.fill()
 
-  const size = { keen: 0.4, cheerful: 0.46, eager: 0.48, sleepy: 0.4 }[face]
-  const apart = { keen: 0.46, cheerful: 0.44, eager: 0.42, sleepy: 0.44 }[face]
+  const size = { keen: 0.4, cheerful: 0.46, eager: 0.48, sleepy: 0.4, grumpy: 0.42, sly: 0.44 }[face]
+  const apart = { keen: 0.46, cheerful: 0.44, eager: 0.42, sleepy: 0.44, grumpy: 0.46, sly: 0.43 }[face]
   const r = Math.min(glassW * size, glassH * 0.62)
 
   for (const side of [-1, 1]) {
@@ -630,12 +644,19 @@ export function drawFace(
     ctx.arc(ex + look * r * 0.38 - r * 0.16, cy - r * 0.08, r * 0.14, 0, Math.PI * 2)
     ctx.fill()
 
-    // Lids do the expression: narrowed for keen, heavy for sleepy.
-    if (face === 'keen' || face === 'sleepy') {
+    /*
+     * Lids do the expression, and they are the whole of it.
+     *
+     * Narrowed for keen, heavy for sleepy, half-shut for sly — and for grumpy
+     * the same lid tilted inwards, which is a brow. One ellipse each, and the
+     * difference between six machines and one machine painted six colours.
+     */
+    if (face === 'keen' || face === 'sleepy' || face === 'sly' || face === 'grumpy') {
       ctx.fillStyle = '#1a2230'
-      const drop = face === 'sleepy' ? 0.85 : 0.55
+      const drop = { keen: 0.55, sleepy: 0.85, sly: 0.68, grumpy: 0.62 }[face]
+      const tilt = face === 'grumpy' ? side * -0.45 : 0
       ctx.beginPath()
-      ctx.ellipse(ex, cy - r * drop, r * grow * 1.05, r * 0.7, 0, 0, Math.PI * 2)
+      ctx.ellipse(ex, cy - r * drop, r * grow * 1.05, r * 0.7, tilt, 0, Math.PI * 2)
       ctx.fill()
     }
   }
@@ -650,6 +671,13 @@ export function drawFace(
     // A flat line, and not a happy one.
     ctx.moveTo(x - wide * 0.14, mouth)
     ctx.lineTo(x + wide * 0.14, mouth)
+  } else if (face === 'grumpy') {
+    // The same arc as a grin, upside down.
+    ctx.arc(x, mouth + long * 0.09, wide * 0.22, Math.PI * 1.25, Math.PI * 1.75)
+  } else if (face === 'sly') {
+    // Up at one end only, which is the entire joke.
+    ctx.moveTo(x - wide * 0.15, mouth + long * 0.02)
+    ctx.quadraticCurveTo(x, mouth + long * 0.03, x + wide * 0.16, mouth - long * 0.03)
   } else {
     const grin = face === 'keen' ? 0.1 : 0.14
     ctx.arc(x, mouth - long * grin * 0.6, wide * grin * 1.6, Math.PI * 0.25, Math.PI * 0.75)
@@ -665,20 +693,34 @@ export function drawFace(
  * indicator, because a racer pulling out gives the same warning everything
  * else on this road does.
  */
-export function drawRacer(ctx: Ctx, racer: Racing, view: View): void {
-  const x = laneX(view, racer.lane)
-  const y = roadY(view, racer.y)
-  const wide = view.lane * CAR_WIDE
-  const long = CAR_LONG * view.depth
-  const shape = BUILD_OF[racer.who.build]
-
+/**
+ * The paint job, for anybody's car.
+ *
+ * Shared by the field and by whatever you picked out of the garage, because
+ * they are the same kind of thing and the moment you can drive one of theirs
+ * they had better be. Everything that makes a car itself is in here: the
+ * body, the wheels, the trim that says which build it is, the lamps and the
+ * face. What is *not* in here is anything about where the car is in the race
+ * — the flashing of a wreck, an indicator — because those belong to the
+ * driver rather than the machine.
+ */
+function paintCar(
+  ctx: Ctx,
+  x: number,
+  y: number,
+  wide: number,
+  long: number,
+  who: Racer,
+  look: number,
+): void {
+  const shape = BUILD_OF[who.build]
   ctx.fillStyle = INK.shadow
   body(ctx, x + wide * 0.07, y + long * 0.05, wide, long, shape, wide * 0.16)
   ctx.fill()
 
   wheels(ctx, x, y, wide * 0.86, long, wide * 0.06)
 
-  ctx.fillStyle = racer.who.colour
+  ctx.fillStyle = who.colour
   body(ctx, x, y, wide, long, shape, wide * 0.16)
   ctx.fill()
 
@@ -689,14 +731,14 @@ export function drawRacer(ctx: Ctx, racer: Racing, view: View): void {
    * a wing and a scoop, a tow boom, a roof rack. Enough that a glance at the
    * mirror says which of them is behind you.
    */
-  ctx.fillStyle = racer.who.trim
-  if (racer.who.build === 'stock') {
+  ctx.fillStyle = who.trim
+  if (who.build === 'stock') {
     // A bonnet scoop and a rear wing you could serve dinner on.
     ctx.fillRect(x - wide * 0.12, y - long * 0.72, wide * 0.24, long * 0.14)
     ctx.fillRect(x - wide * 0.54, y + long * 0.5, wide * 1.08, long * 0.12)
     ctx.fillRect(x - wide * 0.46, y + long * 0.38, wide * 0.08, long * 0.14)
     ctx.fillRect(x + wide * 0.38, y + long * 0.38, wide * 0.08, long * 0.14)
-  } else if (racer.who.build === 'tow') {
+  } else if (who.build === 'tow') {
     // A flat deck, a boom down the middle of it, and a hook on the end.
     ctx.globalAlpha = 0.55
     ctx.fillRect(x - wide * 0.3, y + long * 0.2, wide * 0.6, long * 0.56)
@@ -708,7 +750,12 @@ export function drawRacer(ctx: Ctx, racer: Racing, view: View): void {
     ctx.lineWidth = Math.max(2, wide * 0.08)
     ctx.strokeStyle = '#4a4f5c'
     ctx.stroke()
-  } else if (racer.who.build === 'coupe') {
+  } else if (who.build === 'racer') {
+    // Front wing, rear wing, and a stripe down the nose between them.
+    ctx.fillRect(x - wide * 0.46, y - long * 0.52, wide * 0.92, long * 0.08)
+    ctx.fillRect(x - wide * 0.5, y + long * 0.42, wide, long * 0.1)
+    ctx.fillRect(x - wide * 0.05, y - long * 0.44, wide * 0.1, long * 0.3)
+  } else if (who.build === 'coupe') {
     // Two stripes over the roof, which is all a small car needs.
     for (const side of [-1, 1]) {
       ctx.fillRect(x + side * wide * 0.14 - wide * 0.05, y - long * 0.5, wide * 0.1, long * 1.3)
@@ -736,7 +783,22 @@ export function drawRacer(ctx: Ctx, racer: Racing, view: View): void {
    * indicator — so a glance sideways is the first warning you get that one of
    * them is coming across.
    */
-  drawFace(ctx, x, y, wide, long, racer.who.face, racer.signal)
+  drawFace(ctx, x, y, wide, long, who.face, look)
+}
+
+export function drawRacer(ctx: Ctx, racer: Racing, view: View): void {
+  const x = laneX(view, racer.lane)
+  const y = roadY(view, racer.y)
+  const wide = view.lane * CAR_WIDE
+  const long = CAR_LONG * view.depth
+
+  /*
+   * The face looks where the car is about to go — the same number that drives
+   * the indicator — so a glance sideways is the first warning you get that one
+   * of them is coming across.
+   */
+  paintCar(ctx, x, y, wide, long, racer.who, racer.signal)
+
 
   if (racer.signal !== 0 && Math.floor(view.clock * 5) % 2 === 0) {
     ctx.fillStyle = '#ffb02e'
@@ -755,7 +817,7 @@ export function drawRacer(ctx: Ctx, racer: Racing, view: View): void {
  * The car that set the best time, drawn where it was at this moment.
  *
  * See-through, because it is not there: you cannot hit it and it cannot hit
- * you. It is the quickest drive anybody has managed on this stage, replaying
+ * you. It is the quickest drive anybody has managed on this level, replaying
  * against you — which is the nearest thing to racing somebody else that works
  * with one phone, no server and nobody else in the room.
  */
@@ -792,8 +854,8 @@ export function drawRun(
   ghost: { gone: number; lane: number } | null = null,
 ): void {
   drawRoad(ctx, view, w, h)
-  drawGrid(ctx, view)
-  drawFinish(ctx, run.stage.distance, view)
+  drawGrid(ctx, view, run.grid)
+  drawFinish(ctx, run.level.distance, view)
   for (const can of run.cans) {
     if (can.taken) continue
     const y = can.y - view.distance
@@ -814,7 +876,7 @@ export function drawRun(
     drawRacer(ctx, racer, view)
   }
   if (ghost) drawGhost(ctx, ghost.lane, ghost.gone, view)
-  drawMine(ctx, lane, view, run.stunned, run.mercy, look)
+  drawMine(ctx, lane, view, run.stunned, run.mercy, look, run.you)
 }
 
 /**
@@ -835,19 +897,33 @@ export function drawLights(
   h: number,
 ): void {
   const done = countdown <= 0
-  const size = Math.min(w * 0.075, h * 0.1)
+  /*
+   * Small, and right up under the readouts.
+   *
+   * It was half again this size and a good deal lower, which was fine while
+   * the field lined up in the two outside lanes: the gantry hung over the
+   * middle of the road and the cars were at the edges of it. Now the grid is
+   * two columns down the centre — which is what a grid looks like — and the
+   * same gantry sat squarely on top of the front row. You could not see who
+   * was on pole at the one moment the whole point is looking at who is on
+   * pole.
+   *
+   * So it is smaller, it sits as high as it can, and the housing is see-
+   * through. The lights themselves stay solid, because they are the signal.
+   */
+  const size = Math.min(w * 0.052, h * 0.075)
   const gap = size * 2.6
-  // High up, clear of the front of the grid — the gantry was landing on top of
-  // whoever was on pole.
-  const cy = top + Math.max(size * 2.4, h * 0.14)
+  const cy = top + size * 1.6
 
   if (!done) {
-    // The gantry.
+    // The gantry, which you can see the road through.
+    ctx.globalAlpha = 0.72
     ctx.fillStyle = '#12151c'
-    ctx.fillRect(w / 2 - gap * 1.8, cy - size * 1.9, gap * 3.6, size * 3.4)
+    ctx.fillRect(w / 2 - gap * 1.8, cy - size * 1.7, gap * 3.6, size * 3.1)
     ctx.strokeStyle = '#2a3040'
     ctx.lineWidth = Math.max(2, size * 0.12)
-    ctx.strokeRect(w / 2 - gap * 1.8, cy - size * 1.9, gap * 3.6, size * 3.4)
+    ctx.strokeRect(w / 2 - gap * 1.8, cy - size * 1.7, gap * 3.6, size * 3.1)
+    ctx.globalAlpha = 1
   }
 
   // How many are lit: one more each second as the clock counts down.
@@ -932,4 +1008,32 @@ export function drawPad(
       drawHint(ctx, key.cx, key.cy - key.r * 1.45, text, Math.max(9, key.r * 0.3), hints.alpha)
     }
   }
+}
+
+/**
+ * One car, painted on its own, for the garage.
+ *
+ * The same `paintCar` the road uses, so what you pick is exactly what you get
+ * — a garage that draws its own idea of a car is a garage that lies. Sized to
+ * the box it is given and pointed up the screen, which is the way you will be
+ * looking at it for the rest of the race.
+ */
+export function drawCarCard(ctx: Ctx, who: Racer, w: number, h: number): void {
+  ctx.clearRect(0, 0, w, h)
+  /*
+   * Lying across the card rather than pointing up it.
+   *
+   * A car seen from above is about three and a half times longer than it is
+   * wide, so standing one upright in a card that is twice as wide as it is
+   * tall gives you a sliver a dozen pixels across — which is what the first
+   * go looked like, and you could tell the twelve of them apart only by
+   * colour. Turned side-on it fills the card, and every bit of trim that
+   * makes one a tow truck and another a camper is actually visible.
+   */
+  ctx.save()
+  ctx.translate(w / 2, h / 2)
+  ctx.rotate(-Math.PI / 2)
+  const long = Math.min(w * 0.88, h * 0.92 / (CAR_WIDE / CAR_LONG))
+  paintCar(ctx, 0, 0, long * (CAR_WIDE / CAR_LONG), long, who, 0)
+  ctx.restore()
 }

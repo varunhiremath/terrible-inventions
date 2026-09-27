@@ -56,12 +56,12 @@ else {
 /*
  * --- the road: the maths question that comes up when you prang -------------
  *
- * On a late stage, because the opening one is nearly empty: holding the pedal
- * down the first stage gets you to the flag without hitting anything, and this
+ * On a late level, because the opening one is nearly empty: holding the pedal
+ * down the first level gets you to the flag without hitting anything, and this
  * then reported "the road never asked a question", which was true and was not
  * a fault.
  */
-await open(/the road/i, '?stage=5')
+await open(/the road/i, '?level=5')
 await page.keyboard.down('ArrowUp')
 let asked = false
 for (let wait = 0; wait < 60 && !asked; wait++) {

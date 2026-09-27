@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  CAR_LONG, CAR_WIDE, COUNTDOWN, GRID_ROW, LANES, LIGHTS, REACT, SIGHT, STAGES, TANK,
-  TOP_SPEED, stageFor,
+  CAR_LONG, CAR_WIDE, COUNTDOWN, GRID_ROW, LANES, LIGHTS, RACER_LOOK, REACT, SIGHT,
+  LEVELS, TANK,
+  TOP_SPEED, levelFor,
 } from './level'
 import {
   FIXED, NO_INPUT, TRAIL_EVERY, blockedLanes, ghostAt, missionMet, newRun, placeOf,
@@ -13,7 +14,7 @@ import {
  *
  * Two of these matter more than the rest. One says the road is never fully
  * blocked — a wall of traffic across every lane is not difficulty, it is a
- * coin toss. The other says a stage can actually be finished by something no
+ * coin toss. The other says a level can actually be finished by something no
  * cleverer than a person: look ahead, pick a free lane, hold the pedal down.
  *
  * Every other game in here shipped without the second kind and was found out
@@ -41,12 +42,12 @@ const drive = (run: Run, input: Input, seconds: number) => {
  *
  * Deliberately not clever. If this cannot get down the road, nor can a child.
  */
-function makeDriver() {
+export function makeDriver() {
   let target: number | null = null
   // It has to see the racers as well as the traffic. It did not, which is
   // fair enough when the field was strung out behind and fatal once everybody
   // starts level: it drove straight into them all the way down the road and
-  // reported the opening stage as three times harder than it is.
+  // reported the opening level as three times harder than it is.
 
   return (run: Run): Input => {
     /** Seconds until he would reach the next car in a lane, or forever. */
@@ -63,7 +64,7 @@ function makeDriver() {
          * everything on the road was slower than him. On a standing grid every
          * car is doing the same nought miles an hour, so the closing speed is
          * nothing, so this saw no danger at all and drove into the back of the
-         * car in front of it — three times a stage, on the gentlest stage.
+         * car in front of it — three times a level, on the gentlest level.
          */
         if (gap < CAR_LONG * 2.5) { soonest = Math.min(soonest, 0.1); return }
         const closing = run.speed - speed
@@ -121,8 +122,8 @@ describe('the road', () => {
      * lane in it is occupied there is nothing to be done and the crash was
      * decided by the spawner rather than by the player.
      */
-    for (const stage of STAGES) {
-      const number = STAGES.indexOf(stage) + 1
+    for (const level of LEVELS) {
+      const number = LEVELS.indexOf(level) + 1
       for (let seed = 1; seed <= 12; seed++) {
         let run = newRun(number, 3, 0, seed)
         const drive = makeDriver()
@@ -131,28 +132,28 @@ describe('the road', () => {
           const window = blockedLanes(run.cars, run.distance, run.distance + SIGHT * 0.55)
           expect(
             window.size,
-            `${stage.name} seed ${seed}: every lane blocked at ${run.distance.toFixed(0)}`,
+            `${level.name} seed ${seed}: every lane blocked at ${run.distance.toFixed(0)}`,
           ).toBeLessThan(LANES)
         }
       }
     }
   }, 120_000)
 
-  it('can be driven to the end of every stage', () => {
+  it('can be driven to the end of every level', () => {
     /*
      * The playability proof: can an ordinary sort of driver get there at all.
      * Averaged over several roads, because the traffic is seeded and one seed
      * tells you about that road rather than about the game.
      */
-    for (let number = 1; number <= STAGES.length; number++) {
+    for (let number = 1; number <= LEVELS.length; number++) {
       for (let seed = 1; seed <= 5; seed++) {
         let run = newRun(number, 99, 0, seed * 13 + 1)
         const drive = makeDriver()
-        for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+        for (let t = 0; t < 400 && run.status !== 'levelDone'; t += FIXED) {
           run = step(run, drive(run), FIXED)
           if (run.status === 'crashed') run = resume(run)
         }
-        expect(run.status, `${stageFor(number).name} seed ${seed} was never finished`).toBe('stageDone')
+        expect(run.status, `${levelFor(number).name} seed ${seed} was never finished`).toBe('levelDone')
       }
     }
   }, 240_000)
@@ -162,20 +163,20 @@ describe('the road', () => {
      * Both ends, because only guarding one of them is how this went wrong.
      *
      * The cap used to be the only rule, and it quietly held the whole game
-     * down to the difficulty of its easiest acceptable stage — five levels
-     * were finished without a single failure. So the last stage now has to
+     * down to the difficulty of its easiest acceptable level — five levels
+     * were finished without a single failure. So the last level now has to
      * cost this driver something, and the first still has to be kind.
      *
      * Worth knowing when reading these numbers: the driver below is a poor
      * player. A person who is any good will crash far less than it does, so a
-     * stage it strolls through is one nobody will notice.
+     * level it strolls through is one nobody will notice.
      */
     const cost = (number: number) => {
       let total = 0
       for (let seed = 1; seed <= 5; seed++) {
         let run = newRun(number, 99, 0, seed * 13 + 1)
         const drive = makeDriver()
-        for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+        for (let t = 0; t < 400 && run.status !== 'levelDone'; t += FIXED) {
           const before = run
           run = step(run, drive(run), FIXED)
           if (run.status === 'crashed') {
@@ -183,7 +184,7 @@ describe('the road', () => {
              * Only what this measure is about: his traffic.
              *
              * It counted every crash, which was the same thing until the day
-             * four racers turned up — and then the gentlest stage read as
+             * four racers turned up — and then the gentlest level read as
              * three times harder because this driver is poor at overtaking.
              * Getting past the field is a race, and the race has its own
              * tests; this one is asking whether the traffic is too thick.
@@ -200,11 +201,11 @@ describe('the road', () => {
     }
 
     const first = cost(1)
-    expect(first, `the first stage cost ${first.toFixed(1)} crashes and has to be kind`)
+    expect(first, `the first level cost ${first.toFixed(1)} crashes and has to be kind`)
       .toBeLessThanOrEqual(1.6)
 
-    const last = cost(STAGES.length)
-    expect(last, `the last stage cost ${last.toFixed(1)} crashes, which is a stroll`)
+    const last = cost(LEVELS.length)
+    expect(last, `the last level cost ${last.toFixed(1)} crashes, which is a stroll`)
       .toBeGreaterThan(2)
   }, 240_000)
 
@@ -226,7 +227,7 @@ describe('the road', () => {
       // No field either: steering into one of them is a crash, which resets
       // him to the middle of the road and makes this measure nothing.
       let run: Run = {
-        ...newRun(1), stage: { ...stageFor(1), traffic: 0 }, countdown: 0, racers: [],
+        ...newRun(1), level: { ...levelFor(1), traffic: 0 }, countdown: 0, racers: [],
       }
       for (let t = 0; t < 6; t += FIXED) {
         run = step({ ...run, cars: [] }, input, FIXED)
@@ -288,22 +289,22 @@ describe('the road', () => {
 })
 
 describe('the missions', () => {
-  it('asks something different of every stage', () => {
-    const asked = STAGES.map((s) => `${s.mission.kind}`)
+  it('asks something different of every level', () => {
+    const asked = LEVELS.map((s) => `${s.mission.kind}`)
     expect(new Set(asked).size).toBeGreaterThan(1)
   })
 
   it('counts what it says it counts', () => {
     const run = newRun(1)
-    const passing = { ...run, stage: { ...run.stage, mission: { kind: 'pass' as const, count: 3 } } }
+    const passing = { ...run, level: { ...run.level, mission: { kind: 'pass' as const, count: 3 } } }
     expect(missionMet({ ...passing, passed: 2 })).toBe(false)
     expect(missionMet({ ...passing, passed: 3 })).toBe(true)
 
-    const cans = { ...run, stage: { ...run.stage, mission: { kind: 'cans' as const, count: 2 } } }
+    const cans = { ...run, level: { ...run.level, mission: { kind: 'cans' as const, count: 2 } } }
     expect(missionMet({ ...cans, cansTaken: 1 })).toBe(false)
     expect(missionMet({ ...cans, cansTaken: 2 })).toBe(true)
 
-    const clean = { ...run, stage: { ...run.stage, mission: { kind: 'clean' as const } } }
+    const clean = { ...run, level: { ...run.level, mission: { kind: 'clean' as const } } }
     expect(missionMet({ ...clean, pranged: 0 })).toBe(true)
     expect(missionMet({ ...clean, pranged: 1 })).toBe(false)
   })
@@ -339,7 +340,7 @@ describe('the vehicles', () => {
             const inside = car.y - run.distance <= REACT
             const nowMoving = Math.abs(car.wants - car.lane) >= 0.01
             if (wasSettled && inside && nowMoving) {
-              throw new Error(`a ${car.kind} set off inside the window on stage ${number}`)
+              throw new Error(`a ${car.kind} set off inside the window on level ${number}`)
             }
           }
           settledBefore = new Map(
@@ -353,7 +354,7 @@ describe('the vehicles', () => {
   it('indicates before it pulls out, every time', () => {
     /*
      * The whole point of the indicators: no vehicle may move sideways without
-     * having had its lamp on first. Watched across the busiest stages, where
+     * having had its lamp on first. Watched across the busiest levels, where
      * every sort of vehicle is out.
      */
     for (const number of [4, 5, 6]) {
@@ -372,20 +373,20 @@ describe('the vehicles', () => {
               sawOne = true
               expect(
                 was.signal !== 0 || car.signal !== 0,
-                `a ${car.kind} moved lane with no indicator on stage ${number}`,
+                `a ${car.kind} moved lane with no indicator on level ${number}`,
               ).toBe(true)
             }
           }
           before = new Map(run.cars.map((c) => [c.id, { lane: c.lane, signal: c.signal }]))
         }
-        expect(sawOne, `nothing changed lane at all on stage ${number}, so this proves nothing`).toBe(true)
+        expect(sawOne, `nothing changed lane at all on level ${number}, so this proves nothing`).toBe(true)
       }
     }
   }, 120_000)
 
   /*
    * There was a test here that the permanently open lane was never closed.
-   * That lane is gone — it made five stages finishable without a scratch —
+   * That lane is gone — it made five levels finishable without a scratch —
    * and the promise it guarded is now kept by checking each lane change
    * against the window instead. "Never blocks every lane at once", above,
    * is the test of it, and it now has wandering traffic to contend with.
@@ -397,8 +398,8 @@ describe('the vehicles', () => {
  *
  * The road was reported as too easy twice, and both times more traffic was the
  * wrong answer: an obstacle course you have solved is not hard, it is long.
- * Four of his machines running the same stage is a different problem — you can
- * drive a clean stage and still come fourth.
+ * Four of his machines running the same level is a different problem — you can
+ * drive a clean level and still come fourth.
  *
  * The rule that earns its own test is the one at the bottom. A racer moves at
  * its own speed, so it can drift into the one lane the spawner left open and
@@ -494,12 +495,12 @@ describe('the field', () => {
      * What "beatable" has to mean here.
      *
      * Not "this driver wins", because this driver is a poor one on purpose —
-     * it crashes a dozen times on the last stage and never picks up a can, and
+     * it crashes a dozen times on the last level and never picks up a can, and
      * demanding a win from it would mean a field so slow that a child beats it
      * without noticing there was one. And not "this driver loses" either.
      *
      * What matters is the margin. If the leader crosses the line while this
-     * driver is still a tenth of the stage back, the race was over at the
+     * driver is still a tenth of the level back, the race was over at the
      * start; if they finish within a few lengths of each other, a clean run
      * wins it and a scrappy one does not. That is a race.
      */
@@ -507,16 +508,16 @@ describe('the field', () => {
       const drive2 = makeDriver()
       let run = newRun(number, 99, 0, 7)
       let pranged = 0
-      for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+      for (let t = 0; t < 400 && run.status !== 'levelDone'; t += FIXED) {
         run = step(run, drive2(run), FIXED)
         if (run.status === 'crashed') { pranged += 1; run = resume(run) }
       }
-      expect(run.status, `stage ${number}`).toBe('stageDone')
+      expect(run.status, `level ${number}`).toBe('levelDone')
 
       /*
        * The margin, and measured against this driver's own mistakes.
        *
-       * It crashes a dozen times on the last stage, and a crash costs about
+       * It crashes a dozen times on the last level, and a crash costs about
        * three seconds — a stop, a stunned moment and the climb back to speed.
        * Demanding a podium from it would mean a field slow enough that a
        * child beats it without noticing there was one. What has to be true is
@@ -527,18 +528,18 @@ describe('the field', () => {
       const order = standings(run)
       const behind = (order.find((row) => row.you)?.at ?? 0) - order[0].at
       const excused = pranged * 3.5 + 4
-      expect(behind, `stage ${number}: beaten by more than ${pranged} crashes explain`)
+      expect(behind, `level ${number}: beaten by more than ${pranged} crashes explain`)
         .toBeLessThan(excused)
     }
 
     // And the gentle end of it has to be winnable by this driver outright.
     const easy = makeDriver()
     let first = newRun(1, 99, 0, 7)
-    for (let t = 0; t < 400 && first.status !== 'stageDone'; t += FIXED) {
+    for (let t = 0; t < 400 && first.status !== 'levelDone'; t += FIXED) {
       first = step(first, easy(first), FIXED)
       if (first.status === 'crashed') first = resume(first)
     }
-    expect(first.place, 'the opening stage should be winnable').toBe(1)
+    expect(first.place, 'the opening level should be winnable').toBe(1)
   })
 
   it('beats somebody who dawdles', () => {
@@ -569,12 +570,21 @@ describe('the field', () => {
      * takes, so it is always open again by the time anyone gets there.
      */
     const CROSSING = 0.7
+    /*
+     * Counted in frames rather than accumulated in seconds.
+     *
+     * Forty-two frames is 0.7 seconds, and adding a sixtieth forty-two times
+     * gives 0.7000000000000005, which is not less than 0.7 — so the limit as
+     * written excluded the very case it was meant to allow. Counting frames
+     * says what the rule means.
+     */
+    const LIMIT = Math.round(CROSSING / FIXED)
     for (const number of [1, 2, 3, 4, 5, 6]) {
       const driver = makeDriver()
       let run = newRun(number)
       let shutFor = 0
       let closeFor = 0
-      for (let t = 0; t < 90 && run.status !== 'stageDone'; t += FIXED) {
+      for (let t = 0; t < 90 && run.status !== 'levelDone'; t += FIXED) {
         run = step(run, driver(run), FIXED)
         if (run.status === 'crashed') run = resume(run)
         if (run.status !== 'driving') break
@@ -610,26 +620,28 @@ describe('the field', () => {
         /*
          * Both stretches are allowed to shut for as long as one lane change
          * takes and no longer. A flat "never shut" on the close stretch was
-         * the first version and it failed on the fifth stage — not because of
+         * the first version and it failed on the fifth level — not because of
          * the field but because the traffic itself is allowed to finish a
          * lane change it has already started, which momentarily puts a car in
          * the last lane. That has always been true of this road; the field
          * did not introduce it, and forbidding it would mean forbidding lane
          * changes.
          */
-        if (shutIn(from + REACT / 3) >= LANES) closeFor += FIXED
+        if (shutIn(from + REACT / 3) >= LANES) closeFor += 1
         else closeFor = 0
         expect(
           closeFor,
-          `stage ${number}: no way through in front of you at ${run.distance.toFixed(0)}`,
-        ).toBeLessThan(CROSSING)
+          `level ${number}: no way through in front of you at ${run.distance.toFixed(0)}`
+            + ` — shut for ${(closeFor * FIXED).toFixed(2)}s`,
+        ).toBeLessThanOrEqual(LIMIT)
 
-        if (shutIn(run.distance + REACT) >= LANES) shutFor += FIXED
+        if (shutIn(run.distance + REACT) >= LANES) shutFor += 1
         else shutFor = 0
         expect(
           shutFor,
-          `stage ${number}: the window stayed shut at ${run.distance.toFixed(0)}`,
-        ).toBeLessThan(CROSSING)
+          `level ${number}: the window stayed shut at ${run.distance.toFixed(0)}`
+            + ` — shut for ${(shutFor * FIXED).toFixed(2)}s`,
+        ).toBeLessThanOrEqual(LIMIT)
       }
     }
   })
@@ -637,7 +649,7 @@ describe('the field', () => {
   it('keeps them on the road', () => {
     let run = newRun(6, 99, 0, 5)
     const driver = makeDriver()
-    for (let t = 0; t < 60 && run.status !== 'stageDone'; t += FIXED) {
+    for (let t = 0; t < 60 && run.status !== 'levelDone'; t += FIXED) {
       run = step(run, driver(run), FIXED)
       if (run.status === 'crashed') run = resume(run)
       for (const racer of run.racers) {
@@ -652,7 +664,7 @@ describe('the field', () => {
     const driver = makeDriver()
     let signalled = 0
     let jumped = 0
-    for (let t = 0; t < 60 && run.status !== 'stageDone'; t += FIXED) {
+    for (let t = 0; t < 60 && run.status !== 'levelDone'; t += FIXED) {
       const before = run.racers.map((r) => r.lane)
       run = step(run, driver(run), FIXED)
       if (run.status === 'crashed') run = resume(run)
@@ -692,11 +704,11 @@ describe('the field', () => {
   it('sorts the finish out at the end', () => {
     const driver = makeDriver()
     let run = newRun(1, 99, 0, 11)
-    for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+    for (let t = 0; t < 400 && run.status !== 'levelDone'; t += FIXED) {
       run = step(run, driver(run), FIXED)
       if (run.status === 'crashed') run = resume(run)
     }
-    expect(run.status).toBe('stageDone')
+    expect(run.status).toBe('levelDone')
     const order = standings(run)
     expect(order).toHaveLength(5)
     expect(order.filter((row) => row.you)).toHaveLength(1)
@@ -711,9 +723,9 @@ describe('the field', () => {
   })
 
   it('pays a place mission when the place is made', () => {
-    const stage = STAGES.findIndex((s) => s.mission.kind === 'place')
-    expect(stage, 'no stage is a race').toBeGreaterThanOrEqual(0)
-    const run = newRun(stage + 1)
+    const level = LEVELS.findIndex((s) => s.mission.kind === 'place')
+    expect(level, 'no level is a race').toBeGreaterThanOrEqual(0)
+    const run = newRun(level + 1)
     // You start last, so a place mission is not met until you have done
     // something about it. It is only ever counted at the line anyway.
     expect(missionMet(run)).toBe(false)
@@ -739,13 +751,13 @@ describe('the time', () => {
   it('runs from the lights to the line', () => {
     const driver = makeDriver()
     let run = newRun(1, 99, 0, 7)
-    for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+    for (let t = 0; t < 400 && run.status !== 'levelDone'; t += FIXED) {
       run = step(run, driver(run), FIXED)
       if (run.status === 'crashed') run = resume(run)
     }
-    expect(run.status).toBe('stageDone')
+    expect(run.status).toBe('levelDone')
     expect(run.yourTime).not.toBeNull()
-    // Long enough to be a lap and short enough to be one stage of six.
+    // Long enough to be a lap and short enough to be one level of six.
     expect(run.yourTime!).toBeGreaterThan(10)
     expect(run.yourTime!).toBeLessThan(200)
     // And it is the clock, not the wall: the countdown is not in it.
@@ -768,7 +780,7 @@ describe('the time', () => {
   it('gives everybody a finishing time, real or projected', () => {
     const driver = makeDriver()
     let run = newRun(1, 99, 0, 7)
-    for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+    for (let t = 0; t < 400 && run.status !== 'levelDone'; t += FIXED) {
       run = step(run, driver(run), FIXED)
       if (run.status === 'crashed') run = resume(run)
     }
@@ -799,10 +811,10 @@ describe('the time', () => {
      * forty seconds from home. Reading its instantaneous speed said it was,
      * and the result panel printed "+37.95s" beside a car a few lengths back.
      */
-    const stage = stageFor(1)
+    const level = levelFor(1)
     let run = { ...newRun(1), countdown: 0, clock: 20 }
     // Nearly home, having averaged a good pace, but stopped dead right now.
-    const stuck = { ...run.racers[0], y: stage.distance - 10, speed: 0 }
+    const stuck = { ...run.racers[0], y: level.distance - 10, speed: 0 }
     run = { ...run, racers: [stuck] }
     const projected = timeOf(run, stuck) - run.clock
     expect(projected).toBeGreaterThan(0)
@@ -842,7 +854,7 @@ describe('the getaway', () => {
 /**
  * The ghost.
  *
- * The best drive on a stage, kept and replayed against you. It is the nearest
+ * The best drive on a level, kept and replayed against you. It is the nearest
  * thing to playing together that works with one phone, no server and nobody
  * else in the room: one of you sets a time and the other races the car that
  * set it.
@@ -851,11 +863,11 @@ describe('the recorded drive', () => {
   it('samples the whole run, and not too often to store', () => {
     const driver = makeDriver()
     let run = newRun(1, 99, 0, 7)
-    for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+    for (let t = 0; t < 400 && run.status !== 'levelDone'; t += FIXED) {
       run = step(run, driver(run), FIXED)
       if (run.status === 'crashed') run = resume(run)
     }
-    expect(run.status).toBe('stageDone')
+    expect(run.status).toBe('levelDone')
 
     const { at, gone, lane } = run.trail
     expect(at.length).toBe(gone.length)
@@ -893,17 +905,161 @@ describe('the recorded drive', () => {
 
   it('stays small enough to keep in a save file', () => {
     /*
-     * Six stages of it live in the same record as everything else, and that
-     * record is rewritten on every change. A lap of the longest stage is
+     * Six levels of it live in the same record as everything else, and that
+     * record is rewritten on every change. A lap of the longest level is
      * about a minute, so a few hundred numbers.
      */
     const driver = makeDriver()
     let run = newRun(6, 99, 0, 3)
-    for (let t = 0; t < 400 && run.status !== 'stageDone'; t += FIXED) {
+    for (let t = 0; t < 400 && run.status !== 'levelDone'; t += FIXED) {
       run = step(run, driver(run), FIXED)
       if (run.status === 'crashed') run = resume(run)
     }
     const bytes = JSON.stringify(run.trail).length
     expect(bytes, `a lap costs ${bytes} bytes`).toBeLessThan(20_000)
+  })
+})
+
+/**
+ * The road past the end of the road.
+ *
+ * Six levels were written and the rest are generated, which is only a real
+ * answer to "make it infinite" if level three hundred is a road somebody can
+ * drive. The interesting failure is not a crash, it is a level that is
+ * arithmetically harder than the last one forever, so the game ends at
+ * whichever number first becomes impossible and never says so.
+ */
+describe('the generated levels', () => {
+  const far = [7, 8, 9, 12, 25, 60, 300, 5000]
+
+  it('keeps every dial inside the limits the road is built for', () => {
+    for (const number of far) {
+      const level = levelFor(number)
+      // Past nine, nothing can change lane: every manoeuvre closes the last gap.
+      expect(level.traffic, `level ${number} traffic`).toBeLessThanOrEqual(9)
+      // Slower traffic is harder — you close on it faster — so this has a floor.
+      expect(level.pace, `level ${number} pace`).toBeGreaterThanOrEqual(0.29)
+      // Past this the sight line is spent quicker than anybody can read it.
+      expect(level.limit, `level ${number} limit`).toBeLessThanOrEqual(1.7)
+      expect(level.distance, `level ${number} distance`).toBeLessThanOrEqual(1400)
+      expect(level.fleet.length, `level ${number} fleet`).toBeGreaterThan(0)
+    }
+  })
+
+  it('stops getting harder, rather than getting harder forever', () => {
+    // The curve runs out six levels past the written ones, so twelve is the
+    // hardest road there is and everything after it is the same road.
+    const top = levelFor(12)
+    for (const number of [13, 60, 300, 5000]) {
+      const level = levelFor(number)
+      expect(level.traffic, `level ${number} vs 12`).toBe(top.traffic)
+      expect(level.pace, `level ${number} vs 12`).toBeCloseTo(top.pace, 6)
+      expect(level.limit, `level ${number} vs 12`).toBeCloseTo(top.limit, 6)
+      expect(level.distance, `level ${number} vs 12`).toBe(top.distance)
+    }
+  })
+
+  it('gives each one a name of its own, and numbers the repeats', () => {
+    const names = new Set<string>()
+    for (let n = LEVELS.length + 1; n <= LEVELS.length + 40; n++) {
+      const { name } = levelFor(n)
+      expect(name, `level ${n} has no name`).not.toBe('')
+      expect(names.has(name), `level ${n} repeats "${name}"`).toBe(false)
+      names.add(name)
+    }
+  })
+
+  it('works its way round the four jobs instead of picking at random', () => {
+    const kinds = new Set<string>()
+    for (let n = LEVELS.length + 1; n <= LEVELS.length + 8; n++) {
+      kinds.add(levelFor(n).mission.kind)
+    }
+    expect([...kinds].sort()).toEqual(['cans', 'clean', 'pass', 'place'])
+  })
+
+  it('can be driven to the end, however far out it is', () => {
+    for (const number of [7, 9, 30, 400]) {
+      for (let seed = 1; seed <= 3; seed++) {
+        let run = newRun(number, 99, 0, seed * 7 + 2)
+        const drive = makeDriver()
+        for (let t = 0; t < 500 && run.status !== 'levelDone'; t += FIXED) {
+          run = step(run, drive(run), FIXED)
+          if (run.status === 'crashed') run = resume(run)
+        }
+        expect(
+          run.status,
+          `${levelFor(number).name} (level ${number}) seed ${seed} was never finished`,
+        ).toBe('levelDone')
+      }
+    }
+  }, 240_000)
+})
+
+/**
+ * The grid, and who stands where on it.
+ *
+ * The rule he asked for is one sentence — line up in the order you finished
+ * the last one — and it is the loop the whole game now hangs on: win and you
+ * start with nothing in front of you, come last and you have the lot of them
+ * to get past again.
+ */
+describe('the grid', () => {
+  it('starts you where you finished', () => {
+    for (const place of [1, 2, 3, 4, 5]) {
+      const run = newRun(1, 3, 0, 1, { started: place })
+      expect(run.started, `asked for ${place}`).toBe(place)
+      // Everybody who finished ahead of you is ahead of you on the tarmac.
+      const ahead = run.racers.filter((r) => r.y > 0).length
+      expect(ahead, `from ${place}, cars in front`).toBe(place - 1)
+    }
+  })
+
+  it('gives the winner a clear road and the loser the whole field', () => {
+    const pole = newRun(1, 3, 0, 1, { started: 1 })
+    expect(pole.racers.every((r) => r.y < 0), 'nothing ahead of pole').toBe(true)
+
+    const last = newRun(1, 3, 0, 1, { started: 5 })
+    expect(last.racers.every((r) => r.y > 0), 'the lot of them ahead').toBe(true)
+  })
+
+  it('lays them out in two columns, a row apart, leaving the outside clear', () => {
+    const run = newRun(1, 3, 0, 1, { started: 5 })
+    const lanes = new Set([run.lane, ...run.racers.map((r) => r.lane)])
+    expect([...lanes].sort(), 'the two middle lanes only').toEqual([1, 2])
+
+    /*
+     * Two positions apart is the same column, and that gap has to clear
+     * `RACER_LOOK` or every car on the grid reads the one two places ahead as
+     * traffic to follow and the whole field creeps away from the lights.
+     */
+    // You are at zero by definition: the road's coordinates start at you.
+    const rows = [0, ...run.racers.map((r) => r.y)].sort((a, b) => a - b)
+    for (let i = 0; i + 2 < rows.length; i++) {
+      expect(rows[i + 2] - rows[i], `same-column gap at ${i}`).toBeGreaterThanOrEqual(RACER_LOOK)
+    }
+  })
+
+  it('draws a different field each level, always with somebody quick and somebody slow', () => {
+    const fields = new Set<string>()
+    for (let level = 1; level <= 8; level++) {
+      const run = newRun(level, 3, 0, level)
+      const names = run.racers.map((r) => r.who.name).sort()
+      expect(new Set(names).size, `level ${level} fielded the same car twice`).toBe(names.length)
+      expect(names, `level ${level} raced you against your own car`)
+        .not.toContain(run.you.name)
+      fields.add(names.join(','))
+
+      const paces = run.racers.map((r) => r.who.pace)
+      expect(Math.max(...paces), `level ${level} has nobody quick`).toBeGreaterThanOrEqual(0.85)
+      expect(Math.min(...paces), `level ${level} has nobody to catch`).toBeLessThanOrEqual(0.8)
+    }
+    // Not a new field every single time necessarily, but not one field either.
+    expect(fields.size, 'the same four turned out every level').toBeGreaterThan(3)
+  })
+
+  it('races whatever you picked out of the garage', () => {
+    const run = newRun(1, 3, 0, 1, { car: 'Gasket' })
+    expect(run.you.name).toBe('Gasket')
+    expect(run.you.build).toBe('tow')
   })
 })

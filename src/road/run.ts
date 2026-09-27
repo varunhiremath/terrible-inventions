@@ -8,15 +8,16 @@
  * caught out by its absence: **the road is never completely blocked**. A wall
  * of traffic across all four lanes is not difficulty, it is a coin toss you
  * lose, and the spawner refuses to build one. There is a test that drives into
- * every stage looking for one anyway.
+ * every level looking for one anyway.
  */
 import { makeRng, type Rng } from '../engine/rng'
 import {
   ACCELERATION, BRAKING, BURN_PER_SECOND, CAN_EVERY, CAN_WORTH, CAR_LONG, CAR_WIDE,
-  COUNTDOWN, DASHES, DRAG, FIELD, GRID, GRID_ROW, LANES, LENGTH_OF, LIGHT_EVERY,
-  MISSION_BONUS, POLE, RACER_LOOK, RACER_STEER,
+  COUNTDOWN, DASHES, DRAG, FIELD_SIZE, GRID_ROW, LANES, LENGTH_OF, LIGHT_EVERY,
+  MISSION_BONUS, RACER_LOOK, RACER_STEER,
   REACT, SIGHT, SIGNAL_FOR, STEER_RATE, TANK, TOP_SPEED, WANDERS, WIDTH_OF,
-  stageFor, topSpeedOn, type CarKind, type Racer, type Stage,
+  carNamed, fieldFor, levelFor, slotFor, topSpeedOn,
+  type CarKind, type Racer, type Level, type Slot,
 } from './level'
 
 export const FIXED = 1 / 60
@@ -31,13 +32,13 @@ export const MERCY = 2
  * Five cars leave a four-lane grid three quarters of a lane apart, so the
  * first second is all of them finding a lane at once with inches in it. A
  * nudge in that second is not a mistake anybody made, and taking a life for
- * it turned the opening of every stage into a coin toss — the first go at
+ * it turned the opening of every level into a coin toss — the first go at
  * this grid lost one at the lights in every single run.
  */
 export const START_MERCY = 1.6
 
 export type RoadEvent =
-  | 'pass' | 'can' | 'crash' | 'dry' | 'stageDone' | 'skid' | 'warn' | 'siren'
+  | 'pass' | 'can' | 'crash' | 'dry' | 'levelDone' | 'skid' | 'warn' | 'siren'
   /** One of the three lights coming on. */
   | 'light'
   /** And them going out. */
@@ -88,7 +89,7 @@ export interface Can {
  * A racer moves at its own speed, weaves, backs off and puts its foot down —
  * and the one rule it must never break is the road's promise: it will not sit
  * in the last open lane of the stretch you are arriving in. That rule is in
- * `steerRacer`, and there is a test that plays every stage watching for it.
+ * `steerRacer`, and there is a test that plays every level watching for it.
  */
 export interface Racing {
   id: number
@@ -110,7 +111,7 @@ export interface Racing {
   finished: number | null
 }
 
-export type Status = 'driving' | 'crashed' | 'stageDone' | 'gameOver'
+export type Status = 'driving' | 'crashed' | 'levelDone' | 'gameOver'
 
 /**
  * A recorded run: where the car was, every so often, from the lights.
@@ -143,7 +144,7 @@ export const noTrail = (): Trail => ({ at: [], gone: [], lane: [] })
 export function ghostAt(trail: Trail, clock: number): { gone: number; lane: number } | null {
   const n = trail.at.length
   if (n === 0 || clock < trail.at[0] || clock > trail.at[n - 1]) return null
-  // Walking it is fine: a stage is a few hundred samples and this runs once a
+  // Walking it is fine: a level is a few hundred samples and this runs once a
   // frame. A binary search here would be arithmetic nobody has to read.
   let i = 1
   while (i < n && trail.at[i] < clock) i += 1
@@ -157,8 +158,25 @@ export function ghostAt(trail: Trail, clock: number): { gone: number; lane: numb
 }
 
 export interface Run {
-  stage: Stage
+  level: Level
   number: number
+  /**
+   * What you are driving, and where everybody stood at the lights.
+   *
+   * `you` is on the run rather than read from the save inside the drawing
+   * code, because the simulation has to be a pure function of what it is
+   * handed — a car that changes because somebody opened the garage mid-race
+   * would make a replay disagree with the race it replayed.
+   *
+   * `grid` is the painted boxes, in position order, already rebased so that
+   * your own slot is row zero. The drawing reads it and so does nothing else;
+   * it is kept because the grid is a place on the road, and the road is drawn
+   * relative to you.
+   */
+  you: Racer
+  grid: readonly Slot[]
+  /** Where you started, 1 to `FIELD_SIZE`. */
+  started: number
   /** How far you have come, in car lengths. Everything else is relative to it. */
   distance: number
   /** Sideways, 0 to LANES-1, and fractional while you are changing lanes. */
@@ -170,7 +188,7 @@ export interface Run {
   racers: Racing[]
   score: number
   passed: number
-  /** For the mission: cans taken and scrapes collected on this stage. */
+  /** For the mission: cans taken and scrapes collected on this level. */
   cansTaken: number
   pranged: number
   missionDone: boolean
@@ -233,20 +251,49 @@ export interface Run {
   tank: number
 }
 
-export function newRun(number = 1, lives = STARTING_LIVES, score = 0, seed = 1): Run {
-  const stage = stageFor(number)
+/**
+ * What a new race needs to know beyond the level number.
+ *
+ * All optional, all with a sensible answer, because most callers — the tests
+ * especially — only care about the road.
+ */
+export interface Entry {
+  /** The name of the car in the garage you picked. */
+  car?: string
+  /** Where you finished the last one, which is where you start this one. */
+  started?: number
+}
+
+export function newRun(
+  number = 1,
+  lives = STARTING_LIVES,
+  score = 0,
+  seed = 1,
+  entry: Entry = {},
+): Run {
+  const level = levelFor(number)
+  const you = carNamed(entry.car)
+  const started = Math.max(1, Math.min(FIELD_SIZE, Math.round(entry.started ?? FIELD_SIZE)))
+  const mine = slotFor(started)
   return {
-    stage,
+    level,
     number,
+    you,
+    started,
+    // Rebased against your own slot, because you are the origin of the road.
+    grid: Array.from({ length: FIELD_SIZE }, (_, i) => {
+      const slot = slotFor(i + 1)
+      return { lane: slot.lane, row: slot.row - mine.row }
+    }),
     distance: 0,
-    // Your grid slot: front row, a lane of your own.
-    lane: POLE.lane,
+    // Your grid slot, which is wherever you finished the last one.
+    lane: mine.lane,
     speed: 0,
     fuel: TANK,
     tank: TANK,
     cars: [],
     cans: [],
-    racers: gridOf(stage),
+    racers: gridOf(seed, started, you),
     score,
     passed: 0,
     cansTaken: 0,
@@ -345,9 +392,31 @@ function spawnWave(run: Run, rng: Rng): void {
    * neither of them could see coming.
    */
   const guard = SIGHT * 0.7
-  for (const lane of blockedLanes(run.cars, ahead - guard, ahead + CAR_LONG * 2 + guard)) {
-    free.delete(lane)
+  const from = ahead - guard
+  const to = ahead + CAR_LONG * 2 + guard
+  for (const lane of blockedLanes(run.cars, from, to)) free.delete(lane)
+  /*
+   * Counting where anything already moving is *going*, not only where it is.
+   *
+   * This is the same blind spot as the one in `shuts` above, seen from the
+   * other side, and it produced a wall that stood for a second and a half on
+   * the second level. A taxi was halfway between lane nought and lane one and
+   * changing its mind — on its way back to nought — and by this measure it was
+   * simply a car in lane one. So lane nought read as the way through, the
+   * spawner put a car in the only other free lane, the taxi finished its move,
+   * and every lane was taken. Nobody spawned a wall and nobody drove into one
+   * on purpose: two decisions, each correct when it was made, and a road with
+   * no way through between them.
+   *
+   * A vehicle on the move therefore holds both lanes until it arrives.
+   */
+  for (const car of run.cars) {
+    if (car.y + longOf(car) < from || car.y > to) continue
+    if (Math.abs(car.wants - car.lane) >= 0.01) free.delete(car.wants)
   }
+  // And the field, for the same reason: a racer sitting in a lane shuts it
+  // just as thoroughly as one of his lorries.
+  for (const lane of racerLanes(run.racers, from, to)) free.delete(lane)
   // The open lane is not on offer, whatever else is going on.
   // Always somewhere to go: one lane of the window is left empty.
   if (free.size <= 1) return
@@ -364,7 +433,7 @@ function spawnWave(run: Run, rng: Rng): void {
   const lanes = [...free].sort(() => rng.next() - 0.5).slice(0, want)
 
   for (const lane of lanes) {
-    const fleet = run.stage.fleet
+    const fleet = run.level.fleet
     const kind = fleet[rng.int(0, fleet.length - 1)]
     run.cars.push({
       id: run.nextId++,
@@ -381,7 +450,7 @@ function spawnWave(run: Run, rng: Rng): void {
        * variety comes from what the things are and from them changing lanes,
        * not from how fast they go.
        */
-      speed: topSpeedOn(run.stage) * run.stage.pace,
+      speed: topSpeedOn(run.level) * run.level.pace,
       kind,
       wants: lane,
       signal: 0,
@@ -419,7 +488,7 @@ function spawnCan(run: Run, rng: Rng): void {
  *
  * And no move may close the last way through. There used to be a whole lane
  * kept permanently empty to guarantee that, which was simple and correct and
- * far too kind — five stages were being finished without a scratch. Checking
+ * far too kind — five levels were being finished without a scratch. Checking
  * each move instead keeps the promise without handing over a free lane to sit
  * in.
  */
@@ -436,7 +505,7 @@ function moveOver(run: Run, car: Car, dt: number, rng: Rng): void {
    * halfway across, so completing is the readable outcome. Freezing it instead
    * — which is what this did first — leaves a vehicle straddling two lanes and
    * blocking both, and the road-is-never-blocked test caught exactly that on
-   * the opening stage.
+   * the opening level.
    */
   if (ahead <= REACT && !moving) {
     car.signal = 0
@@ -470,7 +539,33 @@ function moveOver(run: Run, car: Car, dt: number, rng: Rng): void {
     const last = car.y
     for (let i = 0; i <= 4; i++) {
       const from = first + ((last - first) * i) / 4
-      const blocked = blockedLanes(others, from, from + REACT)
+      const to = from + REACT
+      const blocked = blockedLanes(others, from, to)
+      /*
+       * Counting where the other movers are *going*, not only where they are.
+       *
+       * Two vehicles can each pass this check and still shut the road between
+       * them. A lorry takes two and a half seconds to cross a lane; it commits
+       * while the road is fine, and half a second later a second car checks,
+       * sees the lorry occupying the one and a half lanes it currently spans,
+       * finds a way through, and commits too — and then both of them finish
+       * crossing and for the best part of a second every lane is taken. It is
+       * the same failure as the waves of traffic further down this file: two
+       * legal moves adding up to an illegal road, and it was found the same
+       * way, by a driver arriving at a wall nobody had put there.
+       *
+       * So anything already on its way counts as being in both its lanes for
+       * as long as it takes to get there.
+       */
+      for (const other of others) {
+        if (other.y + longOf(other) < from || other.y > to) continue
+        if (Math.abs(other.wants - other.lane) < 0.01) continue
+        blocked.add(other.wants)
+      }
+      // And the field, which is on the same road and was not being counted at
+      // all: a car pulling into a lane a racer is sitting in shuts it just as
+      // thoroughly as one pulling in behind a lorry.
+      for (const taken of racerLanes(run.racers, from, to)) blocked.add(taken)
       for (const own of mine) blocked.add(own)
       if (blocked.size >= LANES) return true
     }
@@ -516,7 +611,7 @@ function moveOver(run: Run, car: Car, dt: number, rng: Rng): void {
 
 /** Did he do the job as well as get there? */
 export function missionMet(run: Run): boolean {
-  const mission = run.stage.mission
+  const mission = run.level.mission
   if (mission.kind === 'pass') return run.passed >= mission.count
   if (mission.kind === 'cans') return run.cansTaken >= mission.count
   if (mission.kind === 'place') return placeOf(run) <= mission.place
@@ -526,19 +621,49 @@ export function missionMet(run: Run): boolean {
 
 // --- the field ---------------------------------------------------------------
 
-/** The four of them, lined up behind you at the start of a stage. */
-export function gridOf(_stage: Stage): Racing[] {
-  return FIELD.map((who, i) => ({
-    id: 1000 + i,
-    who,
-    y: GRID[i].row * GRID_ROW,
-    lane: GRID[i].lane,
-    wants: GRID[i].lane,
-    speed: 0,
-    signal: 0 as -1 | 0 | 1,
-    signalFor: 0,
-    finished: null,
-  }))
+/**
+ * The four of them, in their boxes, in last race's finishing order.
+ *
+ * Two things are going on here and they pull in opposite directions. The
+ * field is re-drawn for every level, so the cars beside you are not the cars
+ * you beat last time; but the grid is supposed to be the last race's result,
+ * and a result needs the same people in it. What survives the re-draw is the
+ * *order*, and specifically your place in it: finish second and you start
+ * second, whoever turns out. The new cars fill the boxes around you quickest
+ * first, which is the only ranking a car nobody has raced yet can have.
+ *
+ * Everything is rebased against your own slot, because the road's coordinates
+ * have you at zero. Start on pole and the rest of them are at negative y —
+ * genuinely behind you, off the bottom of the screen, which is what pole
+ * looks like. That was the one thing the old fixed grid could not do, and it
+ * is the reward for winning.
+ */
+export function gridOf(seed: number, started: number, you: Racer): Racing[] {
+  const mine = slotFor(started)
+  // Quickest first: a car with no history is ranked by the only thing known
+  // about it.
+  const field = fieldFor(seed, you.name).sort((a, b) => b.pace - a.pace)
+
+  const racers: Racing[] = []
+  let next = 0
+  for (let place = 1; place <= FIELD_SIZE; place++) {
+    if (place === started) continue
+    const slot = slotFor(place)
+    const who = field[next]
+    racers.push({
+      id: 1000 + next,
+      who,
+      y: (slot.row - mine.row) * GRID_ROW,
+      lane: slot.lane,
+      wants: slot.lane,
+      speed: 0,
+      signal: 0 as -1 | 0 | 1,
+      signalFor: 0,
+      finished: null,
+    })
+    next++
+  }
+  return racers
 }
 
 /** Where you are in the race: first is 1. */
@@ -551,13 +676,13 @@ export function placeOf(run: Run): number {
  *
  * Their real time if they are already over it. Otherwise the clock now plus
  * however long the road they have left would take at the speed they are doing
- * — an estimate, and the only honest one available: the stage ends when *you*
+ * — an estimate, and the only honest one available: the level ends when *you*
  * cross the line, so the rest of the field genuinely has not finished yet. It
  * is what a television graphic does at the flag, for the same reason.
  */
 export function timeOf(run: Run, racer: Racing): number {
   if (racer.finished !== null) return racer.finished
-  const left = run.stage.distance - racer.y
+  const left = run.level.distance - racer.y
   if (left <= 0) return run.clock
   /*
    * Worked out from the pace it has kept, not the speed it happens to be
@@ -600,7 +725,7 @@ export function racerLanes(
   return blocked
 }
 
-/** The order at the end of a stage, you included, best first. */
+/** The order at the end of a level, you included, best first. */
 export interface Standing {
   name: string
   you: boolean
@@ -724,7 +849,7 @@ function steerRacer(run: Run, racer: Racing, dt: number): void {
    * Counting only the traffic was not enough: two racers, each seeing two
    * lanes open, could sit in both and close the road between them without
    * either one breaking the rule on its own. The test found it on the fourth
-   * stage inside four seconds.
+   * level inside four seconds.
    */
   const shut = blockedLanes(run.cars, window[0], window[1])
   for (const lane of racerLanes(run.racers, window[0], window[1], racer.id)) shut.add(lane)
@@ -861,7 +986,7 @@ function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
    * a little slower on the next is a racer you can catch, and lose again.
    */
   const target =
-    topSpeedOn(run.stage) * racer.who.pace * (1 + Math.sin(clock * 0.7 + racer.id) * racer.who.swing)
+    topSpeedOn(run.level) * racer.who.pace * (1 + Math.sin(clock * 0.7 + racer.id) * racer.who.swing)
 
   /*
    * Something close in its own lane and nowhere to go: follow it rather than
@@ -879,7 +1004,7 @@ function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
    *
    * A flat look-ahead of seven lengths was the first try, and at eighteen
    * lengths a second a car needs ten to stop: it simply could not, so it went
-   * into the back of whatever it was following, which on the fifth stage was
+   * into the back of whatever it was following, which on the fifth level was
    * usually the player. This is the ordinary safe-following sum — the speed
    * from which the room left brings you to the speed of the thing in front.
    */
@@ -890,7 +1015,7 @@ function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
   racer.speed = capped > racer.speed
     ? Math.min(capped, racer.speed + ACCELERATION * dt)
     : Math.max(capped, racer.speed - BRAKING * dt)
-  racer.speed = Math.max(0, Math.min(topSpeedOn(run.stage) * 1.05, racer.speed))
+  racer.speed = Math.max(0, Math.min(topSpeedOn(run.level) * 1.05, racer.speed))
   const was = racer.y
   racer.y += racer.speed * dt
 
@@ -913,7 +1038,7 @@ function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
     racer.speed = Math.min(racer.speed, Math.max(0, run.speed))
   }
 
-  if (racer.y >= run.stage.distance) racer.finished = run.clock
+  if (racer.y >= run.level.distance) racer.finished = run.clock
 }
 
 export function step(run: Run, input: Input, dt: number): Run {
@@ -990,7 +1115,7 @@ export function step(run: Run, input: Input, dt: number): Run {
   } else if (input.brake) {
     next.speed = Math.max(0, next.speed - BRAKING * dt)
   } else if (input.go && next.fuel > 0) {
-    next.speed = Math.min(topSpeedOn(next.stage), next.speed + ACCELERATION * dt)
+    next.speed = Math.min(topSpeedOn(next.level), next.speed + ACCELERATION * dt)
   } else {
     next.speed = Math.max(0, next.speed - DRAG * dt)
   }
@@ -1112,7 +1237,7 @@ export function step(run: Run, input: Input, dt: number): Run {
     const gap = car.y - next.distance
     if (gap > -CAR_LONG * 2 && gap < CAR_LONG * 2 && car.roused === 0) car.roused = 4
     if (car.roused > 0) {
-      const chasing = topSpeedOn(next.stage) * Math.min(0.9, next.stage.pace + 0.22)
+      const chasing = topSpeedOn(next.level) * Math.min(0.9, next.level.pace + 0.22)
       car.speed = Math.min(chasing, car.speed + TOP_SPEED * 0.3 * dt)
     }
   }
@@ -1120,7 +1245,7 @@ export function step(run: Run, input: Input, dt: number): Run {
   next.cans = next.cans.filter((can) => can.y >= next.distance - CAR_LONG * 1.5 && !can.taken)
 
   // --- keeping the road busy -------------------------------------------------
-  const wanted = next.stage.traffic
+  const wanted = next.level.traffic
   if (next.cars.length < wanted && next.distance > next.lastWave - SIGHT * 0.9) {
     spawnWave(next, rng)
   }
@@ -1137,16 +1262,16 @@ export function step(run: Run, input: Input, dt: number): Run {
     next.canCooldown = CAN_EVERY
   }
 
-  // --- the end of the stage --------------------------------------------------
-  if (next.distance >= next.stage.distance) {
-    next.status = 'stageDone'
+  // --- the end of the level --------------------------------------------------
+  if (next.distance >= next.level.distance) {
+    next.status = 'levelDone'
     next.yourTime = next.clock
     next.place = placeOf(next)
     // Finishing money, and more of it the higher up you come.
     next.score += 500 + Math.round(next.fuel) * 5 + Math.max(0, 5 - next.place) * 250
     next.missionDone = missionMet(next)
     if (next.missionDone) next.score += MISSION_BONUS
-    next.events.push('stageDone')
+    next.events.push('levelDone')
   }
 
   return next
