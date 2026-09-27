@@ -16,6 +16,7 @@ import type { CueName } from '../music/score'
 import { createPacer } from '../arcade/pacing'
 import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
+import { useAfterABeat } from '../ui/afterABeat'
 import { LABELS, hintAlpha } from '../ui/padHints'
 import { useStore } from '../store'
 import type { Link } from '../net/link'
@@ -1027,8 +1028,12 @@ export function Road() {
    * Australia is not a thing a race does. With two of you, a crash costs what
    * a crash costs and the road carries on.
    */
-  const asking = hud.status === 'crashed' && !outOfLives && !twoPlayer && seat === 'solo'
-  const overlay = hud.status !== 'driving' && !asking
+  const question = useAfterABeat(
+    hud.status === 'crashed' && !outOfLives && !twoPlayer && seat === 'solo',
+  )
+  /** The card itself, once the pause after a death has run. */
+  const asking = question.now
+  const overlay = hud.status !== 'driving' && !asking && !question.soon
 
   return (
     <div

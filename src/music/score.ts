@@ -99,6 +99,58 @@ export interface Track {
   hotter?: number
   /** Drums that only arrive once the heat does. */
   hotDrums?: string
+  /**
+   * How many times round before the tune stops for a moment.
+   *
+   * A loop that never stops stops being music and becomes a room tone: after
+   * the third time round nobody is listening to it any more, they are just
+   * slightly more tired than they were. A gap fixes that for nothing — the
+   * same eight bars are worth hearing again if something happened in between,
+   * even if the something was silence.
+   *
+   * Nought means never stop, which is right for the two-second cue loops and
+   * wrong for everything anybody has to sit with.
+   */
+  restEvery?: number
+}
+
+/** Loops between rests, for a track that does not say. */
+export const REST_EVERY = 2
+
+/**
+ * How long the gap is, near enough.
+ *
+ * Rounded to a whole bar at the track's own tempo so the tune comes back on a
+ * downbeat rather than wherever three seconds happened to land. Long enough to
+ * register as a pause; short enough that nobody checks whether the sound is
+ * broken.
+ */
+export const REST_SECONDS = 3
+
+export function restEighths(track: Track): number {
+  if ((track.restEvery ?? REST_EVERY) === 0) return 0
+  const bar = 8
+  const wanted = REST_SECONDS / eighthSeconds(track, 0)
+  return Math.max(bar, Math.round(wanted / bar) * bar)
+}
+
+/**
+ * Which eighth of the loop to play at a given moment, or -1 for the gap.
+ *
+ * Out here rather than inside the scheduler so it can be checked without an
+ * audio context and forty seconds of waiting. The scheduler does nothing else
+ * with time: it asks this, plays whatever is written at that position, and
+ * moves on.
+ */
+export function beatAt(track: Track, eighth: number): number {
+  const bars = loopLength(track)
+  if (bars === 0) return -1
+  const every = track.restEvery ?? REST_EVERY
+  const rest = restEighths(track)
+  if (every <= 0 || rest <= 0) return eighth % bars
+  const playFor = bars * every
+  const at = eighth % (playFor + rest)
+  return at < playFor ? at % bars : -1
 }
 
 /** How fast a voice has to arrive once its heat is reached. */

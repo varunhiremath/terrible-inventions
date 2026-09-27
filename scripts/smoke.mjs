@@ -312,6 +312,22 @@ for (let i = 0; i < 60 && !died; i++) {
 if (!died) {
   problems.push('never lost a life in the maze, so the question was never shown')
 } else {
+  /*
+   * A beat, and then the question.
+   *
+   * Losing a life no longer throws the card up in the same frame: the sound of
+   * what happened gets to finish first. This waits for the card rather than
+   * for a fixed time, so it still passes if that pause is ever retimed — and
+   * it fails, loudly, if the card stops arriving at all.
+   */
+  const card = page.locator('.rise-in.block-panel')
+  try {
+    await card.first().waitFor({ state: 'visible', timeout: 6000 })
+  } catch {
+    problems.push('losing a life never brought up a question')
+  }
+  await page.waitForTimeout(300)
+
   questionText = await page.innerText('body')
   if (!/\b(numbers|history|geography|anything)\b/i.test(questionText)) {
     problems.push('losing a life did not bring up a question')

@@ -25,6 +25,7 @@ import { buildGhost, buildPlayer, type Ghost } from '../render/characters'
 import { RUNNER_HULL, RUNNER_ROUND, svgPath } from '../render/silhouettes'
 import { fill } from '../config/profile'
 import { Btn } from '../ui/bits'
+import { useAfterABeat } from '../ui/afterABeat'
 import { say, silence } from '../voice'
 import { useStore } from '../store'
 import { Interlude } from './Interlude'
@@ -611,8 +612,10 @@ function PlayerIcon() {
 
   // Losing a life asks you something and puts you straight back in. A panel
   // saying "you died, press again" in front of it is a tap of nothing.
-  const asking = hud.status === 'died'
-  const overlay = hud.status !== 'playing' && !asking
+  const question = useAfterABeat(hud.status === 'died')
+  /** The card itself, once the pause after a death has run. */
+  const asking = question.now
+  const overlay = hud.status !== 'playing' && !asking && !question.soon
 
   return (
     <div

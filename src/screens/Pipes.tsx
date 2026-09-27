@@ -16,6 +16,7 @@ import { scrollTo } from '../camera'
 import { createPacer } from '../arcade/pacing'
 import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
+import { useAfterABeat } from '../ui/afterABeat'
 import { LABELS, hintAlpha } from '../ui/padHints'
 import { useStore } from '../store'
 import { extraSeconds, spareLives } from '../workshop/kit'
@@ -427,8 +428,10 @@ export function Pipes() {
    * died, press again" in front of it would be one tap of nothing between the
    * player and the game.
    */
-  const asking = hud.status === 'dead' && !outOfLives
-  const overlay = hud.status !== 'playing' && !asking
+  const question = useAfterABeat(hud.status === 'dead' && !outOfLives)
+  /** The card itself, once the pause after a death has run. */
+  const asking = question.now
+  const overlay = hud.status !== 'playing' && !asking && !question.soon
 
   return (
     <div

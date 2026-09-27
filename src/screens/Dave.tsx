@@ -22,6 +22,7 @@ import {
 } from '../dave/draw'
 import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
+import { useAfterABeat } from '../ui/afterABeat'
 import { say, silence } from '../voice'
 import { LABELS, hintAlpha } from '../ui/padHints'
 import { OPENERS } from '../lines'
@@ -490,8 +491,10 @@ export function Dave() {
   const lastLevel = hud.level >= 10
   // Losing a life asks you something and puts you straight back in. A panel
   // saying "you died, press again" in front of it is a tap of nothing.
-  const asking = hud.status === 'died'
-  const overlay = hud.status !== 'playing' && !asking
+  const question = useAfterABeat(hud.status === 'died')
+  /** The card itself, once the pause after a death has run. */
+  const asking = question.now
+  const overlay = hud.status !== 'playing' && !asking && !question.soon
 
   return (
     <div

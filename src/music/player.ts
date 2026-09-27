@@ -19,6 +19,7 @@ import {
   eighthSeconds,
   heatGain,
   loopLength,
+  beatAt,
   readPart,
   type CueName,
   type Wave,
@@ -298,6 +299,14 @@ function schedule(): void {
   const bars = loopLength(track)
   if (bars === 0) return
 
+  /*
+   * Where in the breathing cycle each moment falls — playing, or the gap
+   * between — is `beatAt`'s business, over in the score. The cycle is a few
+   * times round the loop and then a few bars of nothing, counted off the same
+   * eighth counter that drives everything else, so the tune comes back exactly
+   * where it left off and in phase with its own bass line.
+   */
+
   const parts = track.parts
     .map((part) => ({ part, notes: readPart(part.pattern), level: heatGain(part, heat) }))
     .filter((p) => p.level > 0)
@@ -310,8 +319,9 @@ function schedule(): void {
     // of notes into the speaker all at once.
     if (cursor < ctx.currentTime) cursor = ctx.currentTime + 0.01
 
-    const beat = eighth % bars
-    for (const { part, notes, level } of parts) {
+    // -1 is the gap: the clock runs on and nothing is put into it.
+    const beat = beatAt(track, eighth)
+    if (beat >= 0) for (const { part, notes, level } of parts) {
       for (const note of notes) {
         if (note.at !== beat) continue
         playNote(
@@ -325,7 +335,7 @@ function schedule(): void {
         )
       }
     }
-    if (drums[beat] === 'x') playHit(ctx, out, cursor)
+    if (beat >= 0 && drums[beat] === 'x') playHit(ctx, out, cursor)
 
     cursor += step
     eighth += 1

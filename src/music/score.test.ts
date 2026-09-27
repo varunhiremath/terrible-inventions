@@ -1,11 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CAVERN,
+  CHASE,
   CUES,
+  PIPES,
+  REST_EVERY,
+  ROAD,
+  SPACE,
+  THINKING,
   TRACKS,
   eighthSeconds,
   loopLength,
   noteFrequency,
   readPart,
+  beatAt,
+  restEighths,
   type Track,
 } from './score'
 
@@ -218,4 +227,73 @@ describe('how the parts are played', () => {
     expect(TRACKS.thinking.parts.length).toBeLessThan(3)
     expect(TRACKS.thinking.parts.some((p) => p.arp)).toBe(false)
   })
+})
+
+/**
+ * The gaps.
+ *
+ * A loop that never stops stops being music and becomes a room tone — after
+ * the third time round nobody is listening, they are only slightly more tired
+ * than they were. These check the gap exists, lands on a bar line, and is a
+ * pause rather than an interruption.
+ */
+describe('room to breathe', () => {
+  const LOOPS: Track[] = [CHASE, THINKING, PIPES, CAVERN, ROAD, SPACE]
+
+  it('gives every tune somebody has to sit with a gap', () => {
+    for (const track of LOOPS) {
+      expect(restEighths(track), `${track.name} never stops`).toBeGreaterThan(0)
+    }
+  })
+
+  it('stops for about three seconds, not one and not ten', () => {
+    for (const track of LOOPS) {
+      const seconds = restEighths(track) * eighthSeconds(track, 0)
+      expect(seconds, `${track.name} rests for ${seconds.toFixed(1)}s`).toBeGreaterThan(1.5)
+      expect(seconds, `${track.name} rests for ${seconds.toFixed(1)}s`).toBeLessThan(6)
+    }
+  })
+
+  it('comes back on a bar line rather than wherever the seconds landed', () => {
+    for (const track of LOOPS) {
+      expect(restEighths(track) % 8, `${track.name} resumes mid-bar`).toBe(0)
+    }
+  })
+
+  it('plays a good deal more than it rests', () => {
+    for (const track of LOOPS) {
+      const playing = loopLength(track) * (track.restEvery ?? REST_EVERY)
+      expect(playing / restEighths(track), `${track.name} is mostly silence`)
+        .toBeGreaterThan(3)
+    }
+  })
+})
+
+describe('the gap, beat by beat', () => {
+  it('plays the loop right through, then stops, then picks up where it was', () => {
+    const bars = loopLength(CHASE)
+    const rest = restEighths(CHASE)
+    const plays = bars * REST_EVERY
+
+    // Every eighth of the playing part, in order, twice round.
+    for (let i = 0; i < plays; i++) {
+      expect(beatAt(CHASE, i), `eighth ${i}`).toBe(i % bars)
+    }
+    // Then nothing at all.
+    for (let i = plays; i < plays + rest; i++) {
+      expect(beatAt(CHASE, i), `eighth ${i} should be silent`).toBe(-1)
+    }
+    // And back to the top of the loop, not to wherever the clock had got to.
+    expect(beatAt(CHASE, plays + rest)).toBe(0)
+  })
+
+  /*
+   * There is deliberately nothing here about cues.
+   *
+   * The first version of this test asserted that a cue never rests, which is
+   * both false — `restEighths` will happily give one a number — and beside the
+   * point, because a cue is fired note by note by `playCue` and never goes
+   * near the scheduler that reads `beatAt`. Testing it would have been testing
+   * a property nothing relies on.
+   */
 })

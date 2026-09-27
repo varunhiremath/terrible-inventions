@@ -35,6 +35,7 @@ import { createPacer } from '../arcade/pacing'
 import { tweenRun } from '../arcade/dungeon/smooth'
 import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
+import { useAfterABeat } from '../ui/afterABeat'
 import { say, silence } from '../voice'
 import { LABELS, hintAlpha } from '../ui/padHints'
 import { OPENERS } from '../lines'
@@ -474,8 +475,10 @@ export function Prince() {
   // Losing a life asks you something and puts you straight back in, on the
   // same clock — the hour does not stop for a question any more than it stops
   // for anything else.
-  const asking = hud.status === 'dead'
-  const overlay = hud.status !== 'playing' && !asking
+  const question = useAfterABeat(hud.status === 'dead')
+  /** The card itself, once the pause after a death has run. */
+  const asking = question.now
+  const overlay = hud.status !== 'playing' && !asking && !question.soon
 
   return (
     <div
