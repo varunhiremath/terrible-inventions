@@ -7,7 +7,19 @@ import { VitePWA } from 'vite-plugin-pwa'
 // CI sets BASE_PATH explicitly.
 const BASE = process.env.BASE_PATH ?? './'
 
+/**
+ * Which build this is.
+ *
+ * Shown in the settings, so "have you got the new one?" has an answer that is
+ * not a guess. It also guarantees that every build differs from the last by at
+ * least one string, which is what makes the service worker notice one at all:
+ * a change that minifies away leaves the bundle byte-identical, the precache
+ * manifest identical, and the app correctly concludes there is nothing new.
+ */
+const BUILD = process.env.BUILD_ID ?? new Date().toISOString().slice(0, 16).replace('T', ' ')
+
 export default defineConfig({
+  define: { __BUILD__: JSON.stringify(BUILD) },
   // Relative by default, so the build works opened from anywhere. GitHub Pages
   // serves from a subdirectory and the service worker's scope has to match it,
   // so CI sets BASE_PATH explicitly.
@@ -15,7 +27,16 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      /*
+       * Prompt rather than autoUpdate, and the difference matters.
+       *
+       * autoUpdate reloads the page the moment a new service worker takes
+       * over, which on a phone means the app can vanish and come back in the
+       * middle of a race. src/update.ts does the deciding instead: it checks
+       * far more often than the default, and it only takes the new version
+       * when nothing is in progress.
+       */
+      registerType: 'prompt',
       includeAssets: ['icon-180.png', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: 'Terrible Inventions',

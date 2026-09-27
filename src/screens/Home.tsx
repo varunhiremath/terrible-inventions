@@ -4,6 +4,7 @@ import { ROSTER } from '../road/level'
 import { drawRubble, drawShip, drawSky, drawWorld } from '../space/draw'
 import { worldFor } from '../space/level'
 import { useStore } from '../store'
+import { UpdatePill } from '../ui/UpdatePill'
 import type { Screen } from '../store'
 import { drawFigure, type Look } from '../arcade/dungeon/figure'
 import { poseFor } from '../arcade/dungeon/draw'
@@ -362,9 +363,14 @@ export function Home() {
         </button>
       </div>
 
-      <p className="text-sm text-dim">
-        {fill('{papa}')} built six terrible machines. Pick one.
-      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <p className="text-sm text-dim">
+          {fill('{papa}')} built six terrible machines. Pick one.
+        </p>
+        {/* The front screen is the one place it is safe to reload, so this is
+            the one place the update takes itself. */}
+        <UpdatePill auto />
+      </div>
 
       {/*
         * Six tiles, all the same size.

@@ -80,3 +80,82 @@ export function BackButton({ onClick }: { onClick: () => void }) {
     </button>
   )
 }
+
+/**
+ * A switch, for the things that are simply on or off.
+ *
+ * The settings used to give every yes-or-no question a pair of chunky buttons
+ * side by side, one of them highlighted. That is four times the ink and twice
+ * the width of the thing it is asking, and a screen of them reads like a form
+ * from 1998. A switch says the same thing in one control and is the shape
+ * every phone has trained everybody to recognise.
+ */
+export function Toggle({
+  on,
+  onChange,
+  label,
+}: {
+  on: boolean
+  onChange: (on: boolean) => void
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={() => onChange(!on)}
+      className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+        on ? 'bg-moss/80' : 'bg-ink-line'
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`absolute top-1 h-5 w-5 rounded-full bg-chalk shadow transition-all ${
+          on ? 'left-6' : 'left-1'
+        }`}
+      />
+    </button>
+  )
+}
+
+/**
+ * One line of settings: what it is on the left, the control on the right.
+ *
+ * The old screen put a heading, a paragraph and a control in a panel of its
+ * own for every single option, so seven options were seven panels and a great
+ * deal of scrolling. A row with a name, one line of explanation and the
+ * control beside it fits the same information in a fifth of the height.
+ */
+export function Row({
+  title,
+  hint,
+  children,
+}: {
+  title: string
+  hint?: string
+  children?: ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-2.5">
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-chalk">{title}</p>
+        {hint && <p className="mt-0.5 text-xs leading-snug text-dim">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+/** A titled group of rows, with hairlines between them. */
+export function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="block-panel px-4 py-1 sm:px-5">
+      <h2 className="pt-3 font-mono text-[0.7rem] font-bold uppercase tracking-[0.2em] text-dim">
+        {title}
+      </h2>
+      <div className="divide-y divide-white/5">{children}</div>
+    </section>
+  )
+}
