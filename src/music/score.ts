@@ -259,41 +259,73 @@ export function eighthSeconds(track: Track, heat = 0, pace = 0): number {
  */
 
 /*
- * Papa Panic, in a major key.
+ * Papa Panic.
  *
- * It was in A minor, with a melody that climbed to A5 on a nasal pulse wave
- * and a raised seventh grinding a semitone under the root. All of which is
- * correct for a chase and none of which is what was asked for, which was
- * something upbeat and fun that is comfortable to have on for an hour.
+ * Written twice. It was in A minor with a melody that climbed to A5 on a
+ * nasal pulse; then in C major on a triangle, which fixed how it sounded and
+ * left it what it had always been — eight bars of the same thing, round and
+ * round.
  *
- * So: C major, the four happiest chords there are, and a melody that skips
- * about rather than climbing. The top of it is E5 instead of A5 — a fourth
- * lower, which in the register where bright turns into piercing is most of
- * the difference — and it is carried by a triangle rather than a quarter-duty
- * pulse. A triangle has almost nothing above its third harmonic, which is why
- * it can play the same notes without any of the edge.
+ * What was asked for was the shape of the tune everybody knows from that
+ * plumber: "silence, upbeat, slow and fast, happy and tense, all beats nicely
+ * mixed". That is a good description of what makes it work, and none of it is
+ * about the notes. Three things:
  *
- * It is still a chase. The tempo, the drums and the voices that arrive with
- * the heat all do that work, and they do it without anybody wincing.
+ * REST     Half of that melody is gaps. A phrase that fills every eighth has
+ *          no shape, because shape is the difference between the notes and
+ *          the spaces. Most bars here start on a rest.
+ * SYNCOPE  The famous ones do not land on the beat. Starting a phrase on the
+ *          *and* of one is what makes a tune bounce rather than march, and it
+ *          costs nothing but moving a note left.
+ * SECTIONS Sixteen bars rather than eight, in four parts. Two of the bouncy
+ *          thing, then four bars that drop low and go sparse — that is the
+ *          tense bit, and it is tense because everything around it is not —
+ *          then four that climb back out busier than they started.
+ *
+ * The four parts are why it survives being heard for an hour. Eight bars of
+ * anything is a ringtone; sixteen with a middle that goes somewhere else is a
+ * tune, and the gap that follows it makes the return worth having.
  */
 const CHASE_LEAD = [
-  'C5 .  E5 C5 G4 .  A4 . ',
-  'A4 .  C5 A4 E4 .  G4 . ',
-  'F4 A4 C5 A4 F4 .  G4 . ',
-  'G4 B4 D5 B4 G4 .  F4 . ',
-  'E5 .  D5 C5 G4 .  A4 . ',
-  'A4 C5 E5 .  C5 A4 E4 . ',
-  'F4 .  G4 A4 C5 .  A4 . ',
-  'G4 .  F4 D4 C4 .  .  . ',
+  // A: the bounce. Note the rest on every downbeat.
+  '.  C5 C5 .  C5 .  G4 . ',
+  'E5 .  .  C5 .  .  G4 . ',
+  '.  A4 A4 .  A4 .  C5 . ',
+  'D5 .  .  B4 .  .  G4 . ',
+  // A again, opened out at the top.
+  '.  C5 C5 .  C5 .  G4 . ',
+  'E5 .  .  G5 .  E5 C5 . ',
+  '.  F4 A4 .  C5 .  A4 . ',
+  'G4 .  .  E4 .  .  C4 . ',
+  // B: low, slow, and almost nothing in it.
+  'A4 .  .  .  G4 .  .  . ',
+  'F4 .  .  .  E4 .  .  . ',
+  'D4 .  F4 .  A4 .  .  . ',
+  'G4 .  .  .  .  .  .  . ',
+  // C: out the other side, busier than it went in.
+  'C5 D5 E5 F5 G5 .  E5 . ',
+  'C5 .  G4 .  E4 .  G4 . ',
+  'F4 G4 A4 B4 C5 .  A4 . ',
+  'G4 .  B4 .  D5 .  .  . ',
 ].join(' ')
 
 const CHASE_BASS = [
   'C2 C2 G2 C2 C2 C2 G2 C2',
-  'A2 A2 E3 A2 A2 A2 E3 A2',
-  'F2 F2 C3 F2 F2 F2 C3 F2',
-  'G2 G2 D3 G2 G2 G2 D3 G2',
   'C2 C2 G2 C2 C2 C2 G2 C2',
   'A2 A2 E3 A2 A2 A2 E3 A2',
+  'G2 G2 D3 G2 G2 G2 D3 G2',
+  'C2 C2 G2 C2 C2 C2 G2 C2',
+  'C2 C2 G2 C2 C2 C2 G2 C2',
+  'F2 F2 C3 F2 F2 F2 C3 F2',
+  'C2 C2 G2 C2 C2 C2 G2 C2',
+  // Thinned right out under the quiet part: the bass walking away is most of
+  // why those four bars feel like the floor has gone.
+  'A2 .  .  .  E3 .  .  . ',
+  'F2 .  .  .  C3 .  .  . ',
+  'D2 .  .  .  A2 .  .  . ',
+  'G2 .  .  .  D3 .  .  . ',
+  'C2 C2 G2 C2 C2 C2 G2 C2',
+  'C2 C2 G2 C2 C2 C2 G2 C2',
   'F2 F2 C3 F2 F2 F2 C3 F2',
   'G2 G2 D3 G2 G2 D3 G2 G2',
 ].join(' ')
@@ -301,16 +333,36 @@ const CHASE_BASS = [
 /** A quiet third voice, holding the chord under everything else. */
 const CHASE_PAD = [
   'E3 .  .  .  G3 .  .  . ',
-  'C4 .  .  .  E4 .  .  . ',
-  'A3 .  .  .  C4 .  .  . ',
-  'B3 .  .  .  D4 .  .  . ',
   'E3 .  .  .  G3 .  .  . ',
   'C4 .  .  .  E4 .  .  . ',
+  'B3 .  .  .  D4 .  .  . ',
+  'E3 .  .  .  G3 .  .  . ',
+  'E3 .  .  .  G3 .  .  . ',
+  'A3 .  .  .  C4 .  .  . ',
+  'E3 .  .  .  G3 .  .  . ',
+  // Out entirely for the quiet part.
+  '.  .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  'E3 .  .  .  G3 .  .  . ',
+  'E3 .  .  .  G3 .  .  . ',
   'A3 .  .  .  C4 .  .  . ',
   'B3 .  .  .  D4 .  .  . ',
 ].join(' ')
 
-const CHASE_DRUMS = ('- x - x - x - x ').repeat(7) + '- x - x - x x x'
+/*
+ * Sixteen bars, and the middle four nearly stop.
+ *
+ * The drums are what make the quiet part read as deliberate rather than as
+ * something having gone wrong: they do not disappear, they go down to one hit
+ * a bar, which is a band waiting rather than a band leaving.
+ */
+const CHASE_DRUMS =
+  ('- x - x - x - x ').repeat(8) +
+  ('- - - x - - - - ').repeat(4) +
+  ('- x - x - x - x ').repeat(3) +
+  '- x - x - x x x'
 
 
 /*
@@ -333,11 +385,20 @@ const CHASE_DRUMS = ('- x - x - x - x ').repeat(7) + '- x - x - x x x'
  */
 const CHASE_PUSH = [
   '.  C3 .  C3 .  C3 .  C3',
-  '.  A3 .  A3 .  A3 .  A3',
-  '.  F3 .  F3 .  F3 .  F3',
-  '.  G3 .  G3 .  G3 .  G3',
   '.  C3 .  C3 .  C3 .  C3',
   '.  A3 .  A3 .  A3 .  A3',
+  '.  G3 .  G3 .  G3 .  G3',
+  '.  C3 .  C3 .  C3 .  C3',
+  '.  C3 .  C3 .  C3 .  C3',
+  '.  F3 .  F3 .  F3 .  F3',
+  '.  C3 .  C3 .  C3 .  C3',
+  // And out for the quiet four, like everything else.
+  '.  .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  '.  C3 .  C3 .  C3 .  C3',
+  '.  C3 .  C3 .  C3 .  C3',
   '.  F3 .  F3 .  F3 .  F3',
   '.  G3 .  G3 .  G3 G3 G3',
 ].join(' ')
@@ -351,14 +412,32 @@ const CHASE_DREAD = [
   'C4 .  .  .  .  .  .  . ',
   'A3 .  .  .  .  .  .  . ',
   'B3 .  .  .  .  .  .  . ',
+  // It stays for the quiet part. With everything else gone it is the only
+  // thing left, which is the most use it has ever been.
+  'A3 .  .  .  .  .  .  . ',
+  'F3 .  .  .  .  .  .  . ',
+  'D3 .  .  .  .  .  .  . ',
+  'G3 .  .  .  .  .  .  . ',
+  'E4 .  .  .  .  .  .  . ',
+  'C4 .  .  .  .  .  .  . ',
+  'A3 .  .  .  .  .  .  . ',
+  'B3 .  .  .  .  .  .  . ',
 ].join(' ')
 
-const CHASE_HOT_DRUMS = ('x - x x - x x x ').repeat(7) + 'x - x x x x x x'
+const CHASE_HOT_DRUMS =
+  ('x - x x - x x x ').repeat(8) +
+  ('x - - x - - x - ').repeat(4) +
+  ('x - x x - x x x ').repeat(3) +
+  'x - x x x x x x'
 
 export const CHASE: Track = {
   name: 'Papa Panic',
   beatsPerMinute: 126,
   hotter: 12,
+  // Once round, not twice. The others are eight bars and want two passes
+  // before a gap; this one is sixteen and takes half a minute on its own,
+  // which is already longer than anybody listens to anything uninterrupted.
+  restEvery: 1,
   drums: CHASE_DRUMS,
   hotDrums: CHASE_HOT_DRUMS,
   parts: [

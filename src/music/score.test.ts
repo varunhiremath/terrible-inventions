@@ -273,7 +273,9 @@ describe('the gap, beat by beat', () => {
   it('plays the loop right through, then stops, then picks up where it was', () => {
     const bars = loopLength(CHASE)
     const rest = restEighths(CHASE)
-    const plays = bars * REST_EVERY
+    // Its own cadence, not the default: the chase is sixteen bars and rests
+    // after one pass where the shorter tunes take two.
+    const plays = bars * (CHASE.restEvery ?? REST_EVERY)
 
     // Every eighth of the playing part, in order, twice round.
     for (let i = 0; i < plays; i++) {
