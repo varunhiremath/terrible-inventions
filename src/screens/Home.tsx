@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { drawCan, drawCar, drawMine, drawRoad } from '../road/draw'
+import { drawCan, drawCar, drawMine, drawRacer, drawRoad } from '../road/draw'
+import { FIELD } from '../road/level'
 import { drawRubble, drawShip, drawSky, drawWorld } from '../space/draw'
 import { worldFor } from '../space/level'
 import { useStore } from '../store'
@@ -289,6 +290,11 @@ const TILES: Tile[] = [
       // is the game rather than a picture of it.
       drawCar(ctx, { id: 1, y: 3.4, lane: 0, speed: 0, kind: 'patrol', wants: 0, signal: 0, signalFor: 0, roused: 0 }, view)
       drawCar(ctx, { id: 2, y: 2.6, lane: 2, speed: 0, kind: 'swerver', wants: 2, signal: 1, signalFor: 0.5, roused: 0 }, view)
+      // And one of the field, so the tile shows there is somebody to race.
+      drawRacer(ctx, {
+        id: 1000, who: FIELD[0], y: 2.2, lane: 1, wants: 1,
+        speed: 0, signal: 0, signalFor: 0, finished: null,
+      }, view)
       drawCan(ctx, { id: 3, y: 1.6, lane: 3, taken: false }, view)
       drawMine(ctx, 1, view, 0)
     },

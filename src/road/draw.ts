@@ -13,7 +13,9 @@
  * the two details have to be the ones that say whose it is.
  */
 import { drawHint } from '../ui/padHints'
-import { CAR_LONG, CAR_WIDE, LANES, LENGTH_OF, SIGHT, WIDTH_OF, type CarKind } from './level'
+import {
+  CAR_LONG, CAR_WIDE, LANES, LENGTH_OF, SIGHT, WIDTH_OF, type Build, type CarKind, type Face,
+} from './level'
 import type { Can, Car, Racing, Run } from './run'
 
 type Ctx = CanvasRenderingContext2D
@@ -124,6 +126,48 @@ const BOX: Shape = [
   { x: 0.44, y: 1 }, { x: -0.44, y: 1 },
   { x: -0.5, y: 0.92 }, { x: -0.5, y: -0.92 },
 ]
+
+/** A stock car: wide shoulders, a nipped-in waist, and a lot of rear wing. */
+const STOCK: Shape = [
+  { x: -0.38, y: -1 }, { x: 0.38, y: -1 },
+  { x: 0.5, y: -0.62 }, { x: 0.44, y: -0.1 },
+  { x: 0.5, y: 0.4 }, { x: 0.46, y: 1 },
+  { x: -0.46, y: 1 }, { x: -0.5, y: 0.4 },
+  { x: -0.44, y: -0.1 }, { x: -0.5, y: -0.62 },
+]
+
+/** A tow truck: a snub nose, a cab, and a flat deck behind it. */
+const TOW: Shape = [
+  { x: -0.36, y: -1 }, { x: 0.36, y: -1 },
+  { x: 0.46, y: -0.86 }, { x: 0.46, y: -0.2 },
+  { x: 0.4, y: -0.12 }, { x: 0.4, y: 0.92 },
+  { x: -0.4, y: 0.92 }, { x: -0.4, y: -0.12 },
+  { x: -0.46, y: -0.2 }, { x: -0.46, y: -0.86 },
+]
+
+/** A little coupé: round at both ends and not much in between. */
+const COUPE: Shape = [
+  { x: -0.34, y: -1 }, { x: 0.34, y: -1 },
+  { x: 0.44, y: -0.66 }, { x: 0.46, y: 0.3 },
+  { x: 0.3, y: 0.92 }, { x: -0.3, y: 0.92 },
+  { x: -0.46, y: 0.3 }, { x: -0.44, y: -0.66 },
+]
+
+/** A camper: a stubby bonnet and a great tall box on the back. */
+const CAMPER: Shape = [
+  { x: -0.32, y: -1 }, { x: 0.32, y: -1 },
+  { x: 0.44, y: -0.88 }, { x: 0.46, y: -0.62 },
+  { x: 0.5, y: -0.54 }, { x: 0.5, y: 0.96 },
+  { x: -0.5, y: 0.96 }, { x: -0.5, y: -0.54 },
+  { x: -0.46, y: -0.62 }, { x: -0.44, y: -0.88 },
+]
+
+export const BUILD_OF: Record<Build, Shape> = {
+  stock: STOCK,
+  tow: TOW,
+  coupe: COUPE,
+  camper: CAMPER,
+}
 
 const SHAPE_OF: Record<CarKind, Shape> = {
   cruiser: SALOON,
@@ -411,6 +455,7 @@ export function drawMine(
   view: View,
   stunned: number,
   mercy = 0,
+  look = 0,
 ): void {
   const x = laneX(view, lane)
   const y = view.line
@@ -438,14 +483,121 @@ export function drawMine(
   ctx.fillRect(x - wide * 0.46, y - long * 0.52, wide * 0.92, long * 0.08)
   ctx.fillRect(x - wide * 0.5, y + long * 0.42, wide, long * 0.1)
 
-  ctx.fillStyle = INK.visor
+  /*
+   * Your own face, looking where you are steering.
+   *
+   * It would be an odd world where four of his machines had faces and the one
+   * you are driving did not. `look` comes from the steering, so the eyes go
+   * where you go — which, when you are threading a gap, is oddly good at
+   * telling you that you have committed to it.
+   */
+  drawFace(ctx, x, y, wide, long, 'eager', look)
+}
+
+/**
+ * A face on the windscreen.
+ *
+ * Eyes in the glass and a mouth on the grille. It is the oldest trick in the
+ * animated-car business and it has been around since long before any film you
+ * could name — and it is the difference between four coloured wedges and four
+ * machines somebody could tell apart and have an opinion about.
+ *
+ * The pupils look where the car is going, which costs nothing and is most of
+ * what makes them read as alive: a racer that has just decided to pull out
+ * glances that way before it moves, at the same moment its indicator starts.
+ *
+ * Every one of these is drawn here from ellipses and arcs, like everything
+ * else in this project. Nothing is copied from anywhere.
+ */
+export function drawFace(
+  ctx: Ctx,
+  x: number,
+  y: number,
+  wide: number,
+  long: number,
+  face: Face,
+  look: number,
+): void {
+  /*
+   * The glass first, and the eyes sized from it rather than from the car.
+   *
+   * The first go took the eye size off the car's width and the glass off
+   * nothing in particular, so the eyes were half again as wide as the window
+   * they were supposed to be behind and every car looked like a skittle.
+   */
+  const at = { keen: -0.1, cheerful: -0.16, eager: -0.12, sleepy: -0.22 }[face]
+  const cy = y + long * at
+  /*
+   * A windscreen, not a head.
+   *
+   * It has to be narrower than the car at that point or it spills over both
+   * flanks and every machine looks like a skittle with eyes — which is what
+   * the first two goes at this looked like. Tall enough to hold the eyes,
+   * dark enough to read as glass.
+   */
+  const glassW = wide * 0.35
+  const glassH = long * 0.21
+
+  ctx.fillStyle = '#5f8399'
   ctx.beginPath()
-  ctx.ellipse(x, y - long * 0.02, wide * 0.19, long * 0.15, 0, 0, Math.PI * 2)
+  ctx.ellipse(x, cy, glassW, glassH, 0, 0, Math.PI * 2)
   ctx.fill()
-  ctx.fillStyle = '#0d2b30'
+  ctx.fillStyle = 'rgba(255,255,255,0.22)'
   ctx.beginPath()
-  ctx.ellipse(x, y + long * 0.02, wide * 0.13, long * 0.1, 0, 0, Math.PI * 2)
+  ctx.ellipse(x - glassW * 0.32, cy - glassH * 0.34, glassW * 0.28, glassH * 0.26, 0, 0, Math.PI * 2)
   ctx.fill()
+
+  const size = { keen: 0.4, cheerful: 0.46, eager: 0.48, sleepy: 0.4 }[face]
+  const apart = { keen: 0.46, cheerful: 0.44, eager: 0.42, sleepy: 0.44 }[face]
+  const r = Math.min(glassW * size, glassH * 0.62)
+
+  for (const side of [-1, 1]) {
+    const ex = x + side * glassW * apart
+    // One of Gasket's eyes is bigger than the other, which is the whole of its
+    // character and took one number to do.
+    const grow = face === 'cheerful' && side < 0 ? 1.25 : 1
+
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.ellipse(ex, cy, r * grow, r * 1.05 * grow, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.fillStyle = '#1a2230'
+    ctx.beginPath()
+    ctx.ellipse(ex + look * r * 0.38, cy + r * 0.12, r * 0.46, r * 0.5, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // A spark of light, which is what stops an eye looking like a hole.
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.beginPath()
+    ctx.arc(ex + look * r * 0.38 - r * 0.16, cy - r * 0.08, r * 0.14, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Lids do the expression: narrowed for keen, heavy for sleepy.
+    if (face === 'keen' || face === 'sleepy') {
+      ctx.fillStyle = '#1a2230'
+      const drop = face === 'sleepy' ? 0.85 : 0.55
+      ctx.beginPath()
+      ctx.ellipse(ex, cy - r * drop, r * grow * 1.05, r * 0.7, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+
+  // And a mouth on the grille, a little way in front of the glass.
+  ctx.strokeStyle = '#1a2230'
+  ctx.lineWidth = Math.max(1.5, wide * 0.045)
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  const mouth = cy - glassH - long * 0.1
+  if (face === 'sleepy') {
+    // A flat line, and not a happy one.
+    ctx.moveTo(x - wide * 0.14, mouth)
+    ctx.lineTo(x + wide * 0.14, mouth)
+  } else {
+    const grin = face === 'keen' ? 0.1 : 0.14
+    ctx.arc(x, mouth - long * grin * 0.6, wide * grin * 1.6, Math.PI * 0.25, Math.PI * 0.75)
+  }
+  ctx.stroke()
 }
 
 /**
@@ -461,31 +613,73 @@ export function drawRacer(ctx: Ctx, racer: Racing, view: View): void {
   const y = roadY(view, racer.y)
   const wide = view.lane * CAR_WIDE
   const long = CAR_LONG * view.depth
+  const shape = BUILD_OF[racer.who.build]
 
   ctx.fillStyle = INK.shadow
-  body(ctx, x + wide * 0.07, y + long * 0.05, wide, long, RACER, wide * 0.16)
+  body(ctx, x + wide * 0.07, y + long * 0.05, wide, long, shape, wide * 0.16)
   ctx.fill()
 
   wheels(ctx, x, y, wide * 0.86, long, wide * 0.06)
 
   ctx.fillStyle = racer.who.colour
-  body(ctx, x, y, wide, long, RACER, wide * 0.16)
+  body(ctx, x, y, wide, long, shape, wide * 0.16)
   ctx.fill()
 
+  /*
+   * What makes each of them itself, beyond the colour.
+   *
+   * One or two marks each, drawn from the same primitives as everything else:
+   * a wing and a scoop, a tow boom, a roof rack. Enough that a glance at the
+   * mirror says which of them is behind you.
+   */
   ctx.fillStyle = racer.who.trim
-  ctx.fillRect(x - wide * 0.46, y - long * 0.52, wide * 0.92, long * 0.08)
-  ctx.fillRect(x - wide * 0.5, y + long * 0.42, wide, long * 0.1)
-
-  ctx.fillStyle = INK.visor
-  ctx.beginPath()
-  ctx.ellipse(x, y - long * 0.02, wide * 0.19, long * 0.15, 0, 0, Math.PI * 2)
-  ctx.fill()
+  if (racer.who.build === 'stock') {
+    // A bonnet scoop and a rear wing you could serve dinner on.
+    ctx.fillRect(x - wide * 0.12, y - long * 0.72, wide * 0.24, long * 0.14)
+    ctx.fillRect(x - wide * 0.54, y + long * 0.5, wide * 1.08, long * 0.12)
+    ctx.fillRect(x - wide * 0.46, y + long * 0.38, wide * 0.08, long * 0.14)
+    ctx.fillRect(x + wide * 0.38, y + long * 0.38, wide * 0.08, long * 0.14)
+  } else if (racer.who.build === 'tow') {
+    // A flat deck, a boom down the middle of it, and a hook on the end.
+    ctx.globalAlpha = 0.55
+    ctx.fillRect(x - wide * 0.3, y + long * 0.2, wide * 0.6, long * 0.56)
+    ctx.globalAlpha = 1
+    ctx.fillStyle = '#4a4f5c'
+    ctx.fillRect(x - wide * 0.06, y + long * 0.22, wide * 0.12, long * 0.56)
+    ctx.beginPath()
+    ctx.arc(x, y + long * 0.84, wide * 0.11, Math.PI, Math.PI * 2.1)
+    ctx.lineWidth = Math.max(2, wide * 0.08)
+    ctx.strokeStyle = '#4a4f5c'
+    ctx.stroke()
+  } else if (racer.who.build === 'coupe') {
+    // Two stripes over the roof, which is all a small car needs.
+    for (const side of [-1, 1]) {
+      ctx.fillRect(x + side * wide * 0.14 - wide * 0.05, y - long * 0.5, wide * 0.1, long * 1.3)
+    }
+  } else {
+    // A roof rack with a bag strapped under it.
+    ctx.fillRect(x - wide * 0.42, y + long * 0.24, wide * 0.84, long * 0.07)
+    ctx.fillRect(x - wide * 0.42, y + long * 0.66, wide * 0.84, long * 0.07)
+    ctx.fillStyle = '#c8cedb'
+    ctx.beginPath()
+    ctx.roundRect(x - wide * 0.26, y + long * 0.3, wide * 0.52, long * 0.34, wide * 0.08)
+    ctx.fill()
+  }
 
   // Rear lamps, since you are usually looking at the back of one.
   ctx.fillStyle = '#ff5b4a'
   for (const side of [-1, 1]) {
-    ctx.fillRect(x + side * wide * 0.32 - wide * 0.06, y + long * 0.34, wide * 0.12, long * 0.06)
+    ctx.fillRect(x + side * wide * 0.32 - wide * 0.06, y + long * 0.38, wide * 0.12, long * 0.06)
   }
+
+  /*
+   * And the face, last, over everything.
+   *
+   * It looks where the car is about to go — the same number that drives the
+   * indicator — so a glance sideways is the first warning you get that one of
+   * them is coming across.
+   */
+  drawFace(ctx, x, y, wide, long, racer.who.face, racer.signal)
 
   if (racer.signal !== 0 && Math.floor(view.clock * 5) % 2 === 0) {
     ctx.fillStyle = '#ffb02e'
@@ -501,7 +695,15 @@ export function drawRacer(ctx: Ctx, racer: Racing, view: View): void {
 }
 
 /** Everything on the road, in the order it has to be drawn. */
-export function drawRun(ctx: Ctx, run: Run, lane: number, view: View, w: number, h: number): void {
+export function drawRun(
+  ctx: Ctx,
+  run: Run,
+  lane: number,
+  view: View,
+  w: number,
+  h: number,
+  look = 0,
+): void {
   drawRoad(ctx, view, w, h)
   drawFinish(ctx, run.stage.distance, view)
   for (const can of run.cans) {
@@ -523,7 +725,7 @@ export function drawRun(ctx: Ctx, run: Run, lane: number, view: View, w: number,
     if (y < -CAR_LONG * 4 || y > SIGHT * 1.6) continue
     drawRacer(ctx, racer, view)
   }
-  drawMine(ctx, lane, view, run.stunned, run.mercy)
+  drawMine(ctx, lane, view, run.stunned, run.mercy, look)
 }
 
 /**

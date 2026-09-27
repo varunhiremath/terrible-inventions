@@ -153,6 +153,8 @@ export function Road() {
         const input: Input = {
           left: held.left, right: held.right, go: held.go, brake: held.brake,
         }
+        // Which way you are steering, for your car's eyes to follow.
+        const steerNow = (held.right ? 1 : 0) - (held.left ? 1 : 0)
 
         let stepped = false
         /*
@@ -274,7 +276,8 @@ export function Road() {
         ctx.beginPath()
         ctx.rect(0, capH, w, middle)
         ctx.clip()
-        drawRun(ctx, next, at, view, w, capH + middle)
+        // The last argument is which way you are steering, for the eyes.
+        drawRun(ctx, next, at, view, w, capH + middle, steerNow)
         ctx.restore()
 
         ctx.fillStyle = '#0d1016'

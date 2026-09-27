@@ -336,10 +336,29 @@ export function topSpeedOn(stage: Stage): number {
  * up on the same grid that handicap vanished and the same numbers put the test
  * driver last in every stage. These are the numbers for a standing start.
  */
+/**
+ * What sort of vehicle a racer is, and what sort of face it pulls.
+ *
+ * They have faces because a car with eyes in its windscreen is the oldest
+ * trick in the animated-car business — Disney was doing it in 1952 — and
+ * because a field of four identical wedges is a field of four identical
+ * wedges. Each one is its own machine with its own build, its own colour and
+ * its own expression, so they can be told apart at a glance and so there is
+ * somebody in there to beat.
+ *
+ * They are ours, though. Nothing here is modelled on a character from a film:
+ * this repository draws every sprite from primitives and invents every
+ * character in it, which is the rule the whole project is built on.
+ */
+export type Build = 'stock' | 'tow' | 'coupe' | 'camper'
+export type Face = 'keen' | 'cheerful' | 'eager' | 'sleepy'
+
 export interface Racer {
   name: string
   colour: string
   trim: string
+  build: Build
+  face: Face
   /** Fraction of your top speed they average over a stage. */
   pace: number
   /** How much they vary it, so nobody drives like a metronome. */
@@ -347,10 +366,14 @@ export interface Racer {
 }
 
 export const FIELD: readonly Racer[] = [
-  { name: 'Piston', colour: '#e8503a', trim: '#7d1f14', pace: 0.88, swing: 0.06 },
-  { name: 'Gasket', colour: '#f2b134', trim: '#8a5f10', pace: 0.85, swing: 0.09 },
-  { name: 'Tack', colour: '#5ad2e0', trim: '#1c6570', pace: 0.82, swing: 0.05 },
-  { name: 'Grinder', colour: '#9b7ede', trim: '#4a2f80', pace: 0.78, swing: 0.11 },
+  // The quick one: a low, wide stock car that knows it is quick.
+  { name: 'Piston', colour: '#e8503a', trim: '#7d1f14', build: 'stock', face: 'keen', pace: 0.88, swing: 0.06 },
+  // A tow truck with a hook on the back and no business being in a race.
+  { name: 'Gasket', colour: '#f2b134', trim: '#8a5f10', build: 'tow', face: 'cheerful', pace: 0.85, swing: 0.09 },
+  // A little coupé, all enthusiasm.
+  { name: 'Tack', colour: '#5ad2e0', trim: '#1c6570', build: 'coupe', face: 'eager', pace: 0.82, swing: 0.05 },
+  // And a camper van that would rather be somewhere quiet.
+  { name: 'Grinder', colour: '#9b7ede', trim: '#4a2f80', build: 'camper', face: 'sleepy', pace: 0.78, swing: 0.11 },
 ]
 
 /**
