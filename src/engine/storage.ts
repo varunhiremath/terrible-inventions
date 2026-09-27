@@ -86,6 +86,14 @@ export interface SaveState {
   /** Whether somebody else is driving one of the field. */
   roadTwoPlayer?: boolean
   /**
+   * The relay two devices meet at, typed in once.
+   *
+   * A laptop on the wifi or a deployed worker — see server/README.md. Kept in
+   * the save so it survives, and because the two devices in a house will
+   * almost always use the same one.
+   */
+  relay?: string
+  /**
    * Every question he has ever got right, by id. Never asked again.
    *
    * Kept apart from `log`, which is the record of attempts and drives the

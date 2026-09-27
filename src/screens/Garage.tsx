@@ -57,12 +57,14 @@ export function Garage({
   onClose,
   twoPlayer,
   onTwoPlayer,
+  onTogether,
 }: {
   picked: string
   onPick: (name: string) => void
   onClose: () => void
   twoPlayer: boolean
   onTwoPlayer: (on: boolean) => void
+  onTogether: () => void
 }) {
   return (
     <div
@@ -128,6 +130,23 @@ export function Garage({
             </p>
           </div>
           <Toggle label="Two players" on={twoPlayer} onChange={onTwoPlayer} />
+        </div>
+
+        {/*
+          * And the same race on two devices.
+          *
+          * Here rather than only at the flag, which is where it was first put
+          * and is exactly the wrong place: setting up a race is something you
+          * do before driving, not after finishing.
+          */}
+        <div className="mt-2 flex items-center justify-between gap-4 rounded-xl bg-white/5 p-3">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-chalk">On two devices</p>
+            <p className="mt-0.5 text-xs leading-snug text-dim">
+              A screen each, over the wifi. One of you reads out a code.
+            </p>
+          </div>
+          <Btn onClick={onTogether} className="shrink-0 px-3 py-2 text-xs">Set up</Btn>
         </div>
 
         <Btn tone="go" onClick={onClose} className="mt-3 w-full py-3">

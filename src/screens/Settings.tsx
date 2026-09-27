@@ -36,7 +36,7 @@ import { UpdatePill } from '../ui/UpdatePill'
 export function Settings() {
   const {
     save, saveNames, saveNote, replaceSave, setRewards, setVoice, setMusic, go,
-    watchIntro, startCoop,
+    watchIntro, startCoop, setRelay,
   } = useStore()
 
   const [kidName, setKidName] = useState(save.names.kidName ?? '')
@@ -44,6 +44,7 @@ export function Settings() {
   const [note, setNote] = useState(save.note?.text ?? '')
   const [rewards, setRewardText] = useState(save.rewards.join('\n'))
   const [status, setStatus] = useState('')
+  const [relay, setRelayText] = useState(save.relay ?? '')
   const [looking, setLooking] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -217,6 +218,23 @@ export function Settings() {
         <Row title="Two-player puzzle" hint="One puzzle, two halves of the clues, one device.">
           <Btn onClick={startCoop} className="px-3 py-2 text-xs">Start</Btn>
         </Row>
+        <div className="py-3">
+          <p className="text-sm font-bold text-chalk">Relay</p>
+          <p className="mt-0.5 text-xs leading-snug text-dim">
+            For racing on two devices. They need something in the middle to pass
+            messages between them — run{' '}
+            <span className="text-chalk">node server/relay.mjs</span> on a laptop on
+            the same wifi and it prints the address. See server/README.md.
+          </p>
+          <input
+            className={`${field} mt-2.5`}
+            value={relay}
+            onChange={(e) => setRelayText(e.target.value)}
+            onBlur={() => setRelay(relay)}
+            placeholder="ws://192.168.1.24:8787"
+            aria-label="Relay address"
+          />
+        </div>
       </Group>
 
       <Group title="Intros">

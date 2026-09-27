@@ -4,7 +4,8 @@ import {
   DEFAULT_CAR, TANK, kmh, missionSays, levelFor,
 } from '../road/level'
 import {
-  FIXED, STARTING_LIVES, ghostAt, missionMet, newRun, placeOf, resume, standings, step,
+  FIXED, NO_INPUT, STARTING_LIVES, ghostAt, missionMet, newRun, noTrail, placeOf, resume,
+  standings, step,
   type Entry,
   type Input, type RoadEvent, type Run, type Status, type Trail,
 } from '../road/run'
@@ -17,8 +18,11 @@ import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
 import { LABELS, hintAlpha } from '../ui/padHints'
 import { useStore } from '../store'
+import type { Link } from '../net/link'
+import { FRAMES_PER_SECOND, blend, shareable, type Shared } from '../net/race'
 import { spareLives, tankScale } from '../workshop/kit'
 import { Garage } from './Garage'
+import { Together } from './Together'
 import { Interlude } from './Interlude'
 
 /**
@@ -174,6 +178,33 @@ export function Road() {
    */
   const buttons2 = useRef(createLatch())
   const padRef2 = useRef<Key[]>([])
+
+  /*
+   * The other device, when there is one.
+   *
+   * Three ways this screen can be running. On its own, which is everything
+   * above. As the host of a race somebody else is in, which is the same
+   * simulation with the second car's buttons arriving over a wire instead of
+   * off the glass. Or as the guest, which does not simulate anything at all —
+   * it draws what it is told and sends back what is being pressed.
+   *
+   * All of it in refs, because the loop runs outside React and a race must not
+   * skip a frame because a re-render was in flight.
+   */
+  const linkRef = useRef<Link | null>(null)
+  const seatRef = useRef<'solo' | 'host' | 'guest'>('solo')
+  const [seat, setSeat] = useState<'solo' | 'host' | 'guest'>('solo')
+  const [lobby, setLobby] = useState(false)
+  /** Host: what the other person is pressing. */
+  const remote = useRef<Input>(NO_INPUT)
+  /** Guest: the last two things the host said, and when the newer arrived. */
+  const wire = useRef<{ older: Shared | null; newer: Shared | null; at: number }>({
+    older: null, newer: null, at: 0,
+  })
+  /** Host: when the last frame went out. */
+  const sent = useRef(0)
+  /** Guest: what was last sent, so buttons only go when they change. */
+  const said = useRef('')
   const [hud, setHud] = useState<Hud>({
     level: 1, score: 0, speed: 0, fuel: TANK, lives: 3, status: 'driving', gone: 0,
     missionDone: false, place: 1, clock: 0, countdown: 0,
@@ -216,18 +247,62 @@ export function Road() {
       last = now
       clock.current += elapsed
 
-      const run = runRef.current
+      const playing = seatRef.current
+      const guest = playing === 'guest'
+
+      /*
+       * The guest does not simulate.
+       *
+       * It holds the last two things the host said and draws somewhere
+       * between them, which is about a twentieth of a second behind what the
+       * host knows. That lag is the price of the two devices never disagreeing
+       * about what happened, and at fifty milliseconds nobody notices it on a
+       * road where the cars are the size of a thumbnail.
+       */
+      const fromWire = (): Run | null => {
+        const { older, newer, at } = wire.current
+        if (!newer) return null
+        const part = older ? (now - at) / (1000 / FRAMES_PER_SECOND) : 1
+        const shown = older ? blend(older, newer, part) : newer
+        // The two parts that never leave the machine that made them, stubbed
+        // so the drawing and the readouts can treat this like any other run.
+        return { ...shown, trail: noTrail(), events: [] }
+      }
+
+      const run = guest ? fromWire() : runRef.current
       if (run) {
         const held = buttons.current.read()
         const input: Input = {
           left: held.left, right: held.right, go: held.go, brake: held.brake,
         }
         const held2 = buttons2.current.read()
-        const input2: Input = {
-          left: held2.left, right: held2.right, go: held2.go, brake: held2.brake,
-        }
+        /*
+         * Where the second car's buttons come from.
+         *
+         * Off the other half of the glass when two people share a tablet, and
+         * off the wire when they are on two devices. The simulation cannot
+         * tell the difference and does not need to.
+         */
+        const input2: Input = playing === 'host'
+          ? remote.current
+          : { left: held2.left, right: held2.right, go: held2.go, brake: held2.brake }
         // Which way you are steering, for your car's eyes to follow.
         const steerNow = (held.right ? 1 : 0) - (held.left ? 1 : 0)
+
+        /*
+         * The guest's buttons, sent as they change.
+         *
+         * Four booleans, and only when one of them is different from the last
+         * lot — a race is mostly somebody holding the pedal down, so this is a
+         * handful of messages a second rather than sixty.
+         */
+        if (guest && linkRef.current) {
+          const shape = `${input.left}${input.right}${input.go}${input.brake}`
+          if (shape !== said.current) {
+            said.current = shape
+            linkRef.current.send({ t: 'in', in: input })
+          }
+        }
 
         let stepped = false
         /*
@@ -237,17 +312,41 @@ export function Road() {
          * way in the pipes, and again in the caves.
          */
         const heard: RoadEvent[] = []
-        const { previous, next, alpha } = pacer.advance(run, elapsed, (s) => {
-          stepped = true
-          const after = step(s, input, FIXED, input2)
-          if (after.events.length > 0) heard.push(...after.events)
-          return after
-        })
+        /*
+         * Already blended, for the guest.
+         *
+         * The pacer exists to run the simulation at a fixed rate and draw
+         * between steps. There is no simulation on this end, so what came off
+         * the wire is both ends of the interpolation and there is nothing to
+         * advance.
+         */
+        const { previous, next, alpha } = guest
+          ? { previous: run, next: run, alpha: 0 }
+          : pacer.advance(run, elapsed, (s) => {
+              stepped = true
+              const after = step(s, input, FIXED, input2)
+              if (after.events.length > 0) heard.push(...after.events)
+              return after
+            })
         if (stepped) {
           buttons.current.consumed()
           buttons2.current.consumed()
         }
-        runRef.current = next
+        if (!guest) runRef.current = next
+
+        /*
+         * And the host says where everything is, twenty times a second.
+         *
+         * The whole run rather than a hand-rolled list of fields. It is a few
+         * kilobytes, which on a home network is nothing, and a protocol with
+         * one message in it cannot fall out of step with the thing it
+         * describes — which a field-by-field one quietly would, the first time
+         * anything was added to a car.
+         */
+        if (playing === 'host' && linkRef.current && now - sent.current >= 1000 / FRAMES_PER_SECOND) {
+          sent.current = now
+          linkRef.current.send({ t: 'st', run: shareable(next) })
+        }
 
         if (heard.length > 0) {
           const loudest = LOUDEST.find((name) => heard.includes(name))
@@ -267,18 +366,33 @@ export function Road() {
         const dry = Math.max(0, 1 - next.fuel / (next.tank * 0.35))
         setHeat(Math.max(deep * 0.5 + (next.distance / next.level.distance) * 0.25, thin * 0.8, dry))
 
-        const standing = placeOf(next)
+        /*
+         * Whose race the readouts are about.
+         *
+         * On the guest's device every one of these numbers should be theirs,
+         * and almost all of them come off the player's own car by default —
+         * which on that device is somebody else's car, on somebody else's
+         * screen. The two that are visibly wrong if left alone are the speed
+         * and the position, so they are taken off the car this device is
+         * actually driving.
+         */
+        const driving = guest ? next.racers.find((r) => r.id === next.human) ?? null : null
+        const ownSpeed = driving ? driving.speed : next.speed
+        const standing = driving
+          ? 1 + next.racers.filter((r) => r.y > driving.y).length +
+            (next.distance > driving.y ? 1 : 0)
+          : placeOf(next)
         if (
           next.number !== hud.level || next.status !== hud.status ||
           Math.round(next.score) !== hud.score || Math.round(next.fuel) !== Math.round(hud.fuel) ||
-          kmh(next.speed) !== hud.speed || next.lives !== hud.lives || standing !== hud.place ||
+          kmh(ownSpeed) !== hud.speed || next.lives !== hud.lives || standing !== hud.place ||
           Math.round(next.clock * 10) !== Math.round(hud.clock * 10) ||
           Math.ceil(next.countdown) !== Math.ceil(hud.countdown)
         ) {
           setHud({
             level: next.number,
             score: next.score,
-            speed: kmh(next.speed),
+            speed: kmh(ownSpeed),
             fuel: next.fuel,
             lives: next.lives,
             status: next.status,
@@ -343,13 +457,23 @@ export function Road() {
          * sideways and two people sit at the two ends of it, not one above
          * the other.
          */
-        const twoUp = next.human !== null
+        /*
+         * Split only when two people are looking at one screen.
+         *
+         * On two devices each of them has a whole screen for their own car, so
+         * the host draws only its own half of the picture and the guest draws
+         * only the other. Splitting there would give each person a view of
+         * somebody else's car they neither need nor asked for.
+         */
+        const twoUp = playing === 'solo' && next.human !== null
         const halves = twoUp
           ? [
               { x: 0, w: w / 2, mine: 'you' as const },
               { x: w / 2, w: w / 2, mine: next.human as number },
             ]
-          : [{ x: 0, w, mine: 'you' as const }]
+          // The guest is looking out of the car it is driving, not out of the
+          // host's.
+          : [{ x: 0, w, mine: guest ? (next.human as number) : ('you' as const) }]
 
         const depth = middle / SIGHT
         const longEnough = (CAR_LONG * depth) / (1.45 * CAR_WIDE)
@@ -419,7 +543,7 @@ export function Road() {
         const backRoom = 70 * (canvas.width / Math.max(1, canvas.clientWidth))
         const score = `${next.score}`.padStart(6, '0')
         const level = `LEVEL ${next.number}`
-        const speed = `${kmh(next.speed)} KM/H`
+        const speed = `${kmh(ownSpeed)} KM/H`
         let text = Math.min(lane * 0.42, capH * 0.6)
         const fits = () => {
           ctx.font = `bold ${text}px ui-monospace, monospace`
@@ -449,10 +573,20 @@ export function Road() {
           mission.kind === 'pass' ? `${Math.min(next.passed, mission.count)}/${mission.count} PASSED`
           : mission.kind === 'cans' ? `${Math.min(next.cansTaken, mission.count)}/${mission.count} CANS`
           : next.pranged === 0 ? 'NO SCRATCHES YET' : 'SCRATCHED'
-        ctx.font = `bold ${Math.max(9, text * 0.62)}px ui-monospace, monospace`
-        ctx.textAlign = 'center'
-        ctx.fillStyle = missionMet(next) ? '#4ade80' : '#8a91ab'
-        ctx.fillText(progress, w / 2, capH + text * 0.9)
+        /*
+         * Not on the guest's screen, because it is not the guest's job.
+         *
+         * The mission belongs to whoever is running the race — pick up two
+         * cans, arrive without a scratch — and the second person is driving
+         * one car in it, not doing the errands. Showing them somebody else's
+         * progress bar is worse than showing them nothing.
+         */
+        if (!guest) {
+          ctx.font = `bold ${Math.max(9, text * 0.62)}px ui-monospace, monospace`
+          ctx.textAlign = 'center'
+          ctx.fillStyle = missionMet(next) ? '#4ade80' : '#8a91ab'
+          ctx.fillText(progress, w / 2, capH + text * 0.9)
+        }
 
         /*
          * Where you are in the race.
@@ -495,6 +629,9 @@ export function Road() {
         ctx.textAlign = 'left'
 
         // --- the fuel gauge, down the side of the road ------------------------
+        // Also the host's: the second car does not burn anything, and a needle
+        // you cannot affect and are not troubled by is just a moving stripe.
+        if (!guest) {
         const gaugeH = middle * 0.5
         const gaugeW = Math.max(6, lane * 0.16)
         const gaugeX = left + lane * LANES + lane * 0.24
@@ -530,6 +667,7 @@ export function Road() {
         ctx.textBaseline = 'bottom'
         ctx.fillText('F', gaugeX + gaugeW / 2, gaugeY - gaugeW * 0.6)
         ctx.textBaseline = 'middle'
+        }
 
         /*
          * The clock, under the mission line.
@@ -623,11 +761,14 @@ export function Road() {
    * that is what the crash cost.
    */
   useEffect(() => {
-    if (!twoPlayer || hud.status !== 'crashed' || hud.lives <= 0) return
+    // The host clears its own wreck; the guest has no run to clear.
+    if (seat === 'guest') return
+    if (!twoPlayer && seat === 'solo') return
+    if (hud.status !== 'crashed' || hud.lives <= 0) return
     const timer = window.setTimeout(() => carryOn(false), 900)
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [twoPlayer, hud.status, hud.lives])
+  }, [twoPlayer, seat, hud.status, hud.lives])
 
   /** Coins for the drive, paid once, when the level is done or the cars run out. */
   const banked = useRef('')
@@ -803,6 +944,63 @@ export function Road() {
     }
   }
 
+  /**
+   * The moment the other device is in.
+   *
+   * The host rebuilds the run with a second seat in it so one of the field is
+   * under somebody's control; the guest throws its own run away, because from
+   * here it is being told what the race looks like rather than working it out.
+   */
+  const goLive = (link: Link, host: boolean) => {
+    linkRef.current = link
+    seatRef.current = host ? 'host' : 'guest'
+    setSeat(host ? 'host' : 'guest')
+    setLobby(false)
+    wire.current = { older: null, newer: null, at: 0 }
+
+    link.onMessage((message) => {
+      const tag = (message as { t?: string }).t
+      if (tag === 'in') {
+        remote.current = (message as { in: Input }).in
+      } else if (tag === 'st') {
+        const run = (message as { run: Shared }).run
+        wire.current = { older: wire.current.newer, newer: run, at: performance.now() }
+      } else if (tag === 'bye') {
+        hangUp()
+      }
+    })
+
+    if (host) {
+      entry.current = { ...entry.current, twoPlayer: true }
+      runRef.current = withStock(newRun(1, STARTING_LIVES, 0, 1, entry.current), stock.current)
+      setHud((h) => ({ ...h, level: 1, status: 'driving', clock: 0, countdown: COUNTDOWN }))
+    } else {
+      runRef.current = null
+    }
+  }
+
+  /** Put the phone down, whichever end of it you were on. */
+  const hangUp = () => {
+    linkRef.current?.send({ t: 'bye' })
+    linkRef.current?.close()
+    linkRef.current = null
+    seatRef.current = 'solo'
+    setSeat('solo')
+    remote.current = NO_INPUT
+    wire.current = { older: null, newer: null, at: 0 }
+    entry.current = { ...entry.current, twoPlayer }
+    runRef.current = withStock(
+      newRun(1, STARTING_LIVES, 0, 1, entry.current),
+      stock.current,
+    )
+  }
+
+  // Hang up if the screen goes away with a race still running.
+  useEffect(() => () => {
+    linkRef.current?.close()
+    linkRef.current = null
+  }, [])
+
   const startOver = () => {
     runRef.current = newRun(1, STARTING_LIVES, 0, 1, entry.current)
     setHud({
@@ -829,7 +1027,7 @@ export function Road() {
    * Australia is not a thing a race does. With two of you, a crash costs what
    * a crash costs and the road carries on.
    */
-  const asking = hud.status === 'crashed' && !outOfLives && !twoPlayer
+  const asking = hud.status === 'crashed' && !outOfLives && !twoPlayer && seat === 'solo'
   const overlay = hud.status !== 'driving' && !asking
 
   return (
@@ -850,6 +1048,8 @@ export function Road() {
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
       </div>
 
+      {lobby && <Together onLive={goLive} onClose={() => setLobby(false)} />}
+
       {garage && (
         <Garage
           picked={car}
@@ -857,6 +1057,10 @@ export function Road() {
           onClose={() => setGarage(false)}
           twoPlayer={twoPlayer}
           onTwoPlayer={takeSecond}
+          onTogether={() => {
+            setGarage(false)
+            setLobby(true)
+          }}
         />
       )}
 
@@ -955,8 +1159,13 @@ export function Road() {
                   On to level {hud.level + 1}
                 </Btn>
               )}
-              {hud.status === 'levelDone' && (
+              {hud.status === 'levelDone' && seat === 'solo' && (
                 <Btn onClick={() => setGarage(true)}>Change car</Btn>
+              )}
+              {seat === 'solo' ? (
+                <Btn onClick={() => setLobby(true)}>Play together</Btn>
+              ) : (
+                <Btn onClick={hangUp}>Stop playing together</Btn>
               )}
               {outOfLives && (
                 <Btn tone="go" onClick={startOver} className="py-4 text-lg">

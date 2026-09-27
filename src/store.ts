@@ -94,6 +94,8 @@ interface State {
   recordPlace: (place: number) => void
   /** Whether a second person is driving one of the field. */
   setTwoPlayer: (on: boolean) => void
+  /** Where two devices meet. */
+  setRelay: (url: string) => void
   /**
    * Coins earned by playing, paid at the end of a run.
    *
@@ -400,6 +402,12 @@ export const useStore = create<State>((set, get) => ({
 
   setTwoPlayer: (on) => {
     const next: SaveState = { ...get().save, roadTwoPlayer: on }
+    set({ save: next })
+    void persistSave(next)
+  },
+
+  setRelay: (url) => {
+    const next: SaveState = { ...get().save, relay: url.trim() }
     set({ save: next })
     void persistSave(next)
   },

@@ -870,7 +870,15 @@ export function drawGhost(ctx: Ctx, lane: number, gone: number, view: View): voi
  */
 export function drawRun(
   ctx: Ctx,
-  run: Run,
+  /*
+   * Everything but the two parts that never leave the machine that made them.
+   *
+   * `trail` is the record of a drive, kept so it can be replayed later, and
+   * `events` is what happened in one step. Neither is anything to draw, and
+   * writing the type this way is what lets the second device draw a race it
+   * is only being told about.
+   */
+  run: Omit<Run, 'trail' | 'events'>,
   lane: number,
   view: View,
   w: number,
