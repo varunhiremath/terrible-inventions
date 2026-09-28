@@ -16,6 +16,15 @@
  * leaving a notch of background showing through.
  */
 
+/**
+ * How wide the drawn line is, as a fraction of a tile.
+ *
+ * Shared, because the level transition draws a corridor of the same maze and
+ * a corridor whose walls are a different weight from the board's is a
+ * different maze.
+ */
+export const WALL_THICKNESS = 0.16
+
 export interface WallBar {
   /** Centre, in tile coordinates. */
   x: number

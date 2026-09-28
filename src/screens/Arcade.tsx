@@ -19,7 +19,8 @@ import { taunt, type TauntMoment } from '../arcade/taunts'
 import { fitBoard } from '../arcade/fit'
 import { createPacer } from '../arcade/pacing'
 import { directionFromGesture, directionFromSwipe, toScreen } from '../arcade/steer'
-import { wallBars } from '../render/mazeGeometry'
+import { WALL_THICKNESS, wallBars } from '../render/mazeGeometry'
+import { MAZE_INK, hexOf } from '../render/mazeInk'
 import { buildFruit, fruitForLevel } from '../render/fruit'
 import { buildGhost, buildPlayer, type Ghost } from '../render/characters'
 import { RUNNER_HULL, RUNNER_ROUND, svgPath } from '../render/silhouettes'
@@ -56,12 +57,14 @@ import { LevelWipe } from '../ui/LevelWipe'
  */
 const ACTOR_HEIGHT = 0.02
 
-/** Peach, like the arcade's. */
-const DOT_COLOUR = 0xffc9a8
-/** The maze's own colour. Thin lines, so it can be bright without shouting. */
-const WALL_COLOUR = 0xf24fd6
-/** A chaser you can eat. */
-const FRIGHTENED_COLOUR = 0x2632d6
+/*
+ * The board's colours live in `mazeInk.ts`, because the walk to the next level
+ * draws a corridor of this same maze on a flat canvas and has to agree with
+ * this about what a wall looks like.
+ */
+const DOT_COLOUR = hexOf(MAZE_INK.dot)
+const WALL_COLOUR = hexOf(MAZE_INK.wall)
+const FRIGHTENED_COLOUR = hexOf(MAZE_INK.frightened)
 
 /**
  * Which sound answers which event.
@@ -188,7 +191,7 @@ function PlayerIcon() {
      * chaser gone pale because it can be eaten.
      */
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color('#05060a')
+    scene.background = new THREE.Color(MAZE_INK.back)
 
     // Only the fruit are lit; everything else draws its own flat colour. The
     // light comes from straight above, because so does the camera.
@@ -218,8 +221,6 @@ function PlayerIcon() {
      * open floor, which is what draws a one-tile wall as the two parallel
      * lines everyone pictures when they picture this game.
      */
-    const WALL_THICKNESS = 0.16
-
     const plane = new THREE.PlaneGeometry(1, 1)
     const bars = wallBars(board.rows, TILE.WALL, WALL_THICKNESS)
     const walls = new THREE.InstancedMesh(
