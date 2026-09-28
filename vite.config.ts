@@ -62,6 +62,17 @@ export default defineConfig({
         // most notice missing on a bad connection.
         globPatterns: ['**/*.{js,css,html,png,svg,woff2}', 'spoken/*.opus', 'spoken/index.json'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        /*
+         * The listening page is a page, not part of the app.
+         *
+         * Workbox answers any navigation it does not recognise with the app's
+         * own index.html, which is right for a single-page app and wrong for
+         * the one plain HTML file sitting next to it: opening /listen/ on a
+         * phone that has the app installed would have loaded the games. The
+         * denylist sends that path to the network and the cache entry beside
+         * it, which is what it is for.
+         */
+        navigateFallbackDenylist: [/\/listen\//],
       },
     }),
   ],

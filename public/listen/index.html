@@ -1,0 +1,114 @@
+<!doctype html>
+<!--
+  A page to listen to things on.
+
+  Two decisions in this project cannot be made by measuring anything, because
+  they are about whether something sounds right: which voice {papa} should
+  have, and whether a tune is any good. Both were sent as files in a chat and
+  neither arrived anywhere findable.
+
+  So they live here instead, next to the game, where opening a link and
+  pressing play is the whole of what anybody has to do. It is a plain file in
+  public/, copied into the build as-is — nothing imports it and nothing in the
+  app links to it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Have a listen</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        padding: 1.25rem 1rem 3rem;
+        background: #14161f;
+        color: #e8ebf5;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.5;
+      }
+      main { max-width: 34rem; margin: 0 auto; }
+      h1 {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 1.1rem; letter-spacing: 0.18em; text-transform: uppercase;
+        color: #ff6b53; margin: 0 0 0.25rem;
+      }
+      h2 {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.72rem; letter-spacing: 0.2em; text-transform: uppercase;
+        color: #8a91ab; margin: 2rem 0 0.5rem;
+      }
+      p { margin: 0.4rem 0 0; }
+      .hint { color: #8a91ab; font-size: 0.85rem; }
+      .card {
+        background: #1d2030; border: 2px solid #2c3145; border-radius: 0.9rem;
+        padding: 0.85rem 0.9rem; margin-top: 0.6rem;
+      }
+      .name { font-weight: 700; font-size: 0.98rem; }
+      .note { color: #8a91ab; font-size: 0.8rem; margin-top: 0.1rem; }
+      audio { width: 100%; margin-top: 0.6rem; }
+      .pick { color: #ffc84a; font-weight: 700; }
+      a { color: #58b9ff; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Have a listen</h1>
+      <p class="hint">
+        Two things I cannot judge for myself. Tap play, then tell me a number
+        for the voice and yes or no for the tune.
+      </p>
+
+      <h2>Papa&rsquo;s voice &mdash; five candidates</h2>
+      <p class="hint">
+        The same two lines each. There is no Indian-English voice available at
+        all, so <span class="pick">2</span> and <span class="pick">3</span> come
+        from a set of Hindi speakers reading American English, which is the
+        nearest thing to the mix you described.
+      </p>
+
+      <div class="card">
+        <div class="name">1 &mdash; what he sounds like now</div>
+        <div class="note">Northern English. The one in the game today.</div>
+        <audio controls preload="none" src="voice-1-british.opus"></audio>
+      </div>
+      <div class="card">
+        <div class="name">2 &mdash; Hindi speaker, American English</div>
+        <div class="note">L2-ARCTIC speaker ASI.</div>
+        <audio controls preload="none" src="voice-2-hindi-asi.opus"></audio>
+      </div>
+      <div class="card">
+        <div class="name">3 &mdash; Hindi speaker, American English</div>
+        <div class="note">L2-ARCTIC speaker RRBI.</div>
+        <audio controls preload="none" src="voice-3-hindi-rrbi.opus"></audio>
+      </div>
+      <div class="card">
+        <div class="name">4 &mdash; &ldquo;kusal&rdquo;</div>
+        <div class="note">A South Asian English voice, single speaker.</div>
+        <audio controls preload="none" src="voice-4-kusal.opus"></audio>
+      </div>
+      <div class="card">
+        <div class="name">5 &mdash; &ldquo;reza&rdquo;</div>
+        <div class="note">Another accented English voice. Slower than the rest.</div>
+        <audio controls preload="none" src="voice-5-reza.opus"></audio>
+      </div>
+
+      <h2>The new Papa Panic tune</h2>
+      <p class="hint">
+        Forty seconds: one full pass and the gap after it. Sixteen bars in four
+        parts &mdash; two of the bouncy bit, then four where the bass walks away
+        and the drums drop to one hit a bar, then four that climb back out
+        busier. Most bars start on a rest and the phrases land off the beat.
+      </p>
+      <div class="card">
+        <div class="name">Papa Panic</div>
+        <div class="note">If this is the right direction I will do the other five the same way.</div>
+        <audio controls preload="none" src="tune-papa-panic.opus"></audio>
+      </div>
+
+      <p class="hint" style="margin-top:2rem">
+        <a href="../">Back to the games</a>
+      </p>
+    </main>
+  </body>
+</html>
