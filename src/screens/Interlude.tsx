@@ -21,23 +21,65 @@ import { useStore } from '../store'
  * A wrong answer costs nothing. Somebody who has just lost a life is not in the
  * mood to be fined, and the explanation runs either way because the point is
  * the idea rather than the mark.
+ *
+ * It is offered rather than imposed, and that is the whole design.
+ *
+ * The first version put the question up with no way past it, reasoning that a
+ * skip is only a way of not playing this part and that a reward means nothing
+ * if answering is optional. What actually happened was reported from the
+ * sofa: he tapped whichever answer was nearest to get back to the game. Which
+ * is the same thing as skipping, except it teaches him that guessing works
+ * and it spends a question he might have wanted.
+ *
+ * So the card opens with the bargain stated plainly — answer one and have the
+ * life back, or carry on without it — and both doors are the same size. If he
+ * does not want to think right now he says so, honestly, in one tap, and
+ * nothing is lost. If he does, he means it.
+ *
+ * And getting one wrong is not the end of the conversation. The explanation
+ * comes up and then he can take another, as many as he likes: somebody asking
+ * for another question is exactly the thing this whole card exists to
+ * encourage, and refusing him on the grounds that he already had a go would
+ * be perverse.
  */
 export function Interlude({
   onDone,
   reward,
+  lastChance = false,
 }: {
   /** Told whether it was right, so the game can pay out. */
   onDone: (correct: boolean) => void
   /** What a right answer is worth here, in the game's own terms. */
   reward?: string
+  /**
+   * Whether this is the last one: no cars left, and a right answer is the
+   * only way the run carries on.
+   *
+   * It changes what the card says rather than how it works. The stakes are
+   * the point — "one more question and you can keep going" is a reason to
+   * think about it, where the same card at the start of a run is an
+   * interruption.
+   */
+  lastChance?: boolean
 }) {
   const save = useStore((s) => s.save)
   const recent = useStore((s) => s.recentQuestions)
   const lastTopic = useStore((s) => s.lastTopic)
   const answered = useStore((s) => s.answerInterlude)
 
-  // Chosen once, not on every render: a re-render is not a reroll, and a
-  // question that changed under you as you thought about it would be cruel.
+  /**
+   * Which part of the conversation this is.
+   *
+   * `offer` is the bargain; `asking` is a question on screen; the verdict
+   * below turns it into an answer and an explanation.
+   */
+  const [phase, setPhase] = useState<'offer' | 'asking'>('offer')
+  /** Bumped to fetch another question, which is the only thing that rerolls. */
+  const [round, setRound] = useState(0)
+
+  // Chosen once per round, not on every render: a re-render is not a reroll,
+  // and a question that changed under you as you thought about it would be
+  // cruel.
   const question = useMemo(
     () =>
       pickQuestion(save.rating, Math.random(), Math.floor(Math.random() * 1e9), {
@@ -57,9 +99,11 @@ export function Interlude({
         topics: FACT_TOPICS,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [round],
   )
   const [verdict, setVerdict] = useState<{ correct: boolean; given: string } | null>(null)
+  /** Whether any question this time round has been got right. */
+  const [won, setWon] = useState(false)
 
   /*
    * The chase tune keeps running while a question is on screen otherwise, and
@@ -81,6 +125,7 @@ export function Interlude({
   const settle = (given: string, correct: boolean) => {
     if (verdict) return
     setVerdict({ correct, given })
+    if (correct) setWon(true)
     answered(
       question.kind === 'maths' ? question.problem : null,
       correct,
@@ -113,7 +158,37 @@ export function Interlude({
       onPointerUp={(e) => e.stopPropagation()}
     >
       <div className="rise-in block-panel max-h-full w-full max-w-xl overflow-y-auto p-5 sm:p-6 short:max-w-3xl short:p-3">
+        {phase === 'offer' && (
+          <div className="fade-in">
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-rust">
+              {lastChance ? 'Last one' : 'A question, if you want it'}
+            </p>
+            <p className="mt-2 text-xl leading-snug text-chalk sm:text-2xl short:text-base">
+              {lastChance
+                ? 'That was the last of them. Get one question right and you can keep going.'
+                : `Answer one and you get ${reward ?? 'it'} back. Or carry straight on without.`}
+            </p>
+            <div className="mt-5 grid gap-2.5 short:mt-3 short:grid-cols-2 short:gap-2">
+              <button
+                type="button"
+                onClick={() => setPhase('asking')}
+                className="block-btn bg-bolt px-4 py-4 text-lg text-ink short:py-2.5 short:text-base"
+              >
+                {lastChance ? 'Give me a question' : `Answer one for ${reward ?? 'it'}`}
+              </button>
+              <button
+                type="button"
+                onClick={() => onDone(false)}
+                className="block-btn px-4 py-3.5 text-base short:py-2.5 short:text-sm"
+              >
+                {lastChance ? 'No thanks, I am done' : 'Carry on without it'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* The topic, as a colour first and a word second. */}
+        {phase === 'asking' && (
         <div className="flex items-center gap-2.5">
           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: topic.tint }} />
           <span
@@ -123,8 +198,9 @@ export function Interlude({
             {topic.label}
           </span>
         </div>
+        )}
 
-        {question.kind === 'maths' ? (
+        {phase === 'asking' && (question.kind === 'maths' ? (
           <div className="mt-4">
             <ProblemView problem={question.problem} locked={verdict !== null} onAnswer={settle} />
           </div>
@@ -188,7 +264,7 @@ export function Interlude({
               })}
             </div>
           </>
-        )}
+        ))}
 
         {verdict && (
           <div className="fade-in mt-5 border-t-2 border-ink-line pt-4 short:mt-3 short:pt-2">
@@ -207,28 +283,58 @@ export function Interlude({
                 {reward}
               </p>
             )}
-            <button
-              type="button"
-              onClick={() => onDone(verdict.correct)}
-              className="block-btn mt-5 w-full bg-bolt py-4 text-lg text-ink short:mt-3 short:py-2.5 short:text-base"
-            >
-              Back to it
-            </button>
+            {/*
+              * Right: take it and go. Wrong: another one, or go anyway.
+              *
+              * The reward is paid on `won` rather than on this last answer,
+              * so getting one right and then trying another for fun cannot
+              * take it away again.
+              */}
+            {verdict.correct ? (
+              <button
+                type="button"
+                onClick={() => onDone(true)}
+                className="block-btn mt-5 w-full bg-bolt py-4 text-lg text-ink short:mt-3 short:py-2.5 short:text-base"
+              >
+                Back to it
+              </button>
+            ) : (
+              <div className="mt-5 grid gap-2.5 short:mt-3 short:grid-cols-2 short:gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVerdict(null)
+                    setRound((n) => n + 1)
+                  }}
+                  className="block-btn bg-bolt px-4 py-4 text-lg text-ink short:py-2.5 short:text-base"
+                >
+                  Try another one
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDone(won)}
+                  className="block-btn px-4 py-3.5 text-base short:py-2.5 short:text-sm"
+                >
+                  {lastChance ? 'That is enough' : 'Back to it'}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
         {/*
-          * No way past it.
+          * The stakes, while a question is up.
           *
-          * There used to be a skip, on the reasoning that being stuck on a
-          * question you cannot answer is worse than not being asked. But there
-          * are four options and a wrong answer costs nothing — so the skip was
-          * only ever a way of not playing this part, and a reward for
-          * answering is no reward at all if the answer is optional.
+          * There used to be a note here explaining that there was no way past
+          * the card, on the reasoning that a reward means nothing if answering
+          * is optional. That turned out to be exactly backwards: with no way
+          * past, the cheapest way out was to guess — so the reward was being
+          * paid out at random and the question was not being read. Offering
+          * the skip up front is what makes the answer mean something.
           */}
-        {!verdict && reward && (
+        {phase === 'asking' && !verdict && reward && (
           <p className="mt-4 text-center font-mono text-[0.7rem] uppercase tracking-[0.2em] text-moss short:mt-2">
-            right answer: {reward}
+            {won ? 'already won — this one is for fun' : `right answer: ${reward}`}
           </p>
         )}
       </div>

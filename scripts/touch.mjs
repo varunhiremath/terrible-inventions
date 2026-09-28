@@ -63,18 +63,45 @@ else {
  */
 await open(/the road/i, '?level=5')
 await page.keyboard.down('ArrowUp')
+/*
+ * The card opens with an offer, so the wait is for that and not for options.
+ *
+ * "Answer one and have your car back, or carry straight on." Pressing the
+ * first door is what puts a question on screen, and both presses here go
+ * through real pointers — that is the whole point of this probe.
+ */
 let asked = false
+const offer = () => page.getByRole('button', { name: /^answer one for/i })
 for (let wait = 0; wait < 60 && !asked; wait++) {
   await page.waitForTimeout(1000)
-  asked = (await page.locator('.rise-in.block-btn').count()) > 0
+  asked = (await offer().count()) > 0
 }
 await page.keyboard.up('ArrowUp')
-if (!asked) problems.push('the road never asked a question')
+if (!asked) problems.push('the road never offered a question')
 else {
-  await page.locator('.rise-in.block-btn').first().click()
-  await page.waitForTimeout(900)
-  if ((await page.getByRole('button', { name: /back to it/i }).count()) === 0) {
-    problems.push('the question could not be answered by touching an option')
+  const door = await offer().first().boundingBox()
+  if (!door) problems.push('the offer has nothing to press')
+  else {
+    await page.mouse.move(door.x + door.width / 2, door.y + door.height / 2)
+    await page.mouse.down()
+    await page.mouse.up()
+  }
+  await page.waitForTimeout(700)
+  const options = page.locator('.rise-in.block-btn')
+  if ((await options.count()) === 0) {
+    problems.push('taking the offer by touch did not bring up a question')
+  } else {
+    const box = await options.first().boundingBox()
+    if (box) {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+      await page.mouse.down()
+      await page.mouse.up()
+    }
+    await page.waitForTimeout(900)
+    const out = page.getByRole('button', { name: /back to it|try another one/i })
+    if ((await out.count()) === 0) {
+      problems.push('the question could not be answered by touching an option')
+    }
   }
 }
 

@@ -511,9 +511,42 @@ export function Dave() {
   // Losing a life asks you something and puts you straight back in. A panel
   // saying "you died, press again" in front of it is a tap of nothing.
   const question = useAfterABeat(hud.status === 'died')
+  /*
+   * One last question when the lives run out.
+   *
+   * Not a consolation prize: it is the only moment in the game where getting
+   * one right visibly saves the run, and that is exactly when a question is
+   * worth answering. Declining is a tap away, and declining ends the run the
+   * way it would have ended anyway.
+   *
+   * Offered once per run. Without the ref it would come back every time the
+   * status was set again, which would be an unlimited supply of last chances.
+   */
+  const [lastChance, setLastChance] = useState(false)
+  const offered = useRef(false)
+  useEffect(() => {
+    if (!(hud.status === 'gameOver')) {
+      offered.current = false
+      return
+    }
+    if (offered.current) return
+    offered.current = true
+    setLastChance(true)
+  }, [hud.status])
+
+  const reprieve = (right: boolean) => {
+    setLastChance(false)
+    if (!right) return
+    const game = gameRef.current
+    if (!game) return
+    gameRef.current = { ...respawn(game), lives: 1 }
+    clock.current = 0
+    setHud((h) => ({ ...h, status: 'playing', message: null, lives: 1 }))
+  }
+
   /** The card itself, once the pause after a death has run. */
   const asking = question.now
-  const overlay = hud.status !== 'playing' && !asking && !question.soon
+  const overlay = hud.status !== 'playing' && !asking && !question.soon && !lastChance
 
   return (
     <div
@@ -555,6 +588,9 @@ export function Dave() {
             advanceNow()
           }}
         />
+      )}
+      {lastChance && (
+        <Interlude onDone={reprieve} reward="the life back" lastChance />
       )}
       {asking && <Interlude onDone={again} reward="the life back" />}
 

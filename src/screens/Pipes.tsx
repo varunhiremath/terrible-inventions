@@ -443,9 +443,40 @@ export function Pipes() {
    * player and the game.
    */
   const question = useAfterABeat(hud.status === 'dead' && !outOfLives)
+  /*
+   * One last question when the cars run out.
+   *
+   * Not a consolation prize: it is the only moment where getting one right
+   * visibly saves the run, and that is exactly when a question is worth
+   * answering. Declining is a tap away and ends things the way they would
+   * have ended anyway. Offered once per run — without the ref, every re-render
+   * that set the status again would hand out another.
+   */
+  const [lastChance, setLastChance] = useState(false)
+  const offered = useRef(false)
+  useEffect(() => {
+    if (!(outOfLives && hud.status !== 'playing')) {
+      offered.current = false
+      return
+    }
+    if (offered.current) return
+    offered.current = true
+    setLastChance(true)
+  }, [hud.status, hud.lives])
+
+  const reprieve = (right: boolean) => {
+    setLastChance(false)
+    if (!right) return
+    const run = runRef.current
+    if (!run) return
+    runRef.current = { ...newRun(levelFor(run.number), run.number, 1, stock.current.seconds), status: 'playing' }
+    camera.current = 0
+    setHud((h) => ({ ...h, status: 'playing', lives: 1 }))
+  }
+
   /** The card itself, once the pause after a death has run. */
   const asking = question.now
-  const overlay = hud.status !== 'playing' && !asking && !question.soon
+  const overlay = hud.status !== 'playing' && !asking && !question.soon && !lastChance
 
   return (
     <div
@@ -474,6 +505,9 @@ export function Pipes() {
             advanceNow()
           }}
         />
+      )}
+      {lastChance && (
+        <Interlude onDone={reprieve} reward="the life back" lastChance />
       )}
       {asking && <Interlude onDone={restart} reward="the life back" />}
 

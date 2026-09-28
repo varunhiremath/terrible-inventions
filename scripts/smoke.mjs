@@ -54,7 +54,21 @@ const skipIntro = async () => {
  * not matter here; getting past it does.
  */
 const clearQuestion = async () => {
-  const back = () => page.getByRole('button', { name: /back to it/i })
+  /*
+   * The card opens with a choice now, not a question.
+   *
+   * "Answer one and have the life back, or carry on without it." Taking the
+   * question is what this helper is for, so it presses that door first; a
+   * probe that only knew the old card reported "the question offered only 3
+   * buttons", which were the offer's two and nothing else.
+   */
+  const offer = page.getByRole('button', { name: /^(answer one for|give me a question)/i })
+  if ((await offer.count()) > 0) {
+    await offer.first().click()
+    await page.waitForTimeout(600)
+  }
+
+  const back = () => page.getByRole('button', { name: /back to it|that is enough/i })
   if ((await back().count()) > 0) {
     await back().first().click()
     await page.waitForTimeout(900)
@@ -73,6 +87,8 @@ const clearQuestion = async () => {
   }
 
   await page.waitForTimeout(700)
+  // A wrong answer offers another question instead of a plain way out, so
+  // take the way out that is there either way.
   if ((await back().count()) > 0) {
     await back().first().click()
     await page.waitForTimeout(900)
@@ -327,6 +343,21 @@ if (!died) {
     problems.push('losing a life never brought up a question')
   }
   await page.waitForTimeout(300)
+
+  /*
+   * And take the offer, because the card opens with one.
+   *
+   * What comes up first is "answer one and have the life back, or carry on
+   * without it" — two buttons, neither of them a question. The checks below
+   * are about the question, so this opens it.
+   */
+  const takeIt = page.getByRole('button', { name: /^answer one for/i })
+  if ((await takeIt.count()) > 0) {
+    await takeIt.first().click()
+    await page.waitForTimeout(600)
+  } else {
+    problems.push('the question card did not offer a question')
+  }
 
   questionText = await page.innerText('body')
   if (!/\b(numbers|history|geography|anything)\b/i.test(questionText)) {

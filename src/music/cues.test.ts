@@ -7,6 +7,7 @@ import {
   PIPE_CUES,
   ROAD_CUES,
   SPACE_CUES,
+  WIPE_CUES,
   eighthSeconds,
   loopLength,
   noteFrequency,
@@ -229,9 +230,18 @@ describe('the cave cues', () => {
 
 describe('every cue', () => {
   it('belongs to exactly one set', () => {
-    // Six sets merge into CUES, and a name in two of them would have one
-    // quietly win. Nothing would fail; the wrong sound would just play.
-    const sets = [DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES]
+    /*
+     * The sets merge into CUES, and a name in two of them would have one
+     * quietly win. Nothing would fail; the wrong sound would just play.
+     *
+     * WIPE_CUES is the one set with no game and no key of its own: it plays
+     * over the walk between levels, which happens in every game and belongs to
+     * none of them. That is why it is not covered by any of the scale tests
+     * above — there is no one scale it could be held to.
+     */
+    const sets = [
+      DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES, WIPE_CUES,
+    ]
     const seen = new Set<string>()
     for (const set of sets) {
       for (const name of Object.keys(set)) {

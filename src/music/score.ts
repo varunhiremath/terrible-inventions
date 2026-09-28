@@ -669,14 +669,14 @@ const CAVERN_BASS = [
 
 /** The drip. One note a bar, always on the same eighth, always on its own. */
 const CAVERN_DRIP = [
-  '-  -  -  -  -  -  A5 - ',
-  '-  -  -  -  -  -  G5 - ',
-  '-  -  -  -  -  -  F5 - ',
-  '-  -  -  -  -  -  E5 - ',
-  '-  -  -  -  -  -  D5 - ',
-  '-  -  -  -  -  -  F5 - ',
-  '-  -  -  -  -  -  G5 - ',
-  '-  -  -  -  -  -  A5 - ',
+  '-  -  -  -  -  -  A4 - ',
+  '-  -  -  -  -  -  G4 - ',
+  '-  -  -  -  -  -  F4 - ',
+  '-  -  -  -  -  -  E4 - ',
+  '-  -  -  -  -  -  D4 - ',
+  '-  -  -  -  -  -  F4 - ',
+  '-  -  -  -  -  -  G4 - ',
+  '-  -  -  -  -  -  A4 - ',
 ].join(' ')
 
 
@@ -734,7 +734,17 @@ export const CAVERN: Track = {
       pattern: CAVERN_LEAD,
     },
     { wave: 'triangle', gain: 0.22, sustain: 1, pattern: CAVERN_BASS },
-    { wave: 'pulse', duty: 0.125, gain: 0.05, sustain: 0.3, pattern: CAVERN_DRIP },
+    /*
+     * The drip, and the last shrill thing in here.
+     *
+     * An eighth-duty pulse up in the fifth octave, once a bar, all the way
+     * through the caves — reported as "a really high pitch noisy sound", and
+     * noticed when a question came up because that is the moment everything
+     * else stops and it is all you can hear. A sine has no harmonics at all to
+     * be shrill with, and a drip of water is about the only thing in the world
+     * that actually sounds like one.
+     */
+    { wave: 'sine', gain: 0.075, sustain: 0.3, pattern: CAVERN_DRIP },
     { wave: 'pulse', duty: 0.5, gain: 0.08, sustain: 0.28, pattern: CAVERN_PUSH, from: 0.32 },
     { wave: 'triangle', gain: 0.072, sustain: 1, pattern: CAVERN_DREAD, from: 0.7 },
   ],
@@ -876,7 +886,7 @@ export const TIMER: Track = {
 export const COIN: Track = {
   name: 'Coin',
   beatsPerMinute: 200,
-  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.12, sustain: 0.5, pattern: 'B5 E6 .  . ' }],
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.09, sustain: 0.5, pattern: 'B4 E5 .  . ' }],
 }
 
 /** A jump. Short, because he does it constantly. */
@@ -942,11 +952,20 @@ export const FLAG: Track = {
  * a cue you hear properly the four-hundredth time is a cue you hate.
  */
 
-/** A dot. As small as a sound can be and still be one. */
+/**
+ * A dot. As small as a sound can be and still be one.
+ *
+ * An octave lower than it was, along with the coin and the overtake. All three
+ * were narrow pulses up at the fifth and sixth octave, which is the right
+ * shape for a blip and the wrong register for one that fires several times a
+ * second for twenty minutes — and the dot is the most frequent sound in the
+ * whole project by a distance. Same waveform, same shape, one octave down: it
+ * still reads as a blip and stops accumulating into a headache.
+ */
 export const CHOMP: Track = {
   name: 'Chomp',
   beatsPerMinute: 260,
-  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.05, sustain: 0.3, pattern: 'A5 E5' }],
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.05, sustain: 0.3, pattern: 'A4 E4' }],
 }
 
 /** A power pellet. The board is about to change hands. */
@@ -1041,7 +1060,7 @@ export const LEAP: Track = {
 export const JETPACK: Track = {
   name: 'Jetpack',
   beatsPerMinute: 200,
-  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.11, sustain: 0.5, pattern: 'D4 E4 F4 G4 A4 Bb4 C5 D5 .  . ' }],
+  parts: [{ wave: 'pulse', duty: 0.5, gain: 0.09, sustain: 0.5, pattern: 'D4 E4 F4 G4 A4 Bb4 C5 D5 .  . ' }],
 }
 
 /** Fire, water, a tentacle, or a very long drop. */
@@ -1172,7 +1191,7 @@ export const ROAD: Track = {
 export const OVERTAKE: Track = {
   name: 'Overtake',
   beatsPerMinute: 260,
-  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.05, sustain: 0.3, pattern: 'B5 E6' }],
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.05, sustain: 0.3, pattern: 'B4 E5' }],
 }
 
 /** A can of fuel. */
@@ -1499,7 +1518,36 @@ export const PIPE_CUES = {
 // Six sets, because each is held to its own scale — and each scale is the
 // one its game's own loop is built from, so a cue sounds like the tune it
 // interrupts. Mixing them would mean holding none of them to anything.
+/** Something cheerful to walk to. */
+export const TRAVEL: Track = {
+  name: 'On We Go',
+  beatsPerMinute: 132,
+  parts: [
+    { wave: 'triangle', gain: 0.17, sustain: 0.7,
+      pattern: 'C5 .  E5 G5 .  E5 G5 .  C6 .  .  G5 C6 .  .  .  .  . ' },
+    { wave: 'pulse', duty: 0.5, gain: 0.055, sustain: 0.5,
+      pattern: '.  .  C5 E5 .  C5 E5 .  G5 .  .  E5 G5 .  .  .  .  . ' },
+    { wave: 'sine', gain: 0.11, sustain: 1,
+      pattern: 'C3 .  .  .  G2 .  .  .  C3 .  .  .  G3 .  C4 .  .  . ' },
+  ],
+}
+
+/**
+ * The walk between levels.
+ *
+ * Its own group rather than any game's, because it plays over a scene that
+ * belongs to no game's key — the same two and a half seconds runs after the
+ * maze in C, the caves in D minor and the road in E minor, and pinning it to
+ * one of them would put it a tone out from the other two. A short phrase that
+ * goes up and stops has nothing to clash with anyway: by the time it plays,
+ * the level's own music has already stopped.
+ */
+export const WIPE_CUES = {
+  travel: TRAVEL,
+} as const
+
 export const CUES = {
   ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES, ...SPACE_CUES,
+  ...WIPE_CUES,
 } as const
 export type CueName = keyof typeof CUES

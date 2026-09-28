@@ -11,7 +11,9 @@ page.on('pageerror', (e) => console.log('page error:', e.message))
 await page.goto('http://127.0.0.1:5199/wipes.html', { waitUntil: 'networkidle' })
 // Three moments through the two and a half seconds, since a still of an
 // animation says very little on its own.
-for (const [tag, wait] of [['early', 500], ['middle', 700], ['late', 700]]) {
+// Sampled well inside each scene: the first version photographed the first
+// half second, before most of them had started moving.
+for (const [tag, wait] of [['early', 900], ['middle', 700], ['late', 600]]) {
   await page.waitForTimeout(wait)
   await page.screenshot({ path: `/tmp/wipes/${tag}.png` })
 }

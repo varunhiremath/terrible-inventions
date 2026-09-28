@@ -1053,9 +1053,39 @@ export function Road() {
   const question = useAfterABeat(
     hud.status === 'crashed' && !outOfLives && !twoPlayer && seat === 'solo',
   )
+  /*
+   * One last question when the cars run out.
+   *
+   * Not a consolation prize: it is the only moment where getting one right
+   * visibly saves the run, and that is exactly when a question is worth
+   * answering. Declining is a tap away and ends things the way they would
+   * have ended anyway. Offered once per run — without the ref, every re-render
+   * that set the status again would hand out another.
+   */
+  const [lastChance, setLastChance] = useState(false)
+  const offered = useRef(false)
+  useEffect(() => {
+    if (!(outOfLives && hud.status !== 'driving')) {
+      offered.current = false
+      return
+    }
+    if (offered.current) return
+    offered.current = true
+    setLastChance(true)
+  }, [hud.status, hud.lives])
+
+  const reprieve = (right: boolean) => {
+    setLastChance(false)
+    if (!right) return
+    const run = runRef.current
+    if (!run) return
+    runRef.current = { ...resume({ ...run, lives: 1 }), fuel: Math.max(run.fuel, run.tank * 0.5) }
+    setHud((h) => ({ ...h, status: 'driving', lives: 1 }))
+  }
+
   /** The card itself, once the pause after a death has run. */
   const asking = question.now
-  const overlay = hud.status !== 'driving' && !asking && !question.soon
+  const overlay = hud.status !== 'driving' && !asking && !question.soon && !lastChance
 
   return (
     <div
@@ -1097,11 +1127,15 @@ export function Road() {
         <LevelWipe
           scene="road"
           title={`Level ${wipe}`}
+          car={car}
           onDone={() => {
             setWipe(null)
             advanceNow()
           }}
         />
+      )}
+      {lastChance && (
+        <Interlude onDone={reprieve} reward="your car back" lastChance />
       )}
       {asking && <Interlude onDone={carryOn} reward="your car back, and half a tank" />}
 
