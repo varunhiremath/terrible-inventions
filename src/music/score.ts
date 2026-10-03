@@ -27,7 +27,37 @@
  * quarter of the time, and those narrower pulses are the thin, reedy voice the
  * era actually sounded like.
  */
-export type Wave = 'square' | 'triangle' | 'sawtooth' | 'sine' | 'pulse'
+export type Wave = 'square' | 'triangle' | 'sawtooth' | 'sine' | 'pulse' | Instrument
+
+/**
+ * The voices that are not a chip.
+ *
+ * Everything above is one oscillator: that is the whole of what the machines
+ * this music is written in the idiom of could do, and it is why five games
+ * sound like each other. These four are not — they are small FM instruments,
+ * a carrier whose pitch is wobbled thousands of times a second by a second
+ * oscillator, which is how an electric piano was made before sampling and is
+ * still the cheapest way to get a struck string out of a browser.
+ *
+ * What makes them sound struck rather than switched on is that the wobble
+ * dies away faster than the note does. The first few hundredths of a second
+ * are a clatter of harmonics — the hammer — and what is left behind is nearly
+ * a sine. No envelope on a square wave does that.
+ *
+ *   piano    the hammer and the string. Ratio one, a hard bite, a long decay.
+ *   bell     the same machine with the modulator at three and a half times
+ *            the carrier, which is not a whole number, which is why it rings
+ *            instead of singing.
+ *   pluck    short, round and low. The bass hand.
+ *   strings  the odd one out and barely FM at all: two detuned saws that take
+ *            a quarter of a second to arrive and then hold. For the voice
+ *            underneath everything else.
+ */
+export type Instrument = 'piano' | 'bell' | 'pluck' | 'strings'
+
+export const INSTRUMENTS: readonly Wave[] = ['piano', 'bell', 'pluck', 'strings']
+
+export const isInstrument = (wave: Wave): boolean => INSTRUMENTS.includes(wave)
 
 /*
  * A note on why no *background* voice is a sawtooth any more.
@@ -71,6 +101,17 @@ export interface Part {
   arp?: readonly number[]
   /** How fast to flick through `arp`, in steps per second. */
   arpRate?: number
+  /**
+   * Semitones sounded *with* the written note, rather than flicked between.
+   *
+   * The arpeggio above is a workaround for hardware that could not hold a
+   * chord down. Nothing here has that problem — it was copied because the
+   * sound of it is the idiom — so a part with a real instrument on it can
+   * simply play the chord. Each voice is quietened to keep the part as loud
+   * as its `gain` says and no louder, so adding a third does not make a part
+   * half again as loud as the one next to it.
+   */
+  chord?: readonly number[]
   pattern: string
   /**
    * The heat this voice waits for, 0 to 1. Absent means it plays throughout.
@@ -544,59 +585,149 @@ export const THINKING: Track = {
 /*
  * The pipes.
  *
- * Bright where everything else in here is not. This is the one game of the
- * four that is about going somewhere rather than surviving, so the tune walks:
- * C, A minor, F, G, round twice, the second pass sitting higher and reaching
- * further. The bass never stops moving, which is what gives a side-scroller
- * its feeling of travel — stand still in this game and the music carries on
- * without you.
+ * The brief was "completely new music instead of just changing the beat for
+ * the current one — use some other musical instruments, like a piano". So the
+ * notes are new, the harmony is new, the form is twice as long, and none of
+ * the voices playing it existed in this engine a day ago.
+ *
+ * It stays in C major, which is the one thing that could not change: the coin,
+ * the jump and the stomp are cues in C that fire over the top of it, and they
+ * are held to that key by a test for exactly this reason. A tune in F with a
+ * coin in C is a wrong note several times a second.
+ *
+ * Sixteen bars rather than eight, because a piano piece that comes round every
+ * fourteen seconds is a ringtone. Two halves: the first sits low and walks,
+ * the second lifts an octave and reaches. 132 rather than 148, because the
+ * speed of this one is in the left hand rather than the tempo — and the tune
+ * still quickens when he runs.
+ *
+ *   C  Am F  G  | C  Em Dm G
+ *   F  G  Em Am | F  Dm G  C
  */
 
+/** The right hand. Starts on the off-beat, which is most of why it skips. */
 const PIPES_LEAD = [
-  'E5 G5 C6 .  G5 E5 G5 . ',
-  'A5 .  E5 .  C5 .  E5 . ',
-  'F5 A5 C6 .  A5 F5 A5 . ',
-  'G5 .  D5 .  B4 .  D5 . ',
-  'C6 .  B5 C6 E6 .  C6 . ',
-  'A5 .  G5 A5 C6 .  A5 . ',
-  'F5 G5 A5 C6 D6 .  C6 . ',
-  'G5 .  B5 .  D6 .  .  . ',
+  '.  G4 C5 .  E5 .  D5 . ',
+  'C5 .  .  A4 .  .  .  . ',
+  '.  A4 C5 .  F5 .  E5 . ',
+  'D5 .  .  B4 .  .  .  . ',
+  'E5 .  G5 .  E5 C5 D5 . ',
+  'B4 .  E5 .  G5 .  .  . ',
+  'F5 .  E5 D5 C5 .  A4 . ',
+  'B4 .  D5 .  G4 .  .  . ',
+  'F5 G5 A5 .  C6 .  A5 . ',
+  'G5 A5 B5 .  D6 .  B5 . ',
+  'E5 .  G5 .  B5 .  G5 . ',
+  'A5 .  .  E5 C5 .  .  . ',
+  'A5 .  C6 .  A5 .  F5 . ',
+  'D5 .  F5 .  A5 .  F5 . ',
+  'G5 .  B5 .  D6 .  B5 . ',
+  'C6 .  .  .  .  .  .  . ',
 ].join(' ')
 
+/**
+ * The left hand, which never stops.
+ *
+ * Root, fifth, root, third — a walk rather than a pedal. Standing still in
+ * this game and hearing the music carry on without you is the whole feeling a
+ * side-scroller is after, and it comes from down here.
+ */
 const PIPES_BASS = [
-  'C3 .  C3 G3 E3 .  G3 . ',
-  'A2 .  A2 E3 C3 .  E3 . ',
-  'F2 .  F2 C3 A2 .  C3 . ',
-  'G2 .  G2 D3 B2 .  D3 . ',
-  'C3 .  C3 G3 E3 .  G3 . ',
-  'A2 .  A2 E3 C3 .  E3 . ',
-  'F2 .  F2 C3 A2 .  C3 . ',
+  'C3 .  G2 .  C3 .  E3 . ',
+  'A2 .  E3 .  A2 .  C3 . ',
+  'F2 .  C3 .  F2 .  A2 . ',
+  'G2 .  D3 .  G2 .  B2 . ',
+  'C3 .  G2 .  C3 .  E3 . ',
+  'E2 .  B2 .  E3 .  G2 . ',
+  'D3 .  A2 .  D3 .  F3 . ',
   'G2 .  D3 .  G2 G2 B2 . ',
+  'F2 .  C3 .  F2 .  A2 . ',
+  'G2 .  D3 .  G2 .  B2 . ',
+  'E2 .  B2 .  E3 .  G2 . ',
+  'A2 .  E3 .  A2 .  C3 . ',
+  'F2 .  C3 .  F2 .  A2 . ',
+  'D3 .  A2 .  D3 .  F3 . ',
+  'G2 .  D3 .  G2 .  B2 . ',
+  'C3 .  G2 .  C3 C3 G2 . ',
 ].join(' ')
 
-/** A quiet third voice, holding each chord under the other two. */
-const PIPES_PAD = [
-  'C4 .  .  .  E4 .  .  . ',
-  'A3 .  .  .  C4 .  .  . ',
-  'F3 .  .  .  A3 .  .  . ',
-  'B3 .  .  .  D4 .  .  . ',
-  'E4 .  .  .  G4 .  .  . ',
-  'C4 .  .  .  E4 .  .  . ',
-  'A3 .  .  .  C4 .  .  . ',
-  'B3 .  .  .  D4 .  .  . ',
+/**
+ * The chord, struck twice a bar on the back of the beat.
+ *
+ * Root, fifth, octave and no third, which is not laziness: the third is what
+ * makes a chord major or minor, and it is held by the voice below so that one
+ * part can comp through both without needing a second pattern full of rests.
+ */
+const PIPES_COMP = [
+  '.  .  C4 .  .  .  C4 . ',
+  '.  .  A3 .  .  .  A3 . ',
+  '.  .  F3 .  .  .  F3 . ',
+  '.  .  G3 .  .  .  G3 . ',
+  '.  .  C4 .  .  .  C4 . ',
+  '.  .  E3 .  .  .  E3 . ',
+  '.  .  D4 .  .  .  D4 . ',
+  '.  .  G3 .  .  .  G3 . ',
+  '.  .  F3 .  .  .  F3 . ',
+  '.  .  G3 .  .  .  G3 . ',
+  '.  .  E3 .  .  .  E3 . ',
+  '.  .  A3 .  .  .  A3 . ',
+  '.  .  F3 .  .  .  F3 . ',
+  '.  .  G3 .  .  .  G3 . ',
+  '.  .  D4 .  .  .  D4 . ',
+  '.  .  C4 .  .  .  C4 C4',
 ].join(' ')
 
-/** Off the beat as often as on it, which is what makes it bounce. */
-const PIPES_DRUMS = 'x - - x - - x - '.repeat(7) + 'x - x - x - x x'
+/**
+ * One held note a bar: the third of whatever chord is underneath.
+ *
+ * This is the part that says major or minor. E over C, C over A minor, G over
+ * E minor — nothing else in the tune has to care which kind of chord it is.
+ */
+const PIPES_COLOUR = [
+  'E4 .  .  .  .  .  .  . ',
+  'C4 .  .  .  .  .  .  . ',
+  'A3 .  .  .  .  .  .  . ',
+  'B3 .  .  .  .  .  .  . ',
+  'E4 .  .  .  .  .  .  . ',
+  'G4 .  .  .  .  .  .  . ',
+  'F4 .  .  .  .  .  .  . ',
+  'B3 .  .  .  .  .  .  . ',
+  'A4 .  .  .  .  .  .  . ',
+  'B4 .  .  .  .  .  .  . ',
+  'G4 .  .  .  .  .  .  . ',
+  'C5 .  .  .  .  .  .  . ',
+  'A4 .  .  .  .  .  .  . ',
+  'F4 .  .  .  .  .  .  . ',
+  'B4 .  .  .  .  .  .  . ',
+  'E5 .  .  .  .  .  .  . ',
+].join(' ')
 
+/** A bell every other bar, high up, once things start going badly. */
+const PIPES_BELL = [
+  'C6 .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  'A5 .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  'E6 .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  'D6 .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  'C6 .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  'B5 .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  'C6 .  .  .  .  .  .  . ',
+  '.  .  .  .  .  .  .  . ',
+  'D6 .  .  .  .  .  .  . ',
+  'E6 .  .  .  .  .  .  . ',
+].join(' ')
 
 /*
  * The pipes, with the clock running down.
  *
- * C major is a cheerful key and this tune is a cheerful tune, which is exactly
- * why the last twenty seconds need help. B against C — the leading note held
- * under the root instead of resolving to it — sours a major key faster than
- * anything else you can do to it without changing a single note of the tune.
+ * A chip voice, deliberately, in a tune that has none: a narrow pulse on every
+ * off-beat, arriving from underneath a piano. The machines he is running away
+ * from sound like machines, and they turn up when the clock does.
  */
 const PIPES_PUSH = [
   '.  C3 .  C3 .  C3 .  C3',
@@ -604,12 +735,35 @@ const PIPES_PUSH = [
   '.  F2 .  F2 .  F2 .  F2',
   '.  G2 .  G2 .  G2 .  G2',
   '.  C3 .  C3 .  C3 .  C3',
+  '.  E2 .  E2 .  E2 .  E2',
+  '.  D3 .  D3 .  D3 .  D3',
+  '.  G2 .  G2 .  G2 .  G2',
+  '.  F2 .  F2 .  F2 .  F2',
+  '.  G2 .  G2 .  G2 .  G2',
+  '.  E2 .  E2 .  E2 .  E2',
   '.  A2 .  A2 .  A2 .  A2',
   '.  F2 .  F2 .  F2 .  F2',
-  '.  G2 .  G2 .  G2 G2 G2',
+  '.  D3 .  D3 .  D3 .  D3',
+  '.  G2 .  G2 .  G2 .  G2',
+  '.  C3 .  C3 .  C3 C3 C3',
 ].join(' ')
 
+/*
+ * And the last of it.
+ *
+ * B against C — the leading note held under the root instead of resolving to
+ * it — sours a major key faster than anything else you can do to it without
+ * changing a single note of the tune.
+ */
 const PIPES_DREAD = [
+  'B5 .  .  .  .  .  .  . ',
+  'C6 .  .  .  .  .  .  . ',
+  'B5 .  .  .  .  .  .  . ',
+  'C6 .  .  .  .  .  .  . ',
+  'B5 .  .  .  .  .  .  C6',
+  'B5 .  .  .  .  .  .  . ',
+  'C6 .  .  .  .  .  .  . ',
+  'B5 .  .  .  .  .  .  . ',
   'B5 .  .  .  .  .  .  . ',
   'C6 .  .  .  .  .  .  . ',
   'B5 .  .  .  .  .  .  . ',
@@ -620,38 +774,39 @@ const PIPES_DREAD = [
   'B5 .  .  .  .  .  .  . ',
 ].join(' ')
 
-const PIPES_HOT_DRUMS = ('x - x - x - x x ').repeat(7) + 'x - x - x x x x'
+/** Off the beat as often as on it, which is what makes it bounce. */
+const PIPES_DRUMS = 'x - - x - - x - '.repeat(15) + 'x - x - x - x x'
+
+const PIPES_HOT_DRUMS = ('x - x - x - x x ').repeat(15) + 'x - x - x x x x'
 
 export const PIPES: Track = {
   name: 'The Pipes',
-  beatsPerMinute: 148,
-  hotter: 11,
+  beatsPerMinute: 132,
+  hotter: 10,
   quicker: 8,
+  // A light lean rather than a shuffle. The left hand is already playing
+  // straight eighths; swing them hard and it stops being a walk and starts
+  // being a jazz trio.
+  swing: 0.14,
   drums: PIPES_DRUMS,
   hotDrums: PIPES_HOT_DRUMS,
+  /*
+   * These are about half the numbers they were first written with, and the
+   * reason is worth keeping: a struck note rings on past the length it was
+   * written for, so the next one starts on top of it and three or four are
+   * sounding at any moment. At the gains that suited an oscillator this tune
+   * measured twice the loudness of every other one in the game and two and a
+   * half times the peak — a jump you would hear on walking from one game into
+   * the next, and not something the writing of it suggests anywhere.
+   */
   parts: [
-    {
-      // Was the narrowest pulse of the three, which is the brightest and the
-      // thinnest, and in a tune this quick it was relentless. See the note on
-      // the chase's lead: same notes, warmer voice, twice the gain to match.
-      wave: 'triangle',
-      gain: 0.17,
-      sustain: 0.8,
-      vibrato: { cents: 12, hz: 5.5, delay: 0.16 },
-      pattern: PIPES_LEAD,
-    },
-    { wave: 'triangle', gain: 0.28, sustain: 0.55, pattern: PIPES_BASS },
-    {
-      wave: 'pulse',
-      duty: 0.25,
-      gain: 0.07,
-      sustain: 0.95,
-      arp: [0, 7, 12],
-      arpRate: 22,
-      pattern: PIPES_PAD,
-    },
-    { wave: 'pulse', duty: 0.5, gain: 0.08, sustain: 0.26, pattern: PIPES_PUSH, from: 0.34 },
-    { wave: 'triangle', gain: 0.064, sustain: 1, pattern: PIPES_DREAD, from: 0.7 },
+    { wave: 'piano', gain: 0.1, sustain: 0.9, pattern: PIPES_LEAD },
+    { wave: 'pluck', gain: 0.085, sustain: 0.8, pattern: PIPES_BASS },
+    { wave: 'piano', gain: 0.042, sustain: 1.4, chord: [0, 7, 12], pattern: PIPES_COMP },
+    { wave: 'strings', gain: 0.028, sustain: 0.95, pattern: PIPES_COLOUR },
+    { wave: 'bell', gain: 0.026, sustain: 1, pattern: PIPES_BELL, from: 0.45 },
+    { wave: 'pulse', duty: 0.25, gain: 0.05, sustain: 0.26, pattern: PIPES_PUSH, from: 0.34 },
+    { wave: 'strings', gain: 0.026, sustain: 1, pattern: PIPES_DREAD, from: 0.72 },
   ],
 }
 

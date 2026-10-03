@@ -17,6 +17,8 @@ import { writeFileSync } from 'node:fs'
 
 const WHICH = process.argv[2] ?? 'chase'
 const SECONDS = Number(process.argv[3] ?? 30)
+/** Heat, 0 to 1: the voices a game brings in as a run goes badly. */
+const WARMTH = Number(process.argv[4] ?? 0)
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -28,8 +30,9 @@ page.on('pageerror', (e) => console.log('page error:', e.message))
 // minified bundle with the names gone.
 await page.goto('http://127.0.0.1:5199/wipes.html', { waitUntil: 'networkidle' })
 
-const samples = await page.evaluate(async ([which, seconds]) => {
+const samples = await page.evaluate(async ([which, seconds, warmth]) => {
   const score = await import('/src/music/score.ts')
+  const player = await import('/src/music/player.ts')
   const extra = await import('/src/music/candidates.ts')
   const track = score.TRACKS[which] ?? score.CUES[which] ?? extra.CANDIDATES[which]
   if (!track) return { error: `no track called ${which}` }
@@ -55,91 +58,25 @@ const samples = await page.evaluate(async ([which, seconds]) => {
   harsh.connect(low)
   low.connect(ctx.destination)
 
-  function pulseWave(duty) {
-    const n = 32
-    const real = new Float32Array(n)
-    const imag = new Float32Array(n)
-    for (let i = 1; i < n; i++) imag[i] = (2 / (i * Math.PI)) * Math.sin(i * Math.PI * duty)
-    return ctx.createPeriodicWave(real, imag, { disableNormalization: false })
-  }
-
-  function note(voice, frequency, at, length, level) {
-    const osc = ctx.createOscillator()
-    const env = ctx.createGain()
-    if (voice.wave === 'pulse') osc.setPeriodicWave(pulseWave(voice.duty ?? 0.25))
-    else osc.type = voice.wave
-    if (voice.arp && voice.arp.length > 1) {
-      const rate = voice.arpRate ?? 18
-      for (let i = 0; i < Math.max(1, Math.ceil(length * rate)); i++) {
-        osc.frequency.setValueAtTime(
-          frequency * Math.pow(2, voice.arp[i % voice.arp.length] / 12),
-          at + i / rate,
-        )
-      }
-    } else osc.frequency.setValueAtTime(frequency, at)
-    const attack = 0.018
-    const release = Math.min(0.09, length * 0.45)
-    env.gain.setValueAtTime(0, at)
-    env.gain.linearRampToValueAtTime(level, at + attack)
-    env.gain.setValueAtTime(level, Math.max(at + attack, at + length - release))
-    env.gain.linearRampToValueAtTime(0, at + length)
-    osc.connect(env)
-    env.connect(master)
-    osc.start(at)
-    osc.stop(at + length + 0.02)
-  }
-
-  const step = score.eighthSeconds(track, 0, 0)
-  const bars = score.loopLength(track)
-  const parts = track.parts.map((p) => ({ part: p, notes: score.readPart(p.pattern) }))
-  const drums = track.drums ? track.drums.trim().split(/\s+/) : []
-
-  for (let eighth = 0; eighth * step < seconds; eighth++) {
-    const beat = score.beatAt(track, eighth)
-    if (beat < 0) continue
-    const at = eighth * step
-    // The same lean the player puts on the off-beats, and the drums below do
-    // not get it — see the note in the player. This block is a copy of that
-    // scheduler and has to be kept in step with it, or the thing being
-    // listened to is not the thing that plays.
-    const lean = score.swingShift(track, eighth, step)
-    for (const { part, notes } of parts) {
-      // Heat stays at nothing: this is the tune as it opens.
-      if (part.from !== undefined) continue
-      for (const n of notes) {
-        if (n.at !== beat) continue
-        note(
-          part,
-          n.frequency,
-          at + lean,
-          Math.max(0.03, n.length * step * (part.sustain ?? 0.9) - lean),
-          part.gain,
-        )
-      }
-    }
-    if (drums[beat] === 'x') {
-      const src = ctx.createBufferSource()
-      const buf = ctx.createBuffer(1, RATE * 0.06, RATE)
-      const d = buf.getChannelData(0)
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1
-      src.buffer = buf
-      const hp = ctx.createBiquadFilter()
-      hp.type = 'highpass'
-      hp.frequency.value = 7000
-      const env = ctx.createGain()
-      env.gain.setValueAtTime(0.09, at)
-      env.gain.exponentialRampToValueAtTime(0.001, at + 0.05)
-      src.connect(hp)
-      hp.connect(env)
-      env.connect(master)
-      src.start(at)
-      src.stop(at + 0.06)
-    }
-  }
+  /*
+   * The game's own synthesiser, not a copy of it.
+   *
+   * This script used to carry its own `note()` — the same envelopes, the same
+   * pulse waves, written out twice — under a comment admitting it had to be
+   * kept in step by hand. It would have been wrong the day the piano arrived:
+   * four instruments the copy had never heard of, rendered as bare
+   * oscillators, in a file put in front of somebody to choose by.
+   */
+  player.renderTrack(ctx, master, track, seconds, warmth)
 
   const buffer = await ctx.startRendering()
-  return { rate: RATE, data: Array.from(buffer.getChannelData(0)), bars, step }
-}, [WHICH, SECONDS])
+  return {
+    rate: RATE,
+    data: Array.from(buffer.getChannelData(0)),
+    bars: score.loopLength(track),
+    step: score.eighthSeconds(track, warmth, 0),
+  }
+}, [WHICH, SECONDS, WARMTH])
 
 await browser.close()
 
@@ -172,6 +109,20 @@ function wav(data, rate) {
 
 const out = process.env.MUSIC_OUT ?? `/tmp/${WHICH}.wav`
 writeFileSync(out, wav(samples.data, samples.rate))
+
+/*
+ * How loud it came out, every time, because one tune being twice as loud as
+ * the next is not a thing anybody hears while listening to it on its own.
+ *
+ * The four oscillator tunes land between 0.09 and 0.13 and peak around 0.36.
+ * The first pass of the piano one measured 0.20 and 0.90 — switch games and
+ * the volume would have jumped — and nothing about writing it suggested that,
+ * because a struck note rings past its written length and the next one starts
+ * on top of it.
+ */
+const peak = samples.data.reduce((m, v) => Math.max(m, Math.abs(v)), 0)
+const rms = Math.sqrt(samples.data.reduce((s, v) => s + v * v, 0) / samples.data.length)
+console.log(`   peak ${peak.toFixed(3)}  rms ${rms.toFixed(3)}   (the others: rms 0.09 to 0.13, peak about 0.36)`)
 console.log(
   `${out}  ${SECONDS}s  ${samples.bars} eighths a loop, ` +
   `${(samples.bars * samples.step).toFixed(1)}s round`,

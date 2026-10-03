@@ -3,6 +3,8 @@ import {
   CAVERN,
   CHASE,
   CUES,
+  INSTRUMENTS,
+  isInstrument,
   PIPES,
   REST_EVERY,
   ROAD,
@@ -17,6 +19,7 @@ import {
   restEighths,
   type Track,
 } from './score'
+import { PATCHES } from './player'
 
 describe('notes', () => {
   it('puts middle A where everyone else puts it', () => {
@@ -338,5 +341,72 @@ describe('tempo following the player', () => {
     const both = eighthSeconds(ROAD, 1, 1)
     expect(both).toBeLessThan(eighthSeconds(ROAD, 1, 0))
     expect(both).toBeLessThan(calm)
+  })
+})
+
+/**
+ * The four voices that are not a chip.
+ *
+ * Each one fails quietly in its own way. An instrument named in a part with no
+ * patch behind it falls through to the oscillator path and comes out as a bare
+ * sine; a chord on a chip voice is silently ignored, because a square wave
+ * cannot hold one; and a chord of one note is a note.
+ */
+describe('the instruments', () => {
+  const everyPart = [
+    ...Object.entries(TRACKS).flatMap(([name, track]) =>
+      track.parts.map((part) => [name, part] as const),
+    ),
+    ...Object.entries(CUES).flatMap(([name, cue]) => cue.parts.map((part) => [name, part] as const)),
+  ]
+
+  it('has a patch for every one of them', () => {
+    for (const wave of INSTRUMENTS) expect(PATCHES[wave], wave).toBeDefined()
+  })
+
+  it('names only instruments that have one', () => {
+    for (const [name, part] of everyPart) {
+      if (!isInstrument(part.wave)) continue
+      expect(PATCHES[part.wave], `${name} asks for ${part.wave}`).toBeDefined()
+    }
+  })
+
+  it('only gives a chord to something that can hold one', () => {
+    for (const [name, part] of everyPart) {
+      if (part.chord === undefined) continue
+      expect(isInstrument(part.wave), `${name} is a ${part.wave}`).toBe(true)
+      expect(part.chord.length, name).toBeGreaterThan(1)
+    }
+  })
+
+  it('strikes the struck ones and holds the held one', () => {
+    // A patch with no decay to speak of is an organ whatever it is called, and
+    // one that takes a tenth of a second to arrive is not struck.
+    for (const name of ['piano', 'bell', 'pluck'] as const) {
+      expect(PATCHES[name].attack, name).toBeLessThan(0.02)
+      expect(PATCHES[name].decay, name).toBeGreaterThan(0.5)
+      expect(PATCHES[name].hold, name).toBeLessThan(0.2)
+    }
+    expect(PATCHES.strings.attack).toBeGreaterThan(0.1)
+    expect(PATCHES.strings.hold).toBeGreaterThan(0.5)
+  })
+
+  it('opens each one above the note it is playing', () => {
+    // The lid is a multiple of the note's own pitch, so a bass is not handed
+    // the same ceiling as a melody. At six it sat below the second harmonic of
+    // a middle C and threw the whole strike away.
+    for (const [name, patch] of Object.entries(PATCHES)) {
+      expect(patch.tilt, name).toBeGreaterThan(6)
+      expect(patch.close, name).toBeLessThan(patch.open)
+    }
+  })
+
+  it('still plays the pipes somewhere a small speaker can follow', () => {
+    for (const part of PIPES.parts) {
+      for (const note of readPart(part.pattern)) {
+        expect(note.frequency).toBeGreaterThan(60)
+        expect(note.frequency).toBeLessThan(2100)
+      }
+    }
   })
 })

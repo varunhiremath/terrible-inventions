@@ -147,7 +147,7 @@ export function unlockAudio(): void {
  */
 const pulses = new Map<number, PeriodicWave>()
 
-function pulseWave(ctx: AudioContext, duty: number): PeriodicWave {
+function pulseWave(ctx: BaseAudioContext, duty: number): PeriodicWave {
   const found = pulses.get(duty)
   if (found) return found
 
@@ -162,7 +162,7 @@ function pulseWave(ctx: AudioContext, duty: number): PeriodicWave {
   return wave
 }
 
-function hiss(ctx: AudioContext): AudioBuffer {
+function hiss(ctx: BaseAudioContext): AudioBuffer {
   if (noise) return noise
   const frames = Math.floor(ctx.sampleRate * 0.12)
   const buffer = ctx.createBuffer(1, frames, ctx.sampleRate)
@@ -170,6 +170,71 @@ function hiss(ctx: AudioContext): AudioBuffer {
   for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1
   noise = buffer
   return buffer
+}
+
+/**
+ * The four instruments, as numbers.
+ *
+ * `ratio` is the modulator's pitch as a multiple of the note's. A whole number
+ * gives harmonics and sounds like a string or a horn; 3.5 does not divide into
+ * anything and gives the clang of a bell. `index` is how far it bends the
+ * carrier at the start, in multiples of the note's own frequency, and `bite`
+ * is how quickly that falls away — the short one is a hammer, the long one is
+ * a bow.
+ *
+ * `hold` is what separates them from everything else in here. A chip voice is
+ * on at full until it is told to stop; these fall away on their own from the
+ * moment they are struck, which is why `decay` is in seconds of real time and
+ * not a fraction of the note. A piano does not know how long the note was
+ * written for.
+ */
+interface Patch {
+  carrier: OscillatorType
+  ratio: number
+  index: number
+  bite: number
+  attack: number
+  decay: number
+  /** Where the note settles after the decay, as a fraction of its peak. */
+  hold: number
+  /** Cents between the two carriers. Nought is one oscillator. */
+  spread: number
+  /**
+   * A lowpass that opens on the strike and closes as the note dies.
+   *
+   * `tilt` is how far above the note itself it opens, as a multiple of the
+   * note's own frequency, so a low note is not handed the same lid as a high
+   * one. It was six, which on a middle C put the lid at 1.6 kHz and threw away
+   * everything that made the strike sound like a strike: the piano measured
+   * three per cent of its energy above a kilohertz, against thirty for the
+   * bell. A piano is a bright thing for the first tenth of a second.
+   */
+  tilt: number
+  open: number
+  close: number
+}
+
+export const PATCHES: Record<string, Patch> = {
+  piano: {
+    carrier: 'sine', ratio: 1, index: 4.6, bite: 0.16,
+    attack: 0.004, decay: 2.8, hold: 0.02, spread: 5,
+    tilt: 15, open: 5200, close: 700,
+  },
+  bell: {
+    carrier: 'sine', ratio: 3.5, index: 3.4, bite: 0.5,
+    attack: 0.003, decay: 2.6, hold: 0, spread: 0,
+    tilt: 8, open: 6000, close: 1600,
+  },
+  pluck: {
+    carrier: 'triangle', ratio: 1, index: 1.6, bite: 0.05,
+    attack: 0.004, decay: 0.9, hold: 0.06, spread: 0,
+    tilt: 9, open: 2600, close: 420,
+  },
+  strings: {
+    carrier: 'sawtooth', ratio: 2, index: 0.12, bite: 1.2,
+    attack: 0.22, decay: 0.5, hold: 0.85, spread: 9,
+    tilt: 7, open: 2000, close: 1500,
+  },
 }
 
 /** Everything about how a part is played, as opposed to what it plays. */
@@ -191,10 +256,129 @@ export interface Voice {
   arp?: readonly number[]
   /** How fast to flick through `arp`, in steps per second. */
   arpRate?: number
+  /** Semitones sounded together with the note, for the instruments. */
+  chord?: readonly number[]
+}
+
+/**
+ * One struck or bowed voice.
+ *
+ * Six nodes a note against the chip path's two, which is worth watching but
+ * not worth avoiding: the loudest moment of a game was measured at four live
+ * oscillators, and these parts are the sparsest in the tune.
+ */
+function playPatch(
+  ctx: BaseAudioContext,
+  out: GainNode,
+  patch: Patch,
+  voice: Voice,
+  frequency: number,
+  at: number,
+  seconds: number,
+  level: number,
+): void {
+  const env = ctx.createGain()
+  const tone = ctx.createBiquadFilter()
+  tone.type = 'lowpass'
+  tone.Q.value = 0.7
+
+  // The brightness falls with the note. A struck string loses its top long
+  // before it goes quiet, and a filter that stays open is most of what makes a
+  // synthesised piano sound like an organ.
+  const bright = Math.min(patch.open, Math.max(patch.close, frequency * patch.tilt))
+  tone.frequency.setValueAtTime(bright, at)
+  tone.frequency.exponentialRampToValueAtTime(patch.close, at + patch.decay)
+
+  const carriers: OscillatorNode[] = []
+  const voices = patch.spread > 0 ? 2 : 1
+  for (let i = 0; i < voices; i++) {
+    const osc = ctx.createOscillator()
+    osc.type = patch.carrier
+    osc.frequency.setValueAtTime(frequency, at)
+    // Detuned in opposite directions, which is two strings on one key rather
+    // than one string slightly out of tune.
+    if (patch.spread > 0) osc.detune.setValueAtTime(i === 0 ? -patch.spread : patch.spread, at)
+    carriers.push(osc)
+  }
+
+  if (patch.index > 0) {
+    const modulator = ctx.createOscillator()
+    const depth = ctx.createGain()
+    modulator.type = 'sine'
+    modulator.frequency.setValueAtTime(frequency * patch.ratio, at)
+    depth.gain.setValueAtTime(frequency * patch.index, at)
+    // Towards nought rather than to it: an exponential ramp cannot reach zero,
+    // and asking it to is the one way to make a Web Audio ramp do nothing at
+    // all.
+    depth.gain.exponentialRampToValueAtTime(
+      Math.max(0.0001, frequency * patch.index * 0.02),
+      at + patch.bite,
+    )
+    modulator.connect(depth)
+    for (const osc of carriers) depth.connect(osc.frequency)
+    modulator.start(at)
+    modulator.stop(at + seconds + 0.3)
+  }
+
+  if (voice.vibrato && seconds > (voice.vibrato.delay ?? 0.12) + 0.05) {
+    const { cents, hz, delay = 0.12 } = voice.vibrato
+    const lfo = ctx.createOscillator()
+    const depth = ctx.createGain()
+    lfo.frequency.value = hz
+    depth.gain.setValueAtTime(0, at)
+    depth.gain.setValueAtTime(0, at + delay)
+    depth.gain.linearRampToValueAtTime(frequency * (Math.pow(2, cents / 1200) - 1), at + delay + 0.08)
+    lfo.connect(depth)
+    for (const osc of carriers) depth.connect(osc.frequency)
+    lfo.start(at)
+    lfo.stop(at + seconds + 0.3)
+  }
+
+  /*
+   * The note rings past the end of what was written, and that is the point.
+   *
+   * A piano note is not a rectangle. It is struck, it falls away, and it stops
+   * when the key is let go — so this decays on its own clock and is only cut
+   * off at the end of the note if there is anything left to cut. `tail` is how
+   * far past its written length it is allowed to ring, which is what makes a
+   * run of eighths overlap into a chord instead of a row of blips.
+   */
+  const tail = Math.min(patch.decay, 0.45)
+  const peak = level / Math.sqrt(voices)
+  const settled = Math.max(0.0001, peak * patch.hold)
+  const ends = at + seconds + tail
+
+  env.gain.setValueAtTime(0, at)
+  env.gain.linearRampToValueAtTime(peak, at + patch.attack)
+  env.gain.exponentialRampToValueAtTime(settled, at + patch.attack + patch.decay)
+
+  /*
+   * Where the decay has got to when the key is let go, worked out rather than
+   * read back.
+   *
+   * `env.gain.value` is the obvious thing to put here and it is wrong in a way
+   * that is hard to see: a parameter reads back its *current* value, not the
+   * one scheduled for a moment in the future, so on a note booked a tenth of a
+   * second ahead it returns the gain the node was created with. The same
+   * mistake read 440 Hz off every oscillator in this file once. This is the
+   * same curve the ramp above describes, evaluated at the moment it is needed.
+   */
+  const through = Math.min(1, Math.max(0, (ends - at - patch.attack) / patch.decay))
+  const here = Math.max(0.0001, peak * Math.pow(settled / peak, through))
+  env.gain.setValueAtTime(here, ends)
+  env.gain.exponentialRampToValueAtTime(0.0001, ends + 0.06)
+
+  for (const osc of carriers) {
+    osc.connect(tone)
+    osc.start(at)
+    osc.stop(ends + 0.08)
+  }
+  tone.connect(env)
+  env.connect(out)
 }
 
 function playNote(
-  ctx: AudioContext,
+  ctx: BaseAudioContext,
   out: GainNode,
   voice: Voice,
   frequency: number,
@@ -202,11 +386,24 @@ function playNote(
   seconds: number,
   level: number,
 ): void {
+  const patch = PATCHES[voice.wave]
+  if (patch) {
+    // A real instrument can hold a chord down, so a part asking for one gets
+    // every note of it at once rather than flicked through. Quietened by the
+    // root of the count, which keeps three notes about as loud as one.
+    const notes = voice.chord && voice.chord.length > 0 ? voice.chord : [0]
+    const share = level / Math.sqrt(notes.length)
+    for (const semitones of notes) {
+      playPatch(ctx, out, patch, voice, frequency * Math.pow(2, semitones / 12), at, seconds, share)
+    }
+    return
+  }
+
   const osc = ctx.createOscillator()
   const env = ctx.createGain()
 
   if (voice.wave === 'pulse') osc.setPeriodicWave(pulseWave(ctx, voice.duty ?? 0.25))
-  else osc.type = voice.wave
+  else osc.type = voice.wave as OscillatorType
 
   if (voice.arp && voice.arp.length > 1) {
     // Stepped, not ramped: the flick between notes is the whole point, and a
@@ -266,7 +463,7 @@ function playNote(
   osc.stop(at + seconds + 0.02)
 }
 
-function playHit(ctx: AudioContext, out: GainNode, at: number): void {
+function playHit(ctx: BaseAudioContext, out: GainNode, at: number): void {
   const source = ctx.createBufferSource()
   source.buffer = hiss(ctx)
   const filter = ctx.createBiquadFilter()
@@ -512,4 +709,57 @@ export function duckMusic(seconds: number): void {
 export function speakingSeconds(text: string): number {
   const words = text.trim().split(/\s+/).filter(Boolean).length
   return Math.min(12, 0.4 + words / 3.2)
+}
+
+/**
+ * Lay a whole track onto a context, for rendering it to a file.
+ *
+ * This exists so that `scripts/render-music.mjs` does not have to own a second
+ * copy of the synthesiser. It did, with a comment on it saying it had to be
+ * kept in step with this one by hand — and the moment four instruments were
+ * added here, that copy would have rendered them as plain oscillators and the
+ * file somebody listened to would not have been the tune the game plays. An
+ * audition that is not of the real thing is worse than no audition.
+ *
+ * `out` is whatever the caller has put between this and its destination, so
+ * the two filters the game listens through can be the same two filters.
+ */
+export function renderTrack(
+  ctx: BaseAudioContext,
+  out: GainNode,
+  track: Track,
+  seconds: number,
+  warmth = 0,
+): void {
+  const step = eighthSeconds(track, warmth, 0)
+  if (loopLength(track) === 0) return
+
+  const parts = track.parts
+    .map((part) => ({ part, notes: readPart(part.pattern), level: heatGain(part, warmth) }))
+    .filter((p) => p.level > 0)
+  const written = track.drums ? track.drums.trim().split(/\s+/) : []
+  const hot = track.hotDrums ? track.hotDrums.trim().split(/\s+/) : []
+  const drums = warmth >= HOT_DRUMS && hot.length > 0 ? hot : written
+
+  for (let tick = 0; tick * step < seconds; tick++) {
+    const beat = beatAt(track, tick)
+    if (beat < 0) continue
+    const at = tick * step
+    const lean = swingShift(track, tick, step)
+    for (const { part, notes, level } of parts) {
+      for (const note of notes) {
+        if (note.at !== beat) continue
+        playNote(
+          ctx,
+          out,
+          part,
+          note.frequency,
+          at + lean,
+          Math.max(0.03, note.length * step * (part.sustain ?? 0.9) - lean),
+          part.gain * level,
+        )
+      }
+    }
+    if (drums[beat] === 'x') playHit(ctx, out, at)
+  }
 }

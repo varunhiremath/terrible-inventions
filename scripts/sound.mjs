@@ -99,4 +99,40 @@ const space = await p.evaluate(() => window.__notes.slice())
 // trigger at one shot every 0.26s is about fifteen of them.
 console.log('space: notes', sky, '->', space.length, '| B5 lasers:', space.filter((n) => n === 988).length)
 
+
+/*
+ * And the pipes, which is the only game whose music is not made of
+ * oscillators any more.
+ *
+ * That makes this the one check that would have caught the piano being
+ * inaudible: a part naming an instrument with no patch behind it falls through
+ * to the oscillator path and comes out as a bare sine, and a part whose
+ * envelope never opens makes no sound at all while every test still passes.
+ * The coin is C6 then E6 — 1047Hz and 1319Hz.
+ */
+await p.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
+await p.waitForTimeout(900)
+await p.evaluate(() => { window.__notes.length = 0 })
+await p.getByRole('button', { name: /the pipes/i }).first().click()
+await p.waitForTimeout(600)
+const s4 = p.getByRole('button', { name: /skip/i })
+if (await s4.count()) { await s4.first().click(); await p.waitForTimeout(800) }
+const under = await p.evaluate(() => window.__notes.length)
+await p.keyboard.down('ArrowRight')
+await p.waitForTimeout(5000)
+await p.keyboard.up('ArrowRight')
+const pipes = await p.evaluate(() => window.__notes.slice())
+/*
+ * The tune is C major and the melody sits in the fifth and sixth octaves, so
+ * these are the notes it cannot be playing anything else with. Counted as a
+ * set rather than a total: a total goes up if the piano is a sine, and the
+ * point of this is whether the right notes are being played at all.
+ */
+const wanted = [262, 330, 392, 523, 659]
+const heard = wanted.filter((n) => pipes.some((v) => Math.abs(v - n) <= 1))
+console.log(
+  'pipes: notes', under, '->', pipes.length,
+  '| of C E G c e, heard', heard.length, 'of 5',
+)
+
 await b.close()
