@@ -20,14 +20,21 @@ const browser = await chromium.launch({
 })
 const problems = []
 
-for (const [shape, size] of [
-  ['portrait', { width: 412, height: 915 }],
-  ['landscape', { width: 915, height: 412 }],
+/*
+ * Four places, because past Neptune they stop being planets and start being a
+ * star, a nebula, a black hole and a galaxy — four quite different drawings
+ * that have never been looked at.
+ */
+for (const [shape, world, size] of [
+  ['jupiter', 5, { width: 412, height: 915 }],
+  ['sirius', 12, { width: 412, height: 915 }],
+  ['crab-nebula', 14, { width: 412, height: 915 }],
+  ['black-hole', 15, { width: 412, height: 915 }],
+  ['andromeda', 16, { width: 915, height: 412 }],
 ]) {
   const page = await browser.newPage({ viewport: size, deviceScaleFactor: 2 })
   page.on('pageerror', (e) => problems.push(`${shape}: page error: ${e.message}`))
-  // Out at Jupiter, where everything is in the sky at once.
-  await page.goto('http://127.0.0.1:4173/?world=5', { waitUntil: 'networkidle' })
+  await page.goto(`http://127.0.0.1:4173/?world=${world}`, { waitUntil: 'networkidle' })
   await page.waitForTimeout(900)
   await page.getByRole('button', { name: /long way out/i }).first().click()
   await page.waitForTimeout(700)
@@ -54,9 +61,11 @@ for (const [shape, size] of [
   await page.screenshot({ path: `/tmp/space/${shape}.png` })
   await page.keyboard.up('ArrowUp')
 
-  if (!sawAlien) problems.push(`${shape}: flew for fifteen seconds and met no aliens`)
-  if (!sawShot) problems.push(`${shape}: nothing ever shot back`)
-  else console.log(`${shape}: aliens out there, and firing`)
+  const deep = world > 8
+  if (deep && !sawAlien) problems.push(`${shape}: flew for fifteen seconds and met no aliens`)
+  if (!deep && sawAlien) problems.push(`${shape}: aliens inside the solar system`)
+  if (deep && !sawShot) problems.push(`${shape}: nothing ever shot back`)
+  console.log(`${shape}: ${deep ? 'aliens out there, and firing' : 'rock and weather, as it should be'}`)
   await page.close()
 }
 

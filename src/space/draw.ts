@@ -11,7 +11,8 @@
  */
 import { drawHint } from '../ui/padHints'
 import {
-  SCRAP_WIDE, SHIP_TALL, SHIP_WIDE, SHOT_WIDE, SIZE_OF, TOUGHNESS, type World,
+  SCRAP_WIDE, SHIP_TALL, SHIP_WIDE, SHOT_WIDE, SIZE_OF, TOUGHNESS,
+  type Look, type World,
 } from './level'
 import type { Bolt, Rubble, Run, Scrap, Shot } from './run'
 
@@ -162,6 +163,22 @@ export function drawWorld(ctx: Ctx, world: World, progress: number, view: View):
    */
   const cy = r * 0.95 + view.h * 0.02
 
+  /*
+   * Past Neptune it stops being a planet, so it stops being drawn like one.
+   *
+   * Each of these is the same handful of arcs and gradients as everything else
+   * in this project — nothing is an image — and each is built round the one
+   * thing that makes it recognisable to somebody who already knows the name.
+   * A star has rays. A nebula is a cloud with a point of light buried in it.
+   * A black hole is a hole: a disc of nothing with a bright ring round it and
+   * the sky bent round the outside. A galaxy is a spiral seen at an angle.
+   */
+  const look = world.look ?? 'planet'
+  if (look !== 'planet' && look !== 'ice') {
+    drawFarThing(ctx, world, look, cx, cy, r, view)
+    return
+  }
+
   if (world.rings) {
     ctx.save()
     ctx.translate(cx, cy)
@@ -236,6 +253,171 @@ function seeded(id: number): (which: number) => number {
   }
 }
 
+/** A star, a nebula, a black hole or a galaxy: the things past the planets. */
+function drawFarThing(
+  ctx: Ctx,
+  world: World,
+  look: Look,
+  cx: number,
+  cy: number,
+  r: number,
+  view: View,
+): void {
+  const turn = view.clock * 0.1
+
+  if (look === 'star') {
+    // A corona, then rays, then the disc. The rays breathe, because a star
+    // that holds perfectly still reads as a ball of paint.
+    const halo = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 2.2)
+    halo.addColorStop(0, world.band)
+    halo.addColorStop(0.35, `${world.body}88`)
+    halo.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = halo
+    ctx.beginPath()
+    ctx.arc(cx, cy, r * 2.2, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate(turn)
+    ctx.fillStyle = `${world.band}66`
+    for (let i = 0; i < 8; i++) {
+      const long = r * (1.8 + Math.sin(view.clock * 1.7 + i) * 0.25)
+      ctx.rotate(Math.PI / 4)
+      ctx.beginPath()
+      ctx.moveTo(0, -r * 0.2)
+      ctx.lineTo(long, 0)
+      ctx.lineTo(0, r * 0.2)
+      ctx.closePath()
+      ctx.fill()
+    }
+    ctx.restore()
+
+    ctx.fillStyle = world.body
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = world.band
+    ctx.beginPath()
+    ctx.arc(cx - r * 0.2, cy - r * 0.2, r * 0.55, 0, Math.PI * 2)
+    ctx.fill()
+  } else if (look === 'nebula') {
+    // Overlapping clouds of two colours, and a few new stars inside it, which
+    // is what a nebula is for.
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    for (let i = 0; i < 7; i++) {
+      const a = turn * (i % 2 === 0 ? 1 : -1) + i * 1.4
+      const px = cx + Math.cos(a) * r * 0.55
+      const py = cy + Math.sin(a * 1.3) * r * 0.4
+      const puff = ctx.createRadialGradient(px, py, 0, px, py, r * (0.7 + (i % 3) * 0.25))
+      puff.addColorStop(0, `${i % 2 === 0 ? world.body : world.band}55`)
+      puff.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = puff
+      ctx.beginPath()
+      ctx.arc(px, py, r * (0.7 + (i % 3) * 0.25), 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
+    ctx.fillStyle = '#ffffff'
+    for (let i = 0; i < 9; i++) {
+      const seed = Math.sin(i * 42.1) * 9999
+      const sx = cx + ((seed - Math.floor(seed)) - 0.5) * r * 1.9
+      const sy = cy + ((((seed * 3.7) % 1) + 1) % 1 - 0.5) * r * 1.5
+      ctx.globalAlpha = 0.5 + Math.abs(Math.sin(view.clock * 2 + i)) * 0.5
+      ctx.beginPath()
+      ctx.arc(sx, sy, r * 0.035, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.globalAlpha = 1
+  } else if (look === 'hole') {
+    /*
+     * The sky bent round the outside, then the disc of hot stuff going round,
+     * then nothing at all in the middle. The nothing is the point: it is the
+     * only thing in this game drawn by *not* drawing.
+     */
+    const bend = ctx.createRadialGradient(cx, cy, r * 1.0, cx, cy, r * 2.4)
+    bend.addColorStop(0, 'rgba(255,176,46,0.22)')
+    bend.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = bend
+    ctx.beginPath()
+    ctx.arc(cx, cy, r * 2.4, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.scale(1, 0.3)
+    for (let i = 0; i < 3; i++) {
+      ctx.strokeStyle = i === 0 ? world.band : `${world.band}${i === 1 ? '99' : '55'}`
+      ctx.lineWidth = r * (0.22 - i * 0.06)
+      ctx.beginPath()
+      ctx.arc(0, 0, r * (1.35 + i * 0.3), 0, Math.PI * 2)
+      ctx.stroke()
+    }
+    ctx.restore()
+
+    // A jet out of the top, which the real one has.
+    ctx.fillStyle = 'rgba(255,224,138,0.3)'
+    ctx.beginPath()
+    ctx.moveTo(cx - r * 0.12, cy)
+    ctx.lineTo(cx + r * 0.12, cy)
+    ctx.lineTo(cx + r * 0.4, cy - r * 2.6)
+    ctx.lineTo(cx - r * 0.4, cy - r * 2.6)
+    ctx.closePath()
+    ctx.fill()
+
+    ctx.fillStyle = '#000000'
+    ctx.beginPath()
+    ctx.arc(cx, cy, r * 0.92, 0, Math.PI * 2)
+    ctx.fill()
+  } else {
+    // A galaxy: a bright middle, and arms wound round it, seen at an angle.
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate(0.4)
+    ctx.scale(1, 0.42)
+    const core = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2)
+    core.addColorStop(0, world.band)
+    core.addColorStop(0.2, `${world.band}aa`)
+    core.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = core
+    ctx.beginPath()
+    ctx.arc(0, 0, r * 2, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.strokeStyle = `${world.body}88`
+    ctx.lineWidth = r * 0.3
+    for (const side of [0, Math.PI]) {
+      ctx.beginPath()
+      for (let t = 0; t < 1; t += 0.02) {
+        const a = side + turn + t * Math.PI * 1.6
+        const rad = r * (0.3 + t * 1.7)
+        const x = Math.cos(a) * rad
+        const y = Math.sin(a) * rad
+        if (t === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      }
+      ctx.stroke()
+    }
+    ctx.restore()
+  }
+
+  // Whatever is going round it, which for a star is its planets and for a
+  // galaxy is nothing at all.
+  world.moons.forEach((moon, i) => {
+    const going = view.clock * 0.18 + i * 2.2
+    const orbit = r * (1.5 + i * 0.32)
+    ctx.fillStyle = '#cfd6e2'
+    ctx.beginPath()
+    ctx.arc(
+      cx + Math.cos(going) * orbit,
+      cy + Math.sin(going) * orbit * 0.34,
+      r * moon.size * 0.6, 0, Math.PI * 2,
+    )
+    ctx.fill()
+  })
+}
+
 export function drawRubble(ctx: Ctx, rock: Rubble, view: View): void {
   const x = px(view, rock.x, rock.y)
   const y = py(view, rock.y)
@@ -276,6 +458,45 @@ export function drawRubble(ctx: Ctx, rock: Rubble, view: View): void {
     ctx.beginPath()
     ctx.arc(x, y - size * 0.3, size * 0.2, 0, Math.PI * 2)
     ctx.fill()
+    return
+  }
+
+  if (rock.kind === 'comet') {
+    /*
+     * A head and a tail, and the tail points the way it came from — which for
+     * a real comet is away from the Sun rather than backwards along its path,
+     * but a comet dropping straight at you from a star dead ahead happens to
+     * be the same direction, so the honest drawing and the readable one agree
+     * for once.
+     *
+     * It is drawn bright and small because it is the fastest thing out here:
+     * the whole of what it has to say in the fiftieth of a second you get is
+     * "that one is not going to wait".
+     */
+    ctx.save()
+    ctx.translate(x, y)
+    const tail = ctx.createLinearGradient(0, -size * 7, 0, size)
+    tail.addColorStop(0, 'rgba(120,230,255,0)')
+    tail.addColorStop(0.6, 'rgba(120,230,255,0.28)')
+    tail.addColorStop(1, 'rgba(216,250,255,0.75)')
+    ctx.fillStyle = tail
+    ctx.beginPath()
+    ctx.moveTo(-size * 0.25, -size * 7)
+    ctx.lineTo(size * 0.25, -size * 7)
+    ctx.lineTo(size * 1.1, size * 0.4)
+    ctx.lineTo(-size * 1.1, size * 0.4)
+    ctx.closePath()
+    ctx.fill()
+
+    const head = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 1.5)
+    head.addColorStop(0, '#ffffff')
+    head.addColorStop(0.4, lit ? '#ffffff' : '#9fe8ff')
+    head.addColorStop(1, 'rgba(159,232,255,0)')
+    ctx.fillStyle = head
+    ctx.beginPath()
+    ctx.arc(0, 0, size * 1.5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
     return
   }
 
@@ -587,6 +808,36 @@ export function drawRun(ctx: Ctx, run: Run, view: View, travelled: number): void
   }
 
   drawWorld(ctx, run.world, run.progress, play)
+
+  /*
+   * Which way the current is running, if there is one.
+   *
+   * A force you cannot see is a game cheating at you. Out past Neptune the
+   * place drags the ship sideways and turns a few times on the way, so the
+   * sky says so: a drift of streaks across it, going the way you are being
+   * pushed and as fast as you are being pushed. Nothing to read, nothing to
+   * learn — you can feel the stick fighting you and the sky agrees with it.
+   */
+  const pull = run.world.pull ?? 0
+  if (pull > 0) {
+    const way = Math.sin(run.progress * Math.PI * 2 * 2.5)
+    ctx.save()
+    ctx.strokeStyle = `rgba(216,226,240,${0.07 + Math.abs(way) * 0.13})`
+    ctx.lineWidth = Math.max(1, view.h * 0.002)
+    for (let i = 0; i < 14; i++) {
+      const seed = Math.sin(i * 33.7) * 9999
+      const fy = seed - Math.floor(seed)
+      const y = fy * view.h
+      const drift = ((view.clock * way * 0.22 + fy) % 1.4) - 0.2
+      const x = drift * width
+      const long = width * 0.1 * Math.abs(way)
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.lineTo(x + long * Math.sign(way || 1), y)
+      ctx.stroke()
+    }
+    ctx.restore()
+  }
   for (const bolt of run.bolts) drawBolt(ctx, bolt, play)
   for (const cell of run.scrap) drawCell(ctx, cell, play)
   /*

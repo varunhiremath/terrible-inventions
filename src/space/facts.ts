@@ -60,6 +60,31 @@ export const FACTS: readonly Fact[] = [
   { about: 'space', text: 'The International Space Station goes round the Earth every 90 minutes, so the crew see sixteen sunrises a day.' },
   { about: 'gravity', text: 'Everything in orbit is falling. It is just moving sideways fast enough that it keeps missing the ground.' },
   { about: 'the stars', text: 'When you look at a star you are looking into the past. Some of the ones you can see tonight left their light before anyone alive was born.' },
+
+  // --- past Neptune ---------------------------------------------------------
+  //
+  // The game used to stop at the eighth planet, so these are new. Same rule as
+  // all of the above: every one is real, and where there is a number it is the
+  // number astronomers use, rounded to something a nine-year-old can hold.
+  { about: 'the Kuiper Belt', text: 'Pluto was called the ninth planet for 76 years. It was renamed a dwarf planet in 2006, once it turned out there were thousands of others out there like it.' },
+  { about: 'the Kuiper Belt', text: 'A spacecraft called New Horizons flew past Pluto in 2015 at 50,000 km/h. It had been travelling for nine and a half years and got about twenty minutes of close-up pictures.' },
+  { about: 'the Oort Cloud', text: 'The Oort Cloud is a shell of frozen comets wrapped right round the solar system. Nobody has ever seen it; we know it is there because of where the comets come from.' },
+  { about: 'the Oort Cloud', text: 'Voyager 1 has been flying since 1977 and will not reach the Oort Cloud for another 300 years. It will not be out the other side for 30,000.' },
+  { about: 'comets', text: 'A comet’s tail always points away from the Sun, not backwards along its path — so on the way out, a comet flies tail first.' },
+  { about: 'Proxima Centauri', text: 'Proxima Centauri is the nearest star to us and you cannot see it without a telescope. It is a red dwarf: small, dim, and it will still be burning long after the Sun has gone out.' },
+  { about: 'Proxima Centauri', text: 'There is a planet going round Proxima Centauri, about the size of Earth. Its year is eleven days long.' },
+  { about: 'Sirius', text: 'Sirius looks white to us and is really two stars. The small one is a burnt-out core the size of Earth, and a teaspoon of it would weigh about a tonne.' },
+  { about: 'Sirius', text: 'The ancient Egyptians used Sirius as a calendar: when it first appeared before dawn, the Nile was about to flood.' },
+  { about: 'Betelgeuse', text: 'Betelgeuse is the red one in Orion’s shoulder. It is so big that light takes an hour to cross it, where it takes four and a half seconds to cross the Sun.' },
+  { about: 'Betelgeuse', text: 'Betelgeuse will explode as a supernova one day. It may already have done it — the light takes 650 years to get here, so we would not know yet.' },
+  { about: 'the Crab Nebula', text: 'What is left in the middle of the Crab Nebula is a star so squashed that it is 20 km across and spins thirty times a second.' },
+  { about: 'nebulas', text: 'A nebula is where stars are made. Gravity pulls a cloud of gas together for millions of years until the middle gets hot enough to catch light.' },
+  { about: 'Sagittarius A*', text: 'There is a black hole at the middle of our galaxy and everything in the Milky Way, including us, is going round it. One trip takes the Sun 230 million years.' },
+  { about: 'black holes', text: 'A black hole is not a hole. It is a lump of stuff so heavy that nothing moving through space is fast enough to climb away from it — and nothing in the universe is faster than light.' },
+  { about: 'black holes', text: 'The first photograph of a black hole was taken in 2019, using eight telescopes all over the Earth working as one.' },
+  { about: 'Andromeda', text: 'Andromeda is the furthest thing you can see without a telescope. It is two and a half million light years away, so you are seeing it as it was before there were people.' },
+  { about: 'galaxies', text: 'There are more galaxies in the universe than there are grains of sand on every beach on Earth, and each one holds billions of stars.' },
+  { about: 'the Milky Way', text: 'The Milky Way is the galaxy we live in, seen from the inside. That faint band across a really dark sky is its far side.' },
 ]
 
 /**

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { NEW_KIT, STARTING_SHIELDS, WORLDS, worldFor, type Kit, type Upgrade } from '../space/level'
+import {
+  NEW_KIT, SOLAR_SYSTEM, STARTING_SHIELDS, WORLDS, worldFor, type Kit, type Upgrade,
+} from '../space/level'
 import {
   FIXED, LOUDEST, buy, newRun, resume, step,
   type Input, type Run, type SpaceEvent, type Status,
@@ -68,7 +70,9 @@ function opening(): { world: number; scrap: number } {
   const world = Number(asked.get('world'))
   const scrap = Number(asked.get('scrap'))
   return {
-    world: Number.isFinite(world) ? Math.min(WORLDS.length, Math.max(1, Math.floor(world))) : 1,
+    // No ceiling: there is no last world any more, so a probe can be pointed
+    // at any of them.
+    world: Number.isFinite(world) && world > 0 ? Math.floor(world) : 1,
     scrap: Number.isFinite(scrap) ? Math.max(0, Math.floor(scrap)) : 0,
   }
 }
@@ -162,7 +166,7 @@ export function Space() {
          * to Neptune sounds like the last stretch, and so does being on your
          * last shield at Venus.
          */
-        const far = (next.number - 1) / Math.max(1, WORLDS.length - 1)
+        const far = Math.min(1, (next.number - 1) / Math.max(1, WORLDS.length - 1))
         const hurt = 1 - (next.shields - 1) / Math.max(1, STARTING_SHIELDS - 1)
         setHeat(Math.max(far * 0.55 + next.progress * 0.3, hurt * 0.8))
 
@@ -399,8 +403,9 @@ export function Space() {
   const onward = () => {
     const run = runRef.current
     if (!run) return
+    // No ceiling. He finished this game once; the whole point of what is past
+    // Neptune is that there is no last world to reach.
     const number = run.number + 1
-    if (number > WORLDS.length) return
     // Scrap and kit carry. That is the whole reason to go back for a cell
     // rather than getting out of its way.
     runRef.current = newRun(number, run.shields, run.score, run.seed, run.purse, run.kit)
@@ -418,7 +423,15 @@ export function Space() {
   }
 
   const world = worldFor(hud.number)
-  const lastWorld = hud.number >= WORLDS.length
+  /**
+   * Leaving the solar system, which is the only milestone left.
+   *
+   * There used to be a last world and a "that is the end of it" card at
+   * Neptune. He reached it, so it stopped being an ending and started being a
+   * place the game stopped — and the eighth planet is the right place for
+   * something to be marked and the wrong place for everything to stop.
+   */
+  const leftTheSystem = hud.number === SOLAR_SYSTEM
   const outOfShields = hud.shields <= 0
   /** A knock puts up a fact and puts you straight back out there. */
   const knocked = hud.status === 'knocked' && !outOfShields
@@ -457,8 +470,8 @@ export function Space() {
               {hud.status === 'arrived' ? world.name.toUpperCase() : fill('{papa}')}
             </p>
             <p className="mt-2 text-xl leading-snug short:mt-1 short:text-base">
-              {hud.status === 'arrived' && lastWorld
-                ? 'Neptune. There is nothing past Neptune but my patience, and you have used that up too.'
+              {hud.status === 'arrived' && leftTheSystem
+                ? 'Neptune — the last planet there is. Everything past here is a long way past here, and something out there is awake. Still want to go?'
                 : hud.status === 'arrived'
                   ? `You made ${world.name}! Look at that. Do not tell anyone I said so.`
                   : 'Out of shields! Space is enormous and full of rocks. Go again?'}
@@ -494,12 +507,12 @@ export function Space() {
                */
               className="mt-5 flex flex-col gap-2 short:mt-2 short:flex-row-reverse short:gap-2"
             >
-              {hud.status === 'arrived' && !lastWorld && (
+              {hud.status === 'arrived' && (
                 <Btn tone="go" onClick={onward} className="py-4 text-lg short:min-h-0 short:flex-1 short:py-2 short:text-base">
                   On to {worldFor(hud.number + 1).name}
                 </Btn>
               )}
-              {(outOfShields || (hud.status === 'arrived' && lastWorld)) && (
+              {outOfShields && (
                 <Btn tone="go" onClick={startOver} className="py-4 text-lg short:min-h-0 short:flex-1 short:py-2 short:text-base">
                   Start again
                 </Btn>

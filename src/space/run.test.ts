@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   COSTS, FLYABLE, MOST_OF, MOST_SHIELDS, NEW_KIT, SCRAP_OF, SHIP_SPEED, SHIP_WIDE,
-  SIZE_OF, WORLDS, reloadFor, worldFor, type Hazard,
+  SIZE_OF, SOLAR_SYSTEM, WORLDS, reloadFor, worldFor, type Hazard,
 } from './level'
 import {
   FIXED, NO_INPUT, buy, canBuy, newRubble, newRun, resume, step, widestGap,
@@ -24,8 +24,34 @@ import {
  * middle of the widest opening. If this cannot get to Neptune, nor can a
  * child.
  */
-export function makePilot() {
-  return (run: Run): Input => {
+/**
+ * Somebody flying it.
+ *
+ * @param reaction seconds between making up its mind, or nought for a machine
+ *
+ * The default is a machine: it reads every hazard's exact position and flies
+ * to the middle of the widest gap at full lock, sixty times a second. That is
+ * the right pilot for asking "is there a way through at all", which is what
+ * the fairness checks ask.
+ *
+ * It is the wrong pilot for asking "is this harder than that", and the
+ * measurement said so out loud. Deep space got a gravity well that drags the
+ * ship, comets two and a half times faster than anything else, and aliens
+ * shooting back — and this pilot lost *exactly* as many shields at a black
+ * hole as at Neptune, because none of those things trouble something with no
+ * reaction time. The instrument could not feel the difference, which is not
+ * the same as there not being one.
+ *
+ * So it can be given a reaction: it looks, decides, and then holds that
+ * decision for a fraction of a second whatever happens next. That is what a
+ * person does, and it is the difference between a comet being a hazard and a
+ * comet being a thing that was not there when you last looked.
+ */
+export function makePilot(reaction = 0) {
+  let held: Input | null = null
+  let since = 0
+
+  const decide = (run: Run): Input => {
     /*
      * The clear runs across the band ahead, measured with each hazard's real
      * size. The first version of this assumed everything was a rock, so it
@@ -53,6 +79,16 @@ export function makePilot() {
 
     const off = best - run.x
     return { left: off < -0.01, right: off > 0.01, fire: true }
+  }
+
+  return (run: Run): Input => {
+    if (reaction <= 0) return decide(run)
+    since += FIXED
+    if (held === null || since >= reaction) {
+      held = decide(run)
+      since = 0
+    }
+    return held
   }
 }
 
@@ -178,7 +214,33 @@ describe('the worlds', () => {
   it('are in the order you would meet them', () => {
     expect(WORLDS.map((w) => w.name)).toEqual([
       'Mercury', 'Venus', 'Earth', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune',
+      // And then out of the solar system, in the order you would actually meet
+      // them: the belt, the cloud round it, the nearest stars, a nebula, the
+      // black hole in the middle of this galaxy, and the next galaxy along.
+      'The Kuiper Belt', 'The Oort Cloud', 'Proxima Centauri', 'Sirius',
+      'Betelgeuse', 'The Crab Nebula', 'Sagittarius A*', 'Andromeda',
     ])
+  })
+
+  it('run out of planets where the solar system does', () => {
+    expect(WORLDS.slice(0, SOLAR_SYSTEM).every((w) => (w.look ?? 'planet') === 'planet')).toBe(true)
+    expect(WORLDS.slice(SOLAR_SYSTEM).every((w) => (w.look ?? 'planet') !== 'planet')).toBe(true)
+  })
+
+  it('never run out at all', () => {
+    /*
+     * He finished this game. Eight planets is a finished story, so that was
+     * the right thing to have happened — and the answer to it is that there is
+     * no last world any more.
+     */
+    const far = worldFor(WORLDS.length + 9)
+    expect(far.name).toContain('·')
+    expect(far.fact.length, 'a generated world still has a real fact').toBeGreaterThan(40)
+    expect(far.traffic).toBeGreaterThan(worldFor(WORLDS.length).traffic)
+
+    // And it keeps climbing rather than levelling off straight away.
+    const further = worldFor(WORLDS.length + 40)
+    expect(further.pull ?? 0).toBeGreaterThan(far.pull ?? 0)
   })
 
   it('gets harder the further out you go', () => {

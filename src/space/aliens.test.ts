@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ALIEN_RELOAD, ALIEN_SWEEP, FLYABLE, SHIP_WIDE, SHOT_WIDE, SIZE_OF, WORLDS, worldFor,
+  ALIEN_RELOAD, ALIEN_SWEEP, FLYABLE, SHIP_WIDE, SHOT_WIDE, SIZE_OF, SOLAR_SYSTEM,
+  WORLDS, worldFor,
 } from './level'
 import { FIXED, NO_INPUT, newRubble, newRun, resume, step, widestGap, type Run } from './run'
 import { makePilot } from './run.test'
@@ -31,18 +32,25 @@ const fly = (run: Run, seconds: number, input = NO_INPUT) => {
 }
 
 /** One alien, parked where it is wanted, with everything else cleared away. */
+const DEEP = 10
 const withAlien = (x = 0.5, y = 0.3): Run => ({
-  ...newRun(4, 99, 0, 5),
+  ...newRun(DEEP, 99, 0, 5),
   rubble: [{ ...newRubble('alien', x, y, ALIEN_SWEEP), id: 1 }],
 })
 
 describe('the aliens', () => {
-  it('turn up out past Earth and not before', () => {
-    expect(worldFor(1).sends).not.toContain('alien')
-    expect(worldFor(2).sends).not.toContain('alien')
-    for (let n = 3; n <= WORLDS.length; n++) {
-      expect(worldFor(n).sends, worldFor(n).name).toContain('alien')
+  it('are out in deep space and nowhere near the solar system', () => {
+    /*
+     * Asked for in one line: "aliens should appear only in deep space, not in
+     * the solar system". Which is right, and is the better story — the first
+     * eight worlds are rock and weather and nothing out there wants anything;
+     * past Neptune something does.
+     */
+    for (let n = 1; n <= SOLAR_SYSTEM; n++) {
+      expect(worldFor(n).sends, worldFor(n).name).not.toContain('alien')
     }
+    const deep = WORLDS.slice(SOLAR_SYSTEM)
+    expect(deep.filter((w) => w.sends.includes('alien')).length).toBeGreaterThan(deep.length / 2)
   })
 
   it('fly a beat rather than falling straight', () => {
@@ -77,7 +85,7 @@ describe('the aliens', () => {
      * noticed until somebody flew into a wall. `widestGap` counts where a
      * thing can get to, so this passing is what says the claim is honest.
      */
-    for (let number = 3; number <= WORLDS.length; number++) {
+    for (let number = SOLAR_SYSTEM + 1; number <= WORLDS.length; number++) {
       for (let seed = 1; seed <= 4; seed++) {
         let run = newRun(number, 99, 0, seed * 29)
         const pilot = makePilot()
@@ -113,12 +121,12 @@ describe('the aliens', () => {
 
   it('what they fire can take a shield, and can be shot out of the air', () => {
     const atYou: Run = {
-      ...newRun(4, 99, 0, 5),
+      ...newRun(DEEP, 99, 0, 5),
       rubble: [],
       x: 0.5,
       shots: [{ id: 1, x: 0.5, y: 0.9 }],
     }
-    expect(fly(atYou, 0.4).shields).toBe(newRun(4, 99).shields - 1)
+    expect(fly(atYou, 0.4).shields).toBe(newRun(DEEP, 99).shields - 1)
 
     // And the same shot, met head on. Yours climbs faster than theirs falls,
     // so one well-aimed bolt is enough.
@@ -127,7 +135,7 @@ describe('the aliens', () => {
       0.35,
       { left: false, right: false, fire: true },
     )
-    expect(met.shields, 'shooting it down did not save the shield').toBe(newRun(4, 99).shields)
+    expect(met.shields, 'shooting it down did not save the shield').toBe(newRun(DEEP, 99).shields)
   })
 
   it('fire that cannot wall the screen', () => {
@@ -137,7 +145,7 @@ describe('the aliens', () => {
      * that they could never add up to a wall even if they were counted.
      * Measured over whole runs rather than argued about.
      */
-    for (let number = 3; number <= WORLDS.length; number++) {
+    for (let number = SOLAR_SYSTEM + 1; number <= WORLDS.length; number++) {
       let run = newRun(number, 99, 0, number * 13)
       const pilot = makePilot()
       let worst = 1

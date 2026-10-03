@@ -12,7 +12,7 @@ import { makeRng, type Rng } from '../engine/rng'
 import {
   ALIEN_PACE, ALIEN_RELOAD, ALIEN_SWEEP,
   BOLT_SPEED, COSTS, FLYABLE, MAGNET_PULL, MERCY, MOST_OF, MOST_SHIELDS, NEW_KIT,
-  SCRAP_OF, SCRAP_WIDE, SHIP_SPEED, SHIP_TALL, SHIP_WIDE, SHOT_SPEED, SHOT_WIDE,
+  RUSH_OF, SCRAP_OF, SCRAP_WIDE, SEND_RATE, SHIP_SPEED, SHIP_TALL, SHIP_WIDE, SHOT_SPEED, SHOT_WIDE,
   SIZE_OF, STARTING_SHIELDS, TOUGHNESS, WORTH, reloadFor, worldFor,
   type Hazard, type Kit, type Upgrade, type World,
 } from './level'
@@ -265,12 +265,25 @@ export function widestGap(rubble: readonly Rubble[], from: number, to: number): 
 /** Put something new at the top, but only where it leaves a way past. */
 function send(run: Run, rng: Rng): void {
   const kinds = run.world.sends
-  const kind = kinds[rng.int(0, kinds.length - 1)]
-  const half = SIZE_OF[kind] / 2
 
-  // Ten attempts at a spot that keeps a flyable gap. If none of them works the
-  // band is busy enough already and nothing is sent, which is the right answer.
+  /*
+   * Ten attempts at something that fits, re-rolling what it is each time.
+   *
+   * It used to choose the kind once and then try ten places for it, which is
+   * fine while every kind is as easy to place as every other. A comet is not:
+   * it comes down quicker than everything else, so it needs a clear run all
+   * the way down rather than a gap in one band, and most of the time there
+   * is not one. So one roll in six picked a comet, failed ten times, and sent
+   * *nothing at all* — and the sky out past Neptune came out emptier than
+   * Neptune's, which is how a world with more traffic and a gravity well in it
+   * measured as the easiest in the game.
+   *
+   * Re-rolling makes `traffic` mean what it says again: when the comet will
+   * not fit, something else goes instead.
+   */
   for (let tries = 0; tries < 10; tries++) {
+    const kind = kinds[rng.int(0, kinds.length - 1)]
+    const half = SIZE_OF[kind] / 2
     /*
      * An alien needs room for its whole beat, not just for itself, so it is
      * put down somewhere its patrol fits on the screen — and `claim` below
@@ -297,11 +310,21 @@ function send(run: Run, rng: Rng): void {
      * legal on their own and still end up in the same band together. Checking
      * only the top third let exactly that through on Jupiter.
      *
-     * Nothing drifts, so relative positions never change: a gap that is
-     * flyable across this range is flyable all the way down.
+     * Everything that falls at the same pace keeps its distance from
+     * everything else for ever, so for those the band it is in now is the only
+     * band it will ever be in, and checking that one is enough.
+     *
+     * A comet is not one of those. It comes down two and a half times quicker,
+     * so it will pass through every band below it before it is done — which
+     * means the honest question is whether the gap holds against *everything
+     * on the screen*, not against its neighbours. The same lesson for the
+     * fifth time: a measurement only stays true where nothing moves relative
+     * to anything else, so where something does, measure the whole of what it
+     * will meet.
      */
-    const band = run.rubble.filter((r) => r.y < 0.65)
-    if (widestGap([...band, would], -0.2, 0.65) < FLYABLE) continue
+    const faster = RUSH_OF[kind] > 1
+    const band = faster ? run.rubble : run.rubble.filter((r) => r.y < 0.65)
+    if (widestGap([...band, would], -0.2, faster ? 1.1 : 0.65) < FLYABLE) continue
 
     run.rubble.push({ ...would, id: run.nextId++, drift: 0 })
     return
@@ -352,7 +375,53 @@ export function step(run: Run, input: Input, dt: number): Run {
 
   // --- flying ---------------------------------------------------------------
   const steer = (input.right ? 1 : 0) - (input.left ? 1 : 0)
-  next.x = Math.min(1 - SHIP_WIDE / 2, Math.max(SHIP_WIDE / 2, next.x + steer * SHIP_SPEED * dt))
+  /*
+   * And whatever the place out there is doing to you.
+   *
+   * "Once you have all the upgrades the game becomes easy" — and it does,
+   * because every upgrade in this game makes your gun better. By Neptune the
+   * gun has stopped being the question, so the far half of the trip asks a
+   * different one.
+   *
+   * A gravity well drags you away from the middle, harder the further out you
+   * drift, the way a real one does. You can still go anywhere; you just cannot
+   * let go of the stick, and no amount of firepower helps. Near a black hole
+   * the edges of the screen are a place you fall into rather than a wall you
+   * rest against.
+   */
+  /*
+   * A current, not a slope.
+   *
+   * The first go pulled you away from the middle, harder the further out you
+   * drifted, the way a real well does. Measured, that made the black hole the
+   * *easiest* world in the game — because it pins the ship against an edge,
+   * and a ship pinned at an edge stops crossing the screen and therefore stops
+   * meeting most of what is on it. Five and a half shields lost where Neptune
+   * cost thirteen and a half. A difficulty that works by taking the player out
+   * of the game is not a difficulty.
+   *
+   * So it is a crosswind that turns instead: it pushes one way, eases, and
+   * pushes back the other, a few times on the way out. You cannot be parked by
+   * it and you cannot ignore it — every gap costs more to reach one way and
+   * arrives early the other, and no upgrade in this game has anything to say
+   * about that, which is the whole point.
+   */
+  const pull = next.world.pull ?? 0
+  /*
+   * Held below what the ship can do, which is the difference between hard and
+   * unfair. Sagittarius A* asks for 0.95 and the ship steers at 0.85; at six
+   * tenths of its speed you can always make headway against the current, just
+   * slowly, and slowly is what makes it cost something.
+   */
+  const MOST_PULL = SHIP_SPEED * 0.6
+  /** Turns on the way out. Slow enough to lean into, often enough to matter. */
+  const TURNS = 2.5
+  const lean =
+    pull === 0 ? 0 : Math.sin(next.progress * Math.PI * 2 * TURNS) * Math.min(MOST_PULL, pull)
+  next.x = Math.min(
+    1 - SHIP_WIDE / 2,
+    Math.max(SHIP_WIDE / 2, next.x + (steer * SHIP_SPEED + lean) * dt),
+  )
   next.mercy = Math.max(0, next.mercy - dt)
   next.reload = Math.max(0, next.reload - dt)
   next.progress = Math.min(1, next.progress + dt / next.world.seconds)
@@ -379,7 +448,7 @@ export function step(run: Run, input: Input, dt: number): Run {
 
   // --- everything falling ----------------------------------------------------
   for (const rock of next.rubble) {
-    rock.y += next.world.fall * dt
+    rock.y += next.world.fall * RUSH_OF[rock.kind] * dt
     if (rock.flash > 0) rock.flash = Math.max(0, rock.flash - dt)
 
     if (rock.kind !== 'alien') continue
@@ -518,7 +587,9 @@ export function step(run: Run, input: Input, dt: number): Run {
   }
 
   // --- keeping the sky busy ---------------------------------------------------
-  if (next.rubble.length < next.world.traffic && rng.next() < 0.06) send(next, rng)
+  if (next.rubble.length < next.world.traffic && rng.next() < (next.world.rate ?? SEND_RATE)) {
+    send(next, rng)
+  }
 
   // --- arriving ---------------------------------------------------------------
   if (!next.warned && next.progress > 0.85) {
