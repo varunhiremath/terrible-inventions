@@ -69,3 +69,31 @@ describe('the scrolling camera', () => {
     expect(scrollTo(0, 19, 30, 20)).toBe(0)
   })
 })
+
+/**
+ * The one-way band.
+ *
+ * Reported of the pipes: "it's hard to see what's ahead until you reach the
+ * edge of the screen, so can you make sure the player is always in the left
+ * half". An even margin cannot do that — it lets him drift to four fifths
+ * across — so the front of the view gets more of it than the back.
+ */
+describe('a camera for a game that only goes one way', () => {
+  it('keeps him in the left half the whole way down the level', () => {
+    let camera = 0
+    for (let x = SPAN * 0.4; x < WORLD - SPAN; x += 0.25) {
+      camera = scrollTo(camera, x, SPAN, WORLD, 0.3, 0.55)
+      const at = screenFraction(camera, x, SPAN)
+      expect(at, `at ${x}`).toBeLessThanOrEqual(0.5 + 1e-9)
+      expect(at, `at ${x}`).toBeGreaterThanOrEqual(0.3 - 1e-9)
+    }
+  })
+
+  it('still lets him walk to the very end of the world', () => {
+    // The camera stops at the end, so there he really does reach the right of
+    // the screen — and the flag is at the end, so he has to be able to.
+    const camera = scrollTo(0, WORLD - 1, SPAN, WORLD, 0.3, 0.55)
+    expect(camera).toBe(WORLD - SPAN)
+    expect(screenFraction(camera, WORLD - 1, SPAN)).toBeGreaterThan(0.9)
+  })
+})

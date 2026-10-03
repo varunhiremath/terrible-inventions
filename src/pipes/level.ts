@@ -70,6 +70,30 @@ export interface Spawn {
   kind: 'goomba' | 'koopa'
 }
 
+/**
+ * A pipe you can go down, and the one you come up.
+ *
+ * Asked for in one line — "can we go inside pipes? I don't see a go down
+ * button anywhere" — and it is the thing this genre is named after, so the
+ * answer had to be yes.
+ *
+ * Worked out from the level rather than written into it. The levels are
+ * generated and proved by a solver, and adding a tile to their alphabet would
+ * mean regenerating and re-proving all fifteen to add a shortcut none of them
+ * needs — so the pipes that are already there get paired up instead: the first
+ * with the second, the third with the fourth, as far as they go. Only pairs
+ * that work survive `pairUp` below, so a level with one pipe simply has no
+ * warp in it and nothing anywhere has to know that.
+ */
+export interface Warp {
+  /** The left column of the lip you go down, and the row its top is on. */
+  from: number
+  fromRow: number
+  /** And of the one you come up. */
+  to: number
+  toRow: number
+}
+
 export interface Level {
   name: string
   /** Rows of tiles, sky first. Every row is the same length. */
@@ -77,6 +101,60 @@ export interface Level {
   spawns: Spawn[]
   /** Which column the flagpole is in, for knowing when the level is done. */
   pole: number
+  /** Which pipes lead where. Possibly none. */
+  warps: Warp[]
+}
+
+/** Every pipe lip in a level, left column first, in the order they come. */
+function pipeLips(rows: readonly string[]): { col: number; row: number }[] {
+  const lips: { col: number; row: number }[] = []
+  rows.forEach((line, row) => {
+    for (let col = 0; col < line.length - 1; col++) {
+      if (line[col] === TILE.PIPE_TOP_L && line[col + 1] === TILE.PIPE_TOP_R) {
+        lips.push({ col, row })
+      }
+    }
+  })
+  return lips.sort((a, b) => a.col - b.col)
+}
+
+/**
+ * Pairs of pipes that actually work as a way through.
+ *
+ * Two things have to be true of the far end or the shortcut is a trap: it has
+ * to be further along than the one you went down — a warp that puts you behind
+ * where you started is a punishment — and there has to be room above its lip
+ * to come up into, or he surfaces inside a brick.
+ */
+function pairUp(rows: readonly string[]): Warp[] {
+  const lips = pipeLips(rows)
+  const clearAbove = (col: number, row: number) => {
+    for (let r = row - 2; r < row; r++) {
+      for (const c of [col, col + 1]) {
+        if (r < 0) continue
+        if (isSolid(rows[r]?.[c] ?? TILE.SKY)) return false
+      }
+    }
+    return true
+  }
+  const warps: Warp[] = []
+  for (let i = 0; i + 1 < lips.length; i += 2) {
+    const down = lips[i]
+    const up = lips[i + 1]
+    if (up.col <= down.col + 2) continue
+    if (!clearAbove(down.col, down.row) || !clearAbove(up.col, up.row)) continue
+    warps.push({ from: down.col, fromRow: down.row, to: up.col, toRow: up.row })
+  }
+  return warps
+}
+
+/** The warp you would take by pressing down while stood here, if any. */
+export function warpUnder(level: Level, col: number, row: number): Warp | null {
+  return (
+    level.warps.find(
+      (warp) => warp.fromRow === row && (col === warp.from || col === warp.from + 1),
+    ) ?? null
+  )
 }
 
 export function isSolid(tile: string): boolean {
@@ -133,7 +211,7 @@ export function readLevel(name: string, rows: readonly string[]): Level {
     if (at >= 0) pole = at
   })
 
-  return { name, rows: clean, spawns, pole }
+  return { name, rows: clean, spawns, pole, warps: pairUp(clean) }
 }
 
 /** The ground under a column, for putting things on top of it. */

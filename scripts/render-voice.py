@@ -40,7 +40,10 @@ MODELS = os.environ.get('PIPER_MODELS', '/tmp')
 # by one person doing both parts.
 SPEAKERS = {
     'narrator': 'en_GB-alan-medium',
-    'papa': 'en_GB-northern_english_male-medium',
+    # Chosen by ear out of five candidates put on a page and listened to on a
+    # phone. There is no Indian-English Piper voice at all; this is the closest
+    # thing to the Indian-and-American mix that was asked for.
+    'papa': 'en_US-kusal-medium',
 }
 
 # What the placeholders become. The repo never contains a real name — these
@@ -142,16 +145,73 @@ def lines_from_openers(path):
 OPUS_RATE = 24000
 
 
+def lowpass(audio, cut, rate, taps=129):
+    """A windowed-sinc, zero phase, for use before throwing samples away."""
+    n = np.arange(taps) - (taps - 1) / 2
+    h = np.sinc(2 * cut / rate * n) * np.hamming(taps)
+    h /= h.sum()
+    return np.convolve(audio, h, mode='same').astype('float32')
+
+
 def resample(audio, rate, to):
-    """Plain linear resampling. These are voice clips, not master tapes."""
+    """
+    Linear resampling, with the filter that has to come first when going down.
+
+    Throwing samples away without filtering first folds everything above the
+    new Nyquist back down into the audible band, and the lift below goes down
+    by twelve per cent. Worth saying how much this actually mattered, because
+    it was a suspect for the crackling and it is not the culprit: a control
+    tone above the new Nyquist comes back six million times quieter with the
+    filter than without, so the filter works — but on real speech the aliased
+    band is half a per cent of the signal and the filter removes a tenth of
+    that. It is here because it is correct, not because it fixed anything.
+    """
     if rate == to:
         return audio
+    if to < rate:
+        audio = lowpass(audio, to / 2 * 0.92, rate)
     want = int(round(len(audio) * to / rate))
     return np.interp(
         np.linspace(0, len(audio) - 1, want),
         np.arange(len(audio)),
         audio,
     ).astype('float32')
+
+
+# --- how loud a clip comes out ------------------------------------------------
+#
+# Reported as a crackling noise on some of the spoken lines, and the measuring
+# is worth keeping because three likelier-sounding suspects were wrong.
+#
+#   The music     could not be it. The loudest moment in any tune or cue sums
+#                 to 0.67 of the mixer before the master gain of 0.27 — 0.18 out
+#                 of a possible 1.0, and a cue on top of a tune is 0.28. There
+#                 is no arithmetic by which that clips.
+#   The aliasing  could not be it either; see resample above.
+#   The bitrate   is 38 kbps of Opus at 24 kHz, which is fine for speech.
+#
+# What was left is that Piper normalises every clip to a peak of exactly 1.0,
+# so these went out with no headroom whatsoever: thirty-one of the eighty-four
+# shipped files had samples at or past full scale after encoding, the worst at
+# 1.023. A decoder hands those to a phone that is also playing a game, and the
+# mixer has nowhere to put them.
+#
+# So every clip is brought to the same loudness and then held well under the
+# ceiling. Both halves matter: the peak is what stops the crackle, and the
+# loudness is what stops one line arriving four decibels louder than the last.
+TARGET_RMS = 0.11
+CEILING = 0.72
+
+
+def level(audio):
+    """One loudness for every line, and room above it."""
+    rms = float(np.sqrt(np.mean(audio ** 2)))
+    if rms > 1e-6:
+        audio = audio * (TARGET_RMS / rms)
+    peak = float(np.max(np.abs(audio)))
+    if peak > CEILING:
+        audio = audio * (CEILING / peak)
+    return audio.astype('float32')
 
 
 def key_of(voice, line):
@@ -208,7 +268,7 @@ def main():
             audio = audio[max(0, first - pad):min(len(audio), last + pad)]
 
         out = os.path.join(OUT, f'{key}.opus')
-        sf.write(out, resample(audio, rate, OPUS_RATE), OPUS_RATE, format='OGG', subtype='OPUS')
+        sf.write(out, level(resample(audio, rate, OPUS_RATE)), OPUS_RATE, format='OGG', subtype='OPUS')
         total += os.path.getsize(out)
         index[key] = round(len(audio) / rate, 2)
 

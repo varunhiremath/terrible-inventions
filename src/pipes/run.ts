@@ -11,7 +11,7 @@
  * times in a second to prove it can be finished.
  */
 import {
-  ROWS, TILE, isBumpable, isSolid, tileAt, type Level, type Spawn,
+  ROWS, TILE, isBumpable, isSolid, tileAt, warpUnder, type Level, type Spawn, type Warp,
 } from './level'
 import {
   BODY_W, STOMP_BOUNCE, STOMP_BOUNCE_HELD, bodyHeight, newBody, overlaps, step,
@@ -80,7 +80,27 @@ export interface Run {
   status: Status
   /** Something worth a noise happened this step. Read and cleared by the screen. */
   events: PipeEvent[]
+  /**
+   * Going down a pipe, if he is.
+   *
+   * Nothing else happens while this is set: no gravity, no enemies, no clock.
+   * Sinking into a pipe is the one moment in this game where the player is not
+   * driving, and a goomba that walked into him while he was halfway down one
+   * would be the most unfair death in the app.
+   */
+  warp: Warping | null
 }
+
+/** How far through going down a pipe, and which half of it. */
+export interface Warping {
+  at: Warp
+  /** Seconds into this half. */
+  t: number
+  part: 'down' | 'up'
+}
+
+/** How long each half takes. Slow enough to watch; it is a reward, not a load. */
+export const WARP_SECONDS = 0.55
 
 /**
  * Everything that can happen loudly.
@@ -91,6 +111,7 @@ export interface Run {
  */
 export const EVENTS = [
   'coin', 'sprout', 'break', 'knock', 'jump', 'die', 'grow', 'stomp', 'kick', 'shrink', 'win',
+  'pipe',
 ] as const
 export type PipeEvent = (typeof EVENTS)[number]
 
@@ -128,6 +149,7 @@ export function newRun(level: Level, number: number, lives = 3, extraSeconds = 0
     mercy: 0,
     status: 'playing',
     events: [],
+    warp: null,
   }
 }
 
@@ -265,10 +287,58 @@ function hits(body: Body, x: number, y: number, w: number, h: number): boolean {
   )
 }
 
+/**
+ * Where he stands when he comes up the far pipe: on the lip, facing on.
+ *
+ * `newBody`'s y is his feet, and a lip's row is the top of that tile, so his
+ * feet are the row itself.
+ */
+function onTheLip(warp: Warp): { x: number; y: number } {
+  return { x: warp.to + 1, y: warp.toRow }
+}
+
+/** Sinking into one pipe and rising out of the other. */
+function stepWarp(next: Run, dt: number): Run {
+  const warp = next.warp
+  if (!warp) return next
+  const t = warp.t + dt
+  const into = onTheLip(warp.at)
+
+  if (warp.part === 'down') {
+    if (t >= WARP_SECONDS) {
+      // Out of the far one, starting from below its lip and rising.
+      next.warp = { at: warp.at, t: 0, part: 'up' }
+      next.body = { ...newBody(into.x, into.y + 2), facing: 1 }
+      return next
+    }
+    next.warp = { ...warp, t }
+    next.body = { ...next.body, vx: 0, vy: 0, y: next.body.y + (dt / WARP_SECONDS) * 2 }
+    return next
+  }
+
+  if (t >= WARP_SECONDS) {
+    next.warp = null
+    next.body = { ...newBody(into.x, into.y), facing: 1, onGround: true, big: next.body.big }
+    return next
+  }
+  next.warp = { ...warp, t }
+  next.body = { ...next.body, vx: 0, vy: 0, y: next.body.y - (dt / WARP_SECONDS) * 2 }
+  return next
+}
+
 /** One fixed step of everything. */
 export function stepRun(run: Run, input: Input, dt = FIXED): Run {
   if (run.status !== 'playing') return run
   const next: Run = { ...run, events: [], enemies: [...run.enemies], items: [...run.items] }
+
+  /*
+   * Down a pipe, and nothing else at all.
+   *
+   * Not even the clock: the two seconds it takes are the game's, not his, and
+   * running out of time while stuck inside a pipe would be a joke at the
+   * player's expense.
+   */
+  if (next.warp) return stepWarp(next, dt)
 
   next.seconds -= dt
   if (next.seconds <= 0) return { ...next, seconds: 0, status: 'outOfTime' }
@@ -281,6 +351,22 @@ export function stepRun(run: Run, input: Input, dt = FIXED): Run {
   if (moved.bump) bumpBlock(next, moved.bump.col, moved.bump.row)
   if (moved.fell) {
     return { ...next, lives: next.lives - 1, status: 'dead', events: [...next.events, 'die'] }
+  }
+
+  /*
+   * Stood on a pipe that goes somewhere, and pressing down.
+   *
+   * The tile under his feet, not the one he is in: his feet are exactly on the
+   * boundary when he is standing, so the row below is the lip.
+   */
+  if (input.down && next.body.onGround) {
+    const under = warpUnder(next.level, Math.floor(next.body.x), Math.floor(next.body.y))
+    if (under) {
+      next.warp = { at: under, t: 0, part: 'down' }
+      next.body = { ...next.body, vx: 0, vy: 0, x: under.from + 1, facing: 1 }
+      next.events.push('pipe')
+      return next
+    }
   }
 
   // Coins lying in the world.

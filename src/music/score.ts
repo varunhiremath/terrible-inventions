@@ -120,6 +120,28 @@ export interface Track {
    * wrong for everything anybody has to sit with.
    */
   restEvery?: number
+  /**
+   * How much later the off-beats fall, as a fraction of an eighth.
+   *
+   * Nought is what a computer does: every eighth exactly as long as the last,
+   * which is the difference between a tune being played and a tune being
+   * typed. A third is a shuffle — the first of each pair held long and the
+   * second squeezed in late — and it is most of what "bouncy" means when
+   * anybody says a tune bounces.
+   *
+   * It moves the notes, not the beat: the bar is the same length, the drums
+   * stay where they are, and the tune leans.
+   */
+  swing?: number
+}
+
+/** A sensible ceiling: past this the pairs stop reading as pairs. */
+export const MOST_SWING = 0.34
+
+/** How late an off-beat falls, in seconds. */
+export function swingShift(track: Track, eighth: number, step: number): number {
+  const swing = Math.max(0, Math.min(MOST_SWING, track.swing ?? 0))
+  return eighth % 2 === 1 ? step * swing : 0
 }
 
 /** Loops between rests, for a track that does not say. */
@@ -441,32 +463,30 @@ export const CHASE: Track = {
   drums: CHASE_DRUMS,
   hotDrums: CHASE_HOT_DRUMS,
   parts: [
-    {
-      /*
-       * A triangle, where this was a quarter-duty pulse.
-       *
-       * A pulse that narrow is the most nasal thing the idiom has, and up at
-       * the fifth octave carrying the melody it was the single loudest part of
-       * the tune whatever its gain said — a square wave's harmonics fall away
-       * slowly, so most of what you hear is an octave or two above the note
-       * you are playing. A triangle has almost nothing above its third
-       * harmonic. Same notes, none of the edge.
-       *
-       * It wants a *little* more gain than the pulse did, not a lot. The first
-       * go at this doubled it, on the reasoning that triangles are quieter —
-       * which turns out to be false in the way that matters. Measured against
-       * the ear's own sensitivity curve, a triangle at the same nominal gain
-       * is *louder* than a narrow pulse, because nearly all of it lands in the
-       * fundamental rather than being scattered up into harmonics. What the
-       * pulse had was not loudness, it was presence, and the twenty per cent
-       * here is buying back some of that.
-       */
-      wave: 'triangle',
-      gain: 0.18,
-      sustain: 0.85,
-      vibrato: { cents: 14, hz: 5, delay: 0.14 },
-      pattern: CHASE_LEAD,
-    },
+    /*
+     * The melody, twice: a square for the edge and a triangle for the body.
+     *
+     * This was a quarter-duty pulse once, and that was genuinely too much — a
+     * pulse that narrow is the most nasal thing the idiom has, its harmonics
+     * fall away slowly, and up at the fifth octave carrying the tune it was
+     * the loudest thing in the mix whatever its gain said. Reported as high
+     * pitched and not soothing, and rightly.
+     *
+     * Replacing it with a lone triangle fixed that and went too far the other
+     * way. A triangle has almost nothing above its third harmonic, and under
+     * the master's six-kilohertz lid with a bit of vibrato on it the result is
+     * a music box: pleasant, and not a game. Reported as "let's try again".
+     *
+     * So both. A fifty-per-cent square is the *least* nasal pulse there is —
+     * all its even harmonics cancel — and at this gain it supplies presence
+     * rather than volume; the triangle under it supplies the weight. Together
+     * they are a little over half what the original narrow pulse was set to.
+     *
+     * Three other goes at this are in `candidates.ts` and on the listening
+     * page, so swapping is one word rather than another guess.
+     */
+    { wave: 'pulse', duty: 0.5, gain: 0.105, sustain: 0.85, pattern: CHASE_LEAD },
+    { wave: 'triangle', gain: 0.075, sustain: 0.85, pattern: CHASE_LEAD },
     { wave: 'triangle', gain: 0.26, sustain: 0.6, pattern: CHASE_BASS },
     {
       // Was a held sine, which is a thing no chip of the era could do. Now it
@@ -1506,6 +1526,20 @@ export const ROAD_CUES = {
 } as const
 
 /** The pipes' own set, all in plain C major. */
+/**
+ * Down a pipe.
+ *
+ * A stepped slide, the whole scale downwards and then nothing, because what it
+ * is announcing is a disappearance. C major, like everything else that happens
+ * here.
+ */
+export const PIPE_DOWN: Track = {
+  name: 'Down We Go',
+  beatsPerMinute: 240,
+  parts: [{ wave: 'pulse', duty: 0.25, gain: 0.1, sustain: 0.5,
+            pattern: 'C5 B4 A4 G4 F4 E4 D4 C4 .  . ' }],
+}
+
 export const PIPE_CUES = {
   coin: COIN,
   hop: HOP,
@@ -1513,6 +1547,7 @@ export const PIPE_CUES = {
   grow: GROW,
   fall: FALL,
   flag: FLAG,
+  pipeDown: PIPE_DOWN,
 } as const
 
 // Six sets, because each is held to its own scale — and each scale is the

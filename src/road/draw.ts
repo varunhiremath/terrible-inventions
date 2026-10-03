@@ -809,11 +809,48 @@ export function drawRacer(ctx: Ctx, racer: Racing, view: View): void {
   const long = CAR_LONG * view.depth
 
   /*
+   * Slewed across the road, if it has just hit something.
+   *
+   * They used to pass through each other and carry on as though nothing had
+   * happened, which was reported and was exactly what it looked like. Nothing
+   * passes through anything now, and when two of them do meet the one behind
+   * stops for a moment — so it has to *look* stopped, or a car sitting still
+   * in the middle of a race reads as the game having frozen rather than as
+   * somebody having spun it.
+   */
+  const spun = racer.stunned > 0
+  if (spun) {
+    ctx.save()
+    ctx.translate(x, y)
+    // Settling back straight as the driver collects himself.
+    ctx.rotate(Math.sin(racer.stunned * 9) * racer.stunned * 0.5)
+    ctx.translate(-x, -y)
+  }
+
+  /*
    * The face looks where the car is about to go — the same number that drives
    * the indicator — so a glance sideways is the first warning you get that one
    * of them is coming across.
    */
   paintCar(ctx, x, y, wide, long, racer.who, racer.signal)
+
+  if (spun) {
+    // Smoke off the tyres, which is the other half of saying what happened.
+    ctx.fillStyle = 'rgba(224,228,238,0.5)'
+    for (let puff = 0; puff < 3; puff++) {
+      const drift = (1 - racer.stunned) * long * (0.4 + puff * 0.3)
+      ctx.beginPath()
+      ctx.ellipse(
+        x + (puff % 2 === 0 ? -1 : 1) * wide * 0.5,
+        y + long * 0.4 + drift,
+        wide * (0.18 + drift / long * 0.2),
+        wide * (0.14 + drift / long * 0.16),
+        0, 0, Math.PI * 2,
+      )
+      ctx.fill()
+    }
+    ctx.restore()
+  }
 
 
   if (racer.signal !== 0 && Math.floor(view.clock * 5) % 2 === 0) {

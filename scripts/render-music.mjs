@@ -30,7 +30,8 @@ await page.goto('http://127.0.0.1:5199/wipes.html', { waitUntil: 'networkidle' }
 
 const samples = await page.evaluate(async ([which, seconds]) => {
   const score = await import('/src/music/score.ts')
-  const track = score.TRACKS[which] ?? score.CUES[which]
+  const extra = await import('/src/music/candidates.ts')
+  const track = score.TRACKS[which] ?? score.CUES[which] ?? extra.CANDIDATES[which]
   if (!track) return { error: `no track called ${which}` }
 
   const RATE = 44100
@@ -97,12 +98,23 @@ const samples = await page.evaluate(async ([which, seconds]) => {
     const beat = score.beatAt(track, eighth)
     if (beat < 0) continue
     const at = eighth * step
+    // The same lean the player puts on the off-beats, and the drums below do
+    // not get it — see the note in the player. This block is a copy of that
+    // scheduler and has to be kept in step with it, or the thing being
+    // listened to is not the thing that plays.
+    const lean = score.swingShift(track, eighth, step)
     for (const { part, notes } of parts) {
       // Heat stays at nothing: this is the tune as it opens.
       if (part.from !== undefined) continue
       for (const n of notes) {
         if (n.at !== beat) continue
-        note(part, n.frequency, at, n.length * step * (part.sustain ?? 0.9), part.gain)
+        note(
+          part,
+          n.frequency,
+          at + lean,
+          Math.max(0.03, n.length * step * (part.sustain ?? 0.9) - lean),
+          part.gain,
+        )
       }
     }
     if (drums[beat] === 'x') {

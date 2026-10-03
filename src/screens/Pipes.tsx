@@ -12,7 +12,7 @@ import {
   drawBackdrop, drawEnemies, drawFlag, drawHero, drawItems, drawLevel, drawPad, drawSky,
   type View,
 } from '../pipes/draw'
-import { scrollTo } from '../camera'
+import { scrollTo, screenFraction } from '../camera'
 import { createPacer } from '../arcade/pacing'
 import { fill } from '../config/profile'
 import { BackButton, Btn } from '../ui/bits'
@@ -57,6 +57,7 @@ const NOISE: Record<PipeEvent, CueName> = {
   die: 'fall',
   shrink: 'fall',
   win: 'flag',
+  pipe: 'pipeDown',
 }
 
 /**
@@ -67,7 +68,8 @@ const NOISE: Record<PipeEvent, CueName> = {
  * moment into a mess. One noise per step, and it is the one that matters most.
  */
 const LOUDEST: PipeEvent[] = [
-  'win', 'die', 'shrink', 'grow', 'sprout', 'stomp', 'kick', 'break', 'knock', 'coin', 'jump',
+  'win', 'die', 'shrink', 'grow', 'pipe', 'sprout', 'stomp', 'kick', 'break', 'knock',
+  'coin', 'jump',
 ]
 // Every event has to be in there somewhere, or it can never be the loudest
 // thing in a step and simply never gets heard.
@@ -146,6 +148,7 @@ export function Pipes() {
           right: held.right,
           jump: held.jump,
           run: held.run,
+          down: held.down,
         }
 
         let stepped = false
@@ -232,12 +235,42 @@ export function Pipes() {
          * It used to ratchet forwards and never come back, on the reasoning
          * that he is nearly always running right. He is not: walking left took
          * him to the edge of the screen and then off it, with the view refusing
-         * to follow. It keeps him inside a band with a fifth of the screen
-         * clear either side now, and goes both ways.
+         * to follow. It keeps him inside a band and goes both ways.
+         *
+         * The band is not centred. Reported as "it's hard to see what's ahead
+         * until you reach the edge of the screen": with an even margin he can
+         * drift to four fifths across and everything he is about to run into
+         * is off the screen. Three tenths clear behind and a little over half
+         * in front pins him between three and four and a half tenths across,
+         * which is the left half, which is what was asked for.
          */
-        camera.current = scrollTo(camera.current, next.body.x, across, next.level.rows[0].length)
+        camera.current = scrollTo(
+          camera.current, next.body.x, across, next.level.rows[0].length, 0.3, 0.55,
+        )
+        /*
+         * Down one pipe and up another is the one move that is not walking, so
+         * the view does not walk after it: it cuts, the way it would in the
+         * game this is quoting. Gliding across half a level while he is inside
+         * a pipe would show a stretch of level he is meant to be skipping.
+         */
+        if (next.warp?.part === 'up') {
+          camera.current = scrollTo(
+            0, next.body.x, across, next.level.rows[0].length, 0.3, 0.55,
+          )
+        }
 
         const view: View = { col: camera.current, size, clock: clock.current }
+
+        /*
+         * Where on the screen he actually ended up, for a browser test to
+         * sample. Dev only. "Keep him in the left half" is a statement about
+         * the picture, and the only way to check a statement about the picture
+         * is to read it off the picture.
+         */
+        if (import.meta.env.DEV) {
+          const dev = window as unknown as { __pipesDrawn?: unknown }
+          dev.__pipesDrawn = { at: screenFraction(camera.current, next.body.x, across) }
+        }
 
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         drawSky(ctx, w, h)
@@ -246,11 +279,20 @@ export function Pipes() {
         // is sky above it.
         ctx.translate(0, capH + (middle - boardH))
         drawBackdrop(ctx, view, boardH)
+        if (next.warp) drawHero(ctx, next.body, view, 0, clock.current)
         drawLevel(ctx, next, view, w)
         drawFlag(ctx, next.level, view, next.status === 'won', clock.current)
         drawItems(ctx, next, view)
         drawEnemies(ctx, next, view)
-        drawHero(ctx, next.body, view, next.mercy, clock.current)
+        /*
+         * Behind the pipe while he is going into it, in front of it otherwise.
+         *
+         * Drawing him on top the whole way through means watching him slide
+         * down the outside of a pipe rather than into it, which reads as a
+         * bug. The tiles are drawn first and everything else after; for these
+         * two seconds he goes first instead.
+         */
+        if (!next.warp) drawHero(ctx, next.body, view, next.mercy, clock.current)
         ctx.restore()
 
         // Everything below the level is pad, and everything above is the score.
@@ -372,6 +414,7 @@ export function Pipes() {
     const keys: Record<string, Button> = {
       ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right',
       ArrowUp: 'jump', ' ': 'jump', w: 'jump',
+      ArrowDown: 'down', s: 'down',
       Shift: 'run', z: 'run',
     }
     const slot = (key: string) => -1 - Object.keys(keys).indexOf(key)

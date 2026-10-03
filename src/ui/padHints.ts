@@ -76,7 +76,9 @@ export const LABELS: Record<string, Record<string, string>> = {
     parry: 'BLOCK',
     strike: 'STRIKE',
   },
-  pipes: { left: 'LEFT', right: 'RIGHT', run: 'HOLD TO RUN', jump: 'JUMP' },
+  pipes: {
+    left: 'LEFT', right: 'RIGHT', down: 'DOWN A PIPE', run: 'HOLD TO RUN', jump: 'JUMP',
+  },
   dave: { left: 'LEFT', right: 'RIGHT', up: 'JUMP', fire: 'FIRE', down: 'DOWN' },
   road: { left: 'LEFT', right: 'RIGHT', go: 'HOLD TO GO', brake: 'BRAKE' },
   space: { left: 'LEFT', right: 'RIGHT', fire: 'FIRE (HOLD)' },

@@ -317,44 +317,68 @@ export function drawHero(ctx: Ctx, body: Body, view: View, mercy: number, clock:
   const x = px(view, body.x)
   const y = py(view, body.y)
   const h = bodyHeight(body) * s
-  const w = BODY_W * s
+  /*
+   * Drawn wider than he is.
+   *
+   * Asked for in one line — "can you make the player a tad chubby like the
+   * original guy" — and the original is exactly that: a short round man in
+   * dungarees, and the roundness is most of why he is likeable.
+   *
+   * It is only the drawing that got wider. `BODY_W` is what the physics uses,
+   * and every one of these levels was proved finishable by a solver running
+   * that number: widening it would mean re-proving fifteen levels to make a
+   * cartoon rounder, and some of them would fail. A quarter more shoulder that
+   * nothing can collide with costs nobody anything.
+   */
+  const w = BODY_W * s * 1.24
 
   ctx.save()
   ctx.translate(x, y)
   ctx.scale(body.facing, 1)
 
-  const legs = body.onGround ? Math.sin(body.x * 5) * w * 0.18 : w * 0.12
+  const legs = body.onGround ? Math.sin(body.x * 5) * w * 0.15 : w * 0.1
   ctx.fillStyle = INK.boot
-  ctx.fillRect(-w * 0.42 + legs, -h * 0.13, w * 0.42, h * 0.13)
-  ctx.fillRect(w * 0.02 - legs, -h * 0.13, w * 0.42, h * 0.13)
+  // Short and wide, which is what makes a round body read as round rather than
+  // as a tall man who has eaten well.
+  box(ctx, -w * 0.44 + legs, -h * 0.15, w * 0.44, h * 0.15, w * 0.1, INK.boot)
+  box(ctx, w * 0.0 - legs, -h * 0.15, w * 0.44, h * 0.15, w * 0.1, INK.boot)
 
   // Dungarees over a shirt: the bib is what makes the shape read at any size.
-  box(ctx, -w * 0.42, -h * 0.62, w * 0.84, h * 0.5, w * 0.16, INK.cloth)
-  box(ctx, -w * 0.34, -h * 0.78, w * 0.68, h * 0.24, w * 0.14, INK.shirt)
-  box(ctx, -w * 0.2, -h * 0.74, w * 0.4, h * 0.2, w * 0.1, INK.cloth)
+  // Rounder at the corners than it was, and the belly comes out a little past
+  // the shoulders.
+  box(ctx, -w * 0.48, -h * 0.6, w * 0.96, h * 0.48, w * 0.3, INK.cloth)
+  box(ctx, -w * 0.38, -h * 0.78, w * 0.76, h * 0.26, w * 0.22, INK.shirt)
+  box(ctx, -w * 0.22, -h * 0.74, w * 0.44, h * 0.22, w * 0.12, INK.cloth)
   ctx.fillStyle = INK.clothDark
-  ctx.fillRect(-w * 0.42, -h * 0.4, w * 0.84, h * 0.05)
+  ctx.fillRect(-w * 0.44, -h * 0.4, w * 0.88, h * 0.05)
+  // Two buttons on the bib, which is the other half of the dungarees.
+  ctx.fillStyle = INK.goggle
+  for (const side of [-0.3, 0.3]) {
+    ctx.beginPath()
+    ctx.arc(w * side, -h * 0.66, w * 0.07, 0, Math.PI * 2)
+    ctx.fill()
+  }
 
   // An arm, forward, so there is something in front of the body.
   ctx.fillStyle = INK.skin
   const swing = body.onGround ? Math.sin(body.x * 5 + Math.PI) * h * 0.06 : -h * 0.1
   ctx.beginPath()
-  ctx.roundRect(w * 0.22, -h * 0.72 + swing, w * 0.26, h * 0.3, w * 0.13)
+  ctx.roundRect(w * 0.26, -h * 0.7 + swing, w * 0.26, h * 0.26, w * 0.13)
   ctx.fill()
 
-  // Head, cap and goggles.
+  // Head, cap and goggles. Big, because on a short round man it is.
   const head = -h * 0.78
-  box(ctx, -w * 0.32, head - h * 0.22, w * 0.64, h * 0.24, w * 0.22, INK.skin)
+  box(ctx, -w * 0.36, head - h * 0.24, w * 0.72, h * 0.26, w * 0.28, INK.skin)
   ctx.fillStyle = INK.skin
   ctx.beginPath()
-  ctx.ellipse(w * 0.3, head - h * 0.1, w * 0.1, h * 0.04, 0, 0, Math.PI * 2)
+  ctx.ellipse(w * 0.33, head - h * 0.11, w * 0.11, h * 0.045, 0, 0, Math.PI * 2)
   ctx.fill()
-  box(ctx, -w * 0.36, head - h * 0.3, w * 0.72, h * 0.12, w * 0.08, INK.cap)
+  box(ctx, -w * 0.4, head - h * 0.32, w * 0.8, h * 0.13, w * 0.09, INK.cap)
   ctx.fillStyle = INK.cap
-  ctx.fillRect(w * 0.2, head - h * 0.24, w * 0.3, h * 0.05)
-  box(ctx, -w * 0.3, head - h * 0.22, w * 0.6, h * 0.07, w * 0.04, INK.goggle)
+  ctx.fillRect(w * 0.22, head - h * 0.26, w * 0.32, h * 0.055)
+  box(ctx, -w * 0.34, head - h * 0.23, w * 0.68, h * 0.075, w * 0.04, INK.goggle)
   ctx.fillStyle = INK.ink
-  ctx.fillRect(w * 0.1, head - h * 0.13, w * 0.09, h * 0.05)
+  ctx.fillRect(w * 0.11, head - h * 0.14, w * 0.1, h * 0.055)
 
   ctx.restore()
 }
@@ -392,8 +416,9 @@ export function drawPad(
 
     const a = key.r * 0.42
     ctx.fillStyle = down ? '#ffe08a' : '#eef2f8'
-    if (key.glyph === 'left' || key.glyph === 'right') {
-      const turn = key.glyph === 'left' ? Math.PI : 0
+    if (key.glyph === 'left' || key.glyph === 'right' || key.glyph === 'down') {
+      const turn =
+        key.glyph === 'left' ? Math.PI : key.glyph === 'down' ? Math.PI / 2 : 0
       ctx.beginPath()
       for (let i = 0; i < 3; i++) {
         const angle = turn + (i * Math.PI * 2) / 3

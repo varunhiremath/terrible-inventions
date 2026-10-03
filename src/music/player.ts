@@ -20,6 +20,7 @@ import {
   heatGain,
   loopLength,
   beatAt,
+  swingShift,
   readPart,
   type CueName,
   type Wave,
@@ -323,6 +324,16 @@ function schedule(): void {
 
     // -1 is the gap: the clock runs on and nothing is put into it.
     const beat = beatAt(track, eighth)
+    /*
+     * The tune leans; the drums do not.
+     *
+     * Holding the first of each pair of eighths long and squeezing the second
+     * in late is what a shuffle is, and it is most of what anybody means by a
+     * tune bouncing. The drums stay on the grid, because a shuffle is the
+     * melody playing against a straight beat rather than everything arriving
+     * at once somewhere else.
+     */
+    const lean = swingShift(track, eighth, step)
     if (beat >= 0) for (const { part, notes, level } of parts) {
       for (const note of notes) {
         if (note.at !== beat) continue
@@ -331,8 +342,10 @@ function schedule(): void {
           out,
           part,
           note.frequency,
-          cursor,
-          note.length * step * (part.sustain ?? 0.9),
+          cursor + lean,
+          // A note that starts late still ends where it was going to, or a
+          // swung pair runs into the next beat.
+          Math.max(0.03, note.length * step * (part.sustain ?? 0.9) - lean),
           part.gain * level,
         )
       }

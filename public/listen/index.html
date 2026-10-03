@@ -2,10 +2,10 @@
 <!--
   A page to listen to things on.
 
-  Two decisions in this project cannot be made by measuring anything, because
+  Some decisions in this project cannot be made by measuring anything, because
   they are about whether something sounds right: which voice {papa} should
-  have, and whether a tune is any good. Both were sent as files in a chat and
-  neither arrived anywhere findable.
+  have, and whether a tune is any good. They were sent as files in a chat once
+  and did not arrive anywhere findable.
 
   So they live here instead, next to the game, where opening a link and
   pressing play is the whole of what anybody has to do. It is a plain file in
@@ -55,60 +55,95 @@
     <main>
       <h1>Have a listen</h1>
       <p class="hint">
-        Two things I cannot judge for myself. Tap play, then tell me a number
-        for the voice and yes or no for the tune.
+        The Papa Panic tune has changed, and here are three other goes at it.
+        Tap play, then tell me a number &mdash; one word switches it.
       </p>
 
-      <h2>Papa&rsquo;s voice &mdash; five candidates</h2>
+      <h2>The tune — four goes</h2>
+      <p>
+        You said let&rsquo;s try again. The tune itself was already built the
+        way that plumber&rsquo;s one is &mdash; rests on the downbeats, a
+        middle that drops away &mdash; so what I changed is the instrument
+        carrying it, which is what was making it sound like a music box. Two
+        and three go further.
+      </p>
+
+      <div class="card">
+        <div class="name">1 &mdash; what is in the game now</div>
+        <div class="note">
+          The melody back on a square wave with a soft one under it. This is
+          the change; the three below are alternatives.
+        </div>
+        <audio controls preload="none" src="tune-now.opus"></audio>
+      </div>
+
+      <div class="card">
+        <div class="name">2 &mdash; what it was before</div>
+        <div class="note">
+          The soft one you heard and asked me to try again on, so you can hear
+          what moved rather than take my word for it.
+        </div>
+        <audio controls preload="none" src="tune-soft.opus"></audio>
+      </div>
+
+      <div class="card">
+        <div class="name">3 &mdash; bounce</div>
+        <div class="note">
+          A shuffle: the off-beats land late, which is most of what
+          &ldquo;bouncy&rdquo; means. Shorter, catchier melody over a walking
+          bass.
+        </div>
+        <audio controls preload="none" src="tune-bounce.opus"></audio>
+      </div>
+
+      <div class="card">
+        <div class="name">4 &mdash; warm</div>
+        <div class="note">
+          No edge anywhere, a gentle swing, and no drums at all until half way
+          through. Closest to the covers of that plumber&rsquo;s tune played on
+          real instruments.
+        </div>
+        <audio controls preload="none" src="tune-full.opus"></audio>
+      </div>
+
+      <h2>The crackling</h2>
+      <p>
+        Three likelier suspects measured and cleared: the music never gets
+        within a factor of three of clipping, the aliasing from the pitch shift
+        is half a per cent of the signal, and the bitrate is fine. What was
+        left is that the synthesiser normalises every clip to the very top of
+        the scale, so thirty-one of the eighty-four files went out with samples
+        at or past full scale &mdash; and a phone playing that under a game has
+        nowhere to put them.
+      </p>
       <p class="hint">
-        The same two lines each. There is no Indian-English voice available at
-        all, so <span class="pick">2</span> and <span class="pick">3</span> come
-        from a set of Hindi speakers reading American English, which is the
-        nearest thing to the mix you described.
+        Both of these are Papa&rsquo;s new voice, the one you picked. Listen on
+        the loud words.
       </p>
 
       <div class="card">
-        <div class="name">1 &mdash; what he sounds like now</div>
-        <div class="note">Northern English. The one in the game today.</div>
-        <audio controls preload="none" src="voice-1-british.opus"></audio>
-      </div>
-      <div class="card">
-        <div class="name">2 &mdash; Hindi speaker, American English</div>
-        <div class="note">L2-ARCTIC speaker ASI.</div>
-        <audio controls preload="none" src="voice-2-hindi-asi.opus"></audio>
-      </div>
-      <div class="card">
-        <div class="name">3 &mdash; Hindi speaker, American English</div>
-        <div class="note">L2-ARCTIC speaker RRBI.</div>
-        <audio controls preload="none" src="voice-3-hindi-rrbi.opus"></audio>
-      </div>
-      <div class="card">
-        <div class="name">4 &mdash; &ldquo;kusal&rdquo;</div>
-        <div class="note">A South Asian English voice, single speaker.</div>
-        <audio controls preload="none" src="voice-4-kusal.opus"></audio>
-      </div>
-      <div class="card">
-        <div class="name">5 &mdash; &ldquo;reza&rdquo;</div>
-        <div class="note">Another accented English voice. Slower than the rest.</div>
-        <audio controls preload="none" src="voice-5-reza.opus"></audio>
+        <div class="name">Before</div>
+        <div class="note">Right at the ceiling, as every clip has gone out so far.</div>
+        <audio controls preload="none" src="voice-before.opus"></audio>
       </div>
 
-      <h2>The new Papa Panic tune</h2>
-      <p class="hint">
-        Forty seconds: one full pass and the gap after it. Sixteen bars in four
-        parts &mdash; two of the bouncy bit, then four where the bass walks away
-        and the drums drop to one hit a bar, then four that climb back out
-        busier. Most bars start on a rest and the phrases land off the beat.
-      </p>
       <div class="card">
-        <div class="name">Papa Panic</div>
-        <div class="note">If this is the right direction I will do the other five the same way.</div>
-        <audio controls preload="none" src="tune-papa-panic.opus"></audio>
+        <div class="name">After</div>
+        <div class="note">
+          Same words, same voice, held well under it &mdash; and every clip
+          brought to the same loudness, so no line arrives louder than the
+          last.
+        </div>
+        <audio controls preload="none" src="voice-after.opus"></audio>
       </div>
 
-      <p class="hint" style="margin-top:2rem">
-        <a href="../">Back to the games</a>
+      <h2>The voice</h2>
+      <p>
+        Settled: <span class="pick">4, kusal</span>. Every spoken line in the
+        game has been re-made with it.
       </p>
+
+      <p style="margin-top:2rem"><a href="../">Back to the games</a></p>
     </main>
   </body>
 </html>

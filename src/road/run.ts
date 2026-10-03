@@ -387,6 +387,76 @@ function overlaps(a: [number, number], b: [number, number]): boolean {
 }
 
 /**
+ * The room something on this road actually takes up.
+ *
+ * Every body on the road is *drawn* centred on its `y` — that is what `body()`
+ * in the drawing does, for the traffic, the field and your own car alike. The
+ * rules about what has hit what were written one at a time and none of them
+ * quite agreed with that or with each other: a truck counted as hitting you
+ * from up to one and nine tenths of a length in front of your bumper, and not
+ * at all from behind, where its nose could be a quarter of a length inside
+ * your boot with nothing happening. Reported as cars overlapping and carrying
+ * on regardless, and that is precisely what it was.
+ *
+ * So there is one answer to "where is it and how big is it", and everything
+ * asks it. Half a length either side of the middle, and the lanes it sits
+ * across — which is what you can see on the screen.
+ */
+export interface Box {
+  lanes: [number, number]
+  /** The back bumper and the front one, along the road. */
+  from: number
+  to: number
+}
+
+const boxAt = (lane: number, y: number, wide: number, long: number): Box => ({
+  lanes: occupies(lane, wide),
+  from: y - long / 2,
+  to: y + long / 2,
+})
+
+const boxOfCar = (car: Car): Box => boxAt(car.lane, car.y, WIDTH_OF[car.kind], longOf(car))
+const boxOfRacer = (racer: Racing): Box => boxAt(racer.lane, racer.y, CAR_WIDE, CAR_LONG)
+const boxOfYou = (run: Run): Box => boxAt(run.lane, run.distance, CAR_WIDE, CAR_LONG)
+
+/** Are these two in the same place? */
+function touching(a: Box, b: Box): boolean {
+  return overlaps(a.lanes, b.lanes) && a.from < b.to && b.from < a.to
+}
+
+/** Bumper to bumper, along the road. Negative means already inside. */
+const gapBetween = (behind: Box, front: Box): number => front.from - behind.to
+
+/**
+ * Is there room to be in that lane, right here?
+ *
+ * Holding cars apart along the road is only half of it. Two vehicles can be
+ * clear of each other in a queue and still end up in the same place, because
+ * one of them drove *sideways* into the other: a swerver going looking for
+ * your lane, a racer tidying itself up off the grid. Both check before they
+ * commit, and a check made before a manoeuvre is a statement about where
+ * everything was at the start of it — by the time a lorry is halfway across a
+ * lane, two and a half seconds have passed.
+ *
+ * So the sideways move is checked on every slice, against where everything
+ * actually is now, and simply does not happen when it would put two bodies in
+ * the same place. Being level with something is the one case holding back
+ * cannot fix: there is no gap to leave.
+ */
+function roomBeside(run: Run, self: Box, mover: number, lane: number, wide: number): boolean {
+  const want = boxAt(lane, (self.from + self.to) / 2, wide, self.to - self.from)
+  for (const car of run.cars) {
+    if (car.id === mover) continue
+    if (touching(want, boxOfCar(car))) return false
+  }
+  for (const racer of run.racers) {
+    if (racer.id === mover || racer.finished !== null) continue
+    if (touching(want, boxOfRacer(racer))) return false
+  }
+  return true
+}
+
+/**
  * Which lanes are blocked in the stretch a driver is about to arrive in.
  *
  * Used by the spawner to keep a way through, and by the test that checks it
@@ -637,8 +707,25 @@ function moveOver(run: Run, car: Car, dt: number, rng: Rng): void {
   if (moving) {
     const way = Math.sign(car.wants - car.lane)
     const moved = car.lane + way * STEER_RATE * DASHES[car.kind] * dt
-    car.lane = way > 0 ? Math.min(car.wants, moved) : Math.max(car.wants, moved)
-    if (Math.abs(car.wants - car.lane) < 0.01) car.signal = 0
+    const next = way > 0 ? Math.min(car.wants, moved) : Math.max(car.wants, moved)
+    // Not into the side of something. Three quarters of every overlap measured
+    // on this road was one of these: a swerver merging into a van that was
+    // level with it, both of them quite happy with the road they had checked.
+    if (roomBeside(run, boxOfCar(car), car.id, next, WIDTH_OF[car.kind])) {
+      car.lane = next
+      if (Math.abs(car.wants - car.lane) < 0.01) car.signal = 0
+    } else {
+      /*
+       * Give up on it rather than sit halfway across blocking two lanes. Back
+       * the way it came, not to the nearest lane: what is in the way is on the
+       * side it was heading for. And still indicating, because "it moved lane
+       * with no indicator on" is as true of a retreat as of a manoeuvre, and
+       * there is a test that says so.
+       */
+      const back = way > 0 ? Math.floor(car.lane) : Math.ceil(car.lane)
+      car.wants = Math.min(LANES - 1, Math.max(0, back))
+      car.signal = car.wants > car.lane ? 1 : car.wants < car.lane ? -1 : 0
+    }
   }
 }
 
@@ -810,32 +897,37 @@ export function standings(run: Run): Standing[] {
 function aheadOf(run: Run, racer: Racing, lane: number): { gap: number; speed: number } {
   let nearest = Infinity
   let pace = Infinity
-  const mine = occupies(lane)
-  const note = (gap: number, speed: number) => {
-    if (gap >= nearest) return
+  /*
+   * Measured bumper to bumper, not middle to middle.
+   *
+   * It used to be middle to middle against a flat threshold, which meant a
+   * long vehicle was misjudged by exactly the amount it was long: a truck
+   * whose middle was less than four fifths of a length ahead counted as
+   * *level* rather than in front, so a racer overtaking one simply stopped
+   * seeing it — and drove through it. The measurement found four hundred of
+   * those in eight races, the worst a length and a half inside a truck.
+   *
+   * Level still does not count as ahead, for the reason it never did: two
+   * cars at the same point each read the other as something to follow, each
+   * matched the other's speed, and the pair crawled the whole race. But
+   * "ahead" is now whether its middle is in front of mine, which is a question
+   * with an answer whatever shape the two of them are.
+   */
+  const mine = boxAt(lane, racer.y, CAR_WIDE, CAR_LONG)
+  const note = (box: Box, middle: number, speed: number) => {
+    if (middle <= racer.y) return
+    if (!overlaps(mine.lanes, box.lanes)) return
+    const gap = gapBetween(mine, box)
+    if (gap > RACER_LOOK * 2 || gap >= nearest) return
     nearest = gap
     pace = speed
   }
-  /*
-   * Level does not count as ahead.
-   *
-   * Two cars at the same point in the same lane each read the other as
-   * something to follow, each matched the other's speed, and the pair of them
-   * crawled the whole race at less than a mile an hour. You cannot follow
-   * something that is beside you.
-   */
-  const LEVEL = CAR_LONG * 0.8
-  for (const car of run.cars) {
-    const gap = car.y - racer.y
-    if (gap < LEVEL || gap > RACER_LOOK * 2) continue
-    if (overlaps(mine, spread(car))) note(gap, car.speed)
-  }
+
+  for (const car of run.cars) note(boxOfCar(car), car.y, car.speed)
   // And each other, so they do not drive through their own field.
   for (const other of run.racers) {
     if (other.id === racer.id) continue
-    const gap = other.y - racer.y
-    if (gap < LEVEL || gap > RACER_LOOK * 2) continue
-    if (overlaps(mine, occupies(other.lane))) note(gap, other.speed)
+    note(boxOfRacer(other), other.y, other.speed)
   }
   /*
    * And you.
@@ -846,11 +938,26 @@ function aheadOf(run: Run, racer: Racing, lane: number): { gap: number; speed: n
    * them was this. A racer has to see the player as an obstacle like any
    * other — it will back off, look for a lane, and lose time doing it.
    */
-  const yours = run.distance - racer.y
-  if (yours >= LEVEL && yours <= RACER_LOOK * 2 && overlaps(mine, occupies(run.lane))) {
-    note(yours, run.speed)
-  }
+  note(boxOfYou(run), run.distance, run.speed)
   return { gap: nearest, speed: pace }
+}
+
+/**
+ * Is this one sitting in the only lane left open where the player is arriving?
+ *
+ * The same question `steerRacer` asks before it moves, asked of a car that
+ * cannot move, so that it starts moving again.
+ */
+function lastWayThrough(run: Run, racer: Racing): boolean {
+  const from = run.distance + CAR_LONG
+  const to = run.distance + REACT
+  if (racer.y + CAR_LONG < from || racer.y > to) return false
+
+  const shut = blockedLanes(run.cars, from, to)
+  for (const lane of racerLanes(run.racers, from, to, racer.id)) shut.add(lane)
+  const open: number[] = []
+  for (let lane = 0; lane < LANES; lane++) if (!shut.has(lane)) open.push(lane)
+  return open.length === 1 && overlaps(occupies(racer.lane), occupies(open[0]))
 }
 
 /** How far ahead a racer is looking, which depends on how fast it is going. */
@@ -905,6 +1012,18 @@ function steerRacer(run: Run, racer: Racing, dt: number): void {
 
   const here = Math.round(racer.lane)
   const moving = Math.abs(racer.wants - racer.lane) >= 0.01
+  /*
+   * Never into the last lane left open where the player is arriving.
+   *
+   * It was briefly strengthened to count the lane being left as well as the
+   * one being joined, on the reasoning that a car crossing is in both. That
+   * reasoning is right and the rule built on it was a disaster: when three
+   * lanes hold traffic and the racer is in the fourth, *every* destination
+   * fails it — including the one that would free the road — so the car has to
+   * leave, has nowhere to go, and sits there. The road stayed shut for three
+   * seconds instead of six tenths, which is five times worse than the fault it
+   * was meant to fix.
+   */
   const wouldShut = (lane: number) =>
     insideWindow && lastOpen !== null && overlaps(occupies(lane), occupies(lastOpen))
 
@@ -943,7 +1062,34 @@ function steerRacer(run: Run, racer: Racing, dt: number): void {
   const mustLeave =
     wouldShut(racer.lane) || (moving && (wouldShut(racer.wants) || intoYou(racer.wants)))
 
-  if (!moving || mustLeave) {
+  /*
+   * One at a time across the stretch he is arriving in.
+   *
+   * A car changing lane is in two of them for the half second it takes, and
+   * two cars changing lane at once are in four — which on a four-lane road is
+   * the whole of it. Both moves were legal when each was decided, and the road
+   * still shut: measured at nearly a full second on the fourth level, with
+   * two of the field sweeping from the outside lane to the inside together
+   * while the traffic held the other two.
+   *
+   * It is the oldest lesson in this file arriving again, and the narrow rule
+   * is the right one. Forbidding the *destination* by this reckoning was tried
+   * and was far worse: when three lanes hold traffic every destination fails
+   * it, including the one that frees the road, so the car sits there and the
+   * road stays shut for three seconds. Getting out is never forbidden. Only
+   * setting off behind somebody else who is already crossing is.
+   */
+  const alreadyCrossing = run.racers.some(
+    (other) =>
+      other.id !== racer.id &&
+      other.finished === null &&
+      Math.abs(other.wants - other.lane) >= 0.01 &&
+      other.y + CAR_LONG >= window[0] &&
+      other.y <= window[1],
+  )
+  const waitYourTurn = alreadyCrossing && insideWindow && !mustLeave
+
+  if ((!moving && !waitYourTurn) || mustLeave) {
     // Judged from where it actually is, not from the lane it rounds to. On
     // the grid a car sits three quarters of a lane over, and rounding put it
     // in a lane it was not in — one that happened to contain the player, so
@@ -993,7 +1139,7 @@ function steerRacer(run: Run, racer: Racing, dt: number): void {
   if (Math.abs(racer.wants - racer.lane) < 0.01) {
     const tidy = Math.min(LANES - 1, Math.max(0, Math.round(racer.lane)))
     const askew = Math.abs(racer.lane - tidy) > 0.01
-    if (askew && !wouldShut(tidy) && !intoYou(tidy) && !intoOther(tidy)) {
+    if (askew && !waitYourTurn && !wouldShut(tidy) && !intoYou(tidy) && !intoOther(tidy)) {
       racer.wants = tidy
       racer.signal = tidy > racer.lane ? 1 : -1
       racer.signalFor = SIGNAL_FOR * 0.5
@@ -1012,9 +1158,33 @@ function steerRacer(run: Run, racer: Racing, dt: number): void {
     return
   }
   const way = Math.sign(racer.wants - racer.lane)
-  racer.lane = Math.abs(racer.wants - racer.lane) <= RACER_STEER * dt
+  const next = Math.abs(racer.wants - racer.lane) <= RACER_STEER * dt
     ? racer.wants
     : racer.lane + way * RACER_STEER * dt
+  // And not into the side of anything, checked now rather than when the move
+  // was decided on. `intoOther` above asks the same question of where things
+  // were; this asks it of where they are.
+  if (roomBeside(run, boxOfRacer(racer), racer.id, next, CAR_WIDE)) {
+    racer.lane = next
+    return
+  }
+  /*
+   * Blocked halfway across, so go back rather than stop there.
+   *
+   * Stopping is the obvious thing and it is wrong: a car halted between two
+   * lanes is taking up both of them, and on a four-lane road two of those is
+   * the whole road. That is not a hypothetical — the first version of this
+   * left one straddling lanes one and two for three quarters of a second and
+   * broke the only promise this game makes, which is that the stretch you are
+   * arriving in always has a way through.
+   *
+   * Back means away from wherever it was heading. The nearest whole lane is
+   * not the same thing and is usually the wrong one: what is in the way is on
+   * the side it was going to.
+   */
+  const back = way > 0 ? Math.floor(racer.lane) : Math.ceil(racer.lane)
+  racer.wants = Math.min(LANES - 1, Math.max(0, back))
+  racer.signal = racer.wants > racer.lane ? 1 : racer.wants < racer.lane ? -1 : 0
 }
 
 /** One racer, one slice. */
@@ -1094,6 +1264,28 @@ function driveHuman(run: Run, racer: Racing, input: Input, dt: number): void {
 function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
   if (racer.finished !== null) return
 
+  /*
+   * Stopped, after running into something. It sits where it is with its wheel
+   * straight, and then carries on — see `keepApart`.
+   *
+   * Unless it is the last way through. A car standing still takes a lane, and
+   * the one promise this road makes is that the stretch you are arriving in is
+   * never fully shut — a promise a stopped car broke the first time one of
+   * them stopped, by two hundredths of a second, on the opening level. So the
+   * driver gets going again rather than sitting there while you arrive at a
+   * wall. He is shaken, not asleep.
+   */
+  if (racer.stunned > 0) {
+    if (lastWayThrough(run, racer)) racer.stunned = 0
+    else {
+      racer.stunned = Math.max(0, racer.stunned - dt)
+      racer.speed = 0
+      racer.signal = 0
+      racer.wants = racer.lane
+      return
+    }
+  }
+
   steerRacer(run, racer, dt)
 
   /*
@@ -1127,7 +1319,9 @@ function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
    * usually the player. This is the ordinary safe-following sum — the speed
    * from which the room left brings you to the speed of the thing in front.
    */
-  const room = Math.max(0, gap - CAR_LONG * 1.6)
+  // `gap` is bumper to bumper now, so what has to come off it is the space to
+  // leave between them rather than the length of a car.
+  const room = Math.max(0, gap - CAR_LONG * 0.4)
   const safe = Math.sqrt(2 * BRAKING * 0.8 * room) + Math.max(0, theirs)
   const capped = Math.min(target, safe)
 
@@ -1135,29 +1329,130 @@ function driveRacer(run: Run, racer: Racing, dt: number, clock: number): void {
     ? Math.min(capped, racer.speed + ACCELERATION * dt)
     : Math.max(capped, racer.speed - BRAKING * dt)
   racer.speed = Math.max(0, Math.min(topSpeedOn(run.level) * 1.05, racer.speed))
-  const was = racer.y
   racer.y += racer.speed * dt
 
   /*
-   * And a bumper, because arithmetic is not a promise.
-   *
-   * However good the sum above is, one bad slice — a car changing lane into
-   * the gap, the player braking hard — can still put a racer inside the thing
-   * it is following. It cannot be allowed to end a slice overlapping the
-   * player: that is a life lost to something the player could not have
-   * avoided. So it is stopped short instead.
+   * The bumper that used to be here guarded the player and nothing else, and
+   * arithmetic is not a promise for anything else on this road either.
+   * `keepApart` does the same job now, for every pair of bodies on it.
    */
-  const onto = run.distance - racer.y
-  if (onto > 0 && onto < CAR_LONG * 1.2 && overlaps(occupies(racer.lane), occupies(run.lane))) {
-    // Held back, never shoved backwards. Setting the position outright put a
-    // car behind where it had already got to, which on the grid — where the
-    // player is at nought — meant a negative distance and a car that could
-    // never catch up with its own starting line.
-    racer.y = Math.min(racer.y, Math.max(was, run.distance - CAR_LONG * 1.2))
-    racer.speed = Math.min(racer.speed, Math.max(0, run.speed))
-  }
-
   if (racer.y >= run.level.distance) racer.finished = run.clock
+}
+
+/** How hard two of them have to meet before it counts as an incident. */
+const A_BANG = CAR_LONG * 0.12
+/** How long one of them sits there afterwards. */
+const SHAKEN = 0.9
+
+/**
+ * Nothing ends a slice inside anything else.
+ *
+ * Every body on this road avoids every other body by *steering*, and steering
+ * is a plan made from where things are now. The road is full of things moving
+ * relative to one another, so a plan is not a guarantee — which is the fifth
+ * time that sentence has had to be written in this game. The racers'
+ * safe-following sum is good, and it is still only a sum: one awkward slice,
+ * a lane change into the gap, the player standing on the brakes, and a car is
+ * inside another one. Reported as exactly that, and as them carrying on
+ * afterwards as though nothing had happened.
+ *
+ * So after everything has moved, whoever is behind is held back to clear of
+ * whoever is in front. Held back, never shoved backwards: putting a car behind
+ * where it had already got to meant, on the grid, a negative distance and a
+ * car that could never reach its own starting line.
+ *
+ * And when it is a real bang rather than a touch, the car that made it stops
+ * and sits there for a moment, because a race where the cars pass through each
+ * other is not a race. They are not wiped out — a field that destroys itself
+ * on the first level is no race either — they lose what a driver loses for
+ * running into the back of somebody, which is seconds.
+ */
+function keepApart(run: Run, dt: number): void {
+  type Body =
+    | { readonly kind: 'car'; readonly car: Car }
+    | { readonly kind: 'racer'; readonly racer: Racing }
+
+  const middleOf = (b: Body) => (b.kind === 'car' ? b.car.y : b.racer.y)
+  const boxOfBody = (b: Body) => (b.kind === 'car' ? boxOfCar(b.car) : boxOfRacer(b.racer))
+  const speedOf = (b: Body) => (b.kind === 'car' ? b.car.speed : b.racer.speed)
+  const halfOf = (b: Body) => (b.kind === 'car' ? longOf(b.car) : CAR_LONG) / 2
+
+  /*
+   * The traffic is in here as well as the field, and it is where most of this
+   * was. Of the four hundred and thirty overlaps measured across eight races,
+   * three quarters were one lorry inside another. The spawner keeps a wave
+   * apart when it puts it on the road, and `moveOver` keeps a lane change from
+   * shutting the road, and neither of those is the same as two vehicles at
+   * different speeds ending up in the same lane. A van and a swerver spent
+   * four seconds occupying the same stretch of tarmac.
+   */
+  const bodies: Body[] = [
+    ...run.cars.map((car) => ({ kind: 'car', car }) as const),
+    ...run.racers
+      .filter((racer) => racer.finished === null)
+      .map((racer) => ({ kind: 'racer', racer }) as const),
+  ]
+  // Front first, so a queue settles in one pass rather than shuffling
+  // backwards one place at a time over several slices.
+  bodies.sort((a, b) => middleOf(b) - middleOf(a))
+
+  const you = boxOfYou(run)
+
+  for (const body of bodies) {
+    const was = middleOf(body)
+    const mine = boxOfBody(body)
+    let limit = Infinity
+    let matched = Infinity
+
+    const behind = (box: Box, middle: number, speed: number) => {
+      if (middle <= was) return
+      if (!touching(mine, box)) return
+      // Its back bumper, less half of mine, is as far forward as my middle
+      // may be.
+      limit = Math.min(limit, box.from - halfOf(body))
+      matched = Math.min(matched, Math.max(0, speed))
+    }
+
+    for (const other of bodies) {
+      if (other === body) continue
+      behind(boxOfBody(other), middleOf(other), speedOf(other))
+    }
+    /*
+     * And you — but only ever as something in front. Nothing here holds the
+     * player back, so driving into the back of a bus still costs a life. What
+     * it stops is the reverse: a lorry catching you up and passing through you
+     * from behind, which is not something anybody could have avoided.
+     */
+    behind(you, run.distance, run.speed)
+
+    if (limit === Infinity) continue
+    // Held back, never shoved backwards: putting a car behind where it had
+    // already got to meant, on the grid, a negative distance and a car that
+    // could never reach its own starting line.
+    const to = Math.min(was, Math.max(was - speedOf(body) * dt, limit))
+    const shunted = was - to
+
+    if (body.kind === 'car') {
+      body.car.y = to
+      body.car.speed = Math.min(body.car.speed, matched)
+      continue
+    }
+
+    const racer = body.racer
+    racer.y = to
+    racer.speed = Math.min(racer.speed, matched)
+    /*
+     * A bang, rather than the paint touching.
+     *
+     * Only for one of {papa}'s: a person driving one already has the crash
+     * handling in `driveHuman`, and stunning them twice for one contact would
+     * take two seconds off them for one mistake.
+     */
+    if (shunted > A_BANG && racer.id !== run.human) {
+      racer.stunned = SHAKEN
+      racer.signal = 0
+    }
+  }
 }
 
 export function step(run: Run, input: Input, dt: number, second: Input = NO_INPUT): Run {
@@ -1269,6 +1564,7 @@ export function step(run: Run, input: Input, dt: number, second: Input = NO_INPU
     if (racer.id === next.human) driveHuman(next, racer, second, dt)
     else driveRacer(next, racer, dt, next.distance / TOP_SPEED)
   }
+  keepApart(next, dt)
 
   if (next.speed > 0) {
     next.fuel = Math.max(0, next.fuel - BURN_PER_SECOND * dt * (0.4 + next.speed / TOP_SPEED))
