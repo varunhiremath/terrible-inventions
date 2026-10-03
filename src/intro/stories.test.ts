@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { SCENES } from './scenes'
+import { FOOTAGE_SECONDS, SCENES } from './scenes'
 import { STORIES, STORY_ORDER } from './stories'
-import { totalSeconds } from './timeline'
+import { beatStart, totalSeconds } from './timeline'
+import lengths from '../../public/spoken/index.json'
 
 /**
  * The stories, checked for the things that break them quietly.
@@ -11,7 +13,19 @@ import { totalSeconds } from './timeline'
  * like a loading bug rather than a missing picture.
  */
 /** The scenes that are a real level being played. */
-const LEVELS = ['maze', 'cave', 'dungeon', 'pipes', 'road', 'space']
+const LEVELS = ['maze', 'cave', 'dungeon', 'pipes', 'road', 'space', 'deep']
+
+/**
+ * How `scripts/render-voice.py` names a clip: the line as written, unfilled.
+ *
+ * Kept in step by hand, which is a risk — but the alternative is shipping the
+ * hashing to the app, and the app never needs it. If this drifts, every lookup
+ * misses and the check below quietly passes on nothing, so it also asserts
+ * that it found most of them.
+ */
+function keyOf(voice: string, line: string): string {
+  return createHash('sha1').update(`${voice}|${line}`).digest('hex').slice(0, 16)
+}
 
 describe('the stories', () => {
   it('has one for every game', () => {
@@ -35,6 +49,38 @@ describe('the stories', () => {
         expect(beat.seconds, `${story.id}: "${beat.line}"`).toBeGreaterThan(spoken)
       }
     }
+  })
+
+  it('gives every line long enough for the clip that was actually rendered', () => {
+    /*
+     * The rule above is an estimate — words over two and a half a second —
+     * and it is wrong in the direction that matters. {papa} is read at a
+     * different pace from the narrator and leans on his syllables, so his
+     * lines come out longer than the arithmetic says. Four beats across three
+     * stories were cutting their own clip off mid-word, and the estimate
+     * passed all four.
+     *
+     * So this reads the lengths the renderer measured and wrote down. A line
+     * with no clip is not a failure: anything missing falls back to the
+     * phone's own synthesiser at runtime.
+     */
+    const clips = lengths as Record<string, number>
+    let found = 0
+    let beats = 0
+    for (const story of Object.values(STORIES)) {
+      for (const beat of story.beats) {
+        beats++
+        const clip = clips[keyOf(beat.voice, beat.line)]
+        if (clip === undefined) continue
+        found++
+        expect(beat.seconds, `${story.id}: "${beat.line}" is a ${clip}s clip`)
+          .toBeGreaterThanOrEqual(clip + 0.25)
+      }
+    }
+    // And that it looked at anything at all. A check that keys its lookups by
+    // a hash can pass by matching nothing, which is the failure mode of a flag
+    // detector that searched for the wrong element and reported no flags.
+    expect(found, `only matched ${found} of ${beats} beats to a clip`).toBeGreaterThan(beats * 0.9)
   })
 
   it('stays short enough that nobody has to sit through it', () => {
@@ -67,6 +113,25 @@ describe('the stories', () => {
     for (const story of Object.values(STORIES)) {
       for (const beat of story.beats) {
         expect([...LEVELS, 'question'], `${story.id} shows ${beat.scene}`).toContain(beat.scene)
+      }
+    }
+  })
+
+  it('never outlasts the footage it is playing back', () => {
+    /*
+     * Three scenes are recordings — a race and two flights, flown once at
+     * module load and read back by the clock. Past the end they hold the last
+     * frame, which is a still photograph of a game and reads as a freeze. The
+     * road story outran its recording by two seconds and the space story by
+     * eight, and nothing anywhere said so.
+     */
+    for (const story of Object.values(STORIES)) {
+      for (const [index, beat] of story.beats.entries()) {
+        const have = FOOTAGE_SECONDS[beat.scene]
+        if (have === undefined) continue
+        const ends = beatStart(story, index) + beat.seconds
+        expect(ends, `${story.id}: ${beat.scene} runs out ${(ends - have).toFixed(1)}s early`)
+          .toBeLessThanOrEqual(have)
       }
     }
   })

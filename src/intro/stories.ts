@@ -28,7 +28,7 @@ export const STORIES: Record<string, Story> = {
       { seconds: 5.9, scene: 'maze', voice: 'papa', line: 'Four of them! Four little machines, and every one of them wants YOU.' },
       { seconds: 5.2, scene: 'maze', voice: 'narrator', line: 'They are loose in the maze now, and they do not get tired.' },
       { seconds: 5.9, scene: 'maze', voice: 'narrator', line: 'Clear every dot. Grab the fruit and they will run from you instead.' },
-      { seconds: 5, scene: 'maze', voice: 'narrator', line: 'Touch anywhere to send yourself that way. No buttons. Just point.' },
+      { seconds: 5.4, scene: 'maze', voice: 'narrator', line: 'Touch anywhere to send yourself that way. No buttons. Just point.' },
       { seconds: 5.9, scene: 'question', voice: 'narrator', line: 'Caught? The maths door opens. Two minutes of sums buys you another go.' },
       { seconds: 3.4, scene: 'maze', voice: 'papa', line: 'Off you go. I will be watching.' },
     ],
@@ -64,7 +64,7 @@ export const STORIES: Record<string, Story> = {
     id: 'pipes',
     title: 'THE PIPES',
     beats: [
-      { seconds: 4.4, scene: 'pipes', voice: 'narrator', line: 'The pipes under the garden. {papa} filled them with wind-up machines.' },
+      { seconds: 4.8, scene: 'pipes', voice: 'narrator', line: 'The pipes under the garden. {papa} filled them with wind-up machines.' },
       { seconds: 6.3, scene: 'pipes', voice: 'papa', line: 'They only walk forwards! That is the beauty of it! No brains at all!' },
       { seconds: 5.9, scene: 'pipes', voice: 'narrator', line: 'Land on one and it is finished. Walk into one and you are.' },
       { seconds: 5.4, scene: 'pipes', voice: 'narrator', line: 'Hold jump for longer and you go higher. That is the whole game, really.' },
@@ -87,17 +87,35 @@ export const STORIES: Record<string, Story> = {
       { seconds: 4.2, scene: 'road', voice: 'papa', line: 'Level after level. Off you go.' },
     ],
   },
+  /*
+   * The space story goes out twice as far as it used to.
+   *
+   * It was written when Neptune was the end of the game, and it said so: eight
+   * worlds, and a last line about nobody ever having got that far. Both halves
+   * of that are now wrong — he reached Neptune, and there is a second half of
+   * the game out past it — so a story that stops at the planets tells a player
+   * the game is over at the point it stops being a tour and starts being hard.
+   *
+   * So the back half of the beats moves to the `deep` scene, which is a
+   * different recording of the same game: black hole, aliens in the traffic, a
+   * current pushing the ship about. Said and shown, because "it keeps going"
+   * is a claim, and a sky that looks nothing like the one three beats ago is
+   * the evidence.
+   */
   space: {
     id: 'space',
     title: 'THE LONG WAY OUT',
     beats: [
-      { seconds: 6.4, scene: 'space', voice: 'narrator', line: 'Eight worlds, in the order you would meet them leaving the Sun.' },
-      { seconds: 6.8, scene: 'space', voice: 'papa', line: 'I filled the gaps between them! Rock, scrap, and a few things of my own!' },
-      { seconds: 6.2, scene: 'space', voice: 'narrator', line: 'Hold FIRE and it fires. Steer with your left thumb. Nothing else to learn.' },
-      { seconds: 6.4, scene: 'space', voice: 'narrator', line: 'There is always a way through. The purple mines are not one. Fly round those.' },
-      { seconds: 6.4, scene: 'space', voice: 'narrator', line: 'Reach a world and it tells you something true about itself. That is the prize.' },
-      { seconds: 6.6, scene: 'space', voice: 'narrator', line: 'Everything you break drops a cell. Fly into it, then spend the lot when you land.' },
-      { seconds: 4.6, scene: 'space', voice: 'papa', line: 'Neptune. Nobody has ever got that far. Off you go.' },
+      { seconds: 4.3, scene: 'space', voice: 'narrator', line: 'Eight worlds, in the order you meet them leaving the Sun.' },
+      { seconds: 4.3, scene: 'space', voice: 'papa', line: 'I filled the gaps! Rock, scrap, and a few of mine!' },
+      { seconds: 3.7, scene: 'space', voice: 'narrator', line: 'Hold FIRE to fire. Steer with your left thumb.' },
+      { seconds: 4.7, scene: 'space', voice: 'narrator', line: 'There is always a way through. The purple mines are not it.' },
+      { seconds: 4.7, scene: 'space', voice: 'narrator', line: 'Break anything and it drops a cell. Spend them when you land.' },
+      { seconds: 4.4, scene: 'deep', voice: 'narrator', line: 'Out past Neptune, the Sun is just another star.' },
+      { seconds: 4.7, scene: 'deep', voice: 'papa', line: 'Something lives out here. It shoots back. Not my doing!' },
+      { seconds: 4.2, scene: 'deep', voice: 'narrator', line: 'Shoot their shots out of the sky, then shoot them.' },
+      { seconds: 4.6, scene: 'deep', voice: 'narrator', line: 'A black hole drags the whole sky sideways. Fly across it.' },
+      { seconds: 4.1, scene: 'deep', voice: 'papa', line: 'Stars, nebulae, galaxies. It does not stop. Off you go.' },
     ],
   },
 }

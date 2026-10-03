@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DUNGEON_PATH, floorUnder, SCENES } from './scenes'
+import { DEEP_FOOTAGE, DUNGEON_PATH, floorUnder, SCENES } from './scenes'
 import { isSolid as dungeonSolid } from '../arcade/dungeon/level'
 import { levelFor as dungeonLevel } from '../arcade/dungeon/levels'
 
@@ -145,5 +145,32 @@ describe('finding the floor', () => {
 
   it('has no answer off the end of a row', () => {
     expect(floorUnder(rows, 9, 0, (t) => t === '#')).toBe(null)
+  })
+})
+
+describe('the deep-space recording', () => {
+  /*
+   * The story says something lives out here over this footage, and the first
+   * seed tried had no alien on screen for that beat or the two after it. A
+   * line about aliens over an empty sky is the kind of thing that is obvious
+   * in a photograph and invisible in a diff, so it is counted here.
+   *
+   * The window is the five beats that use this scene: 21.4s to 42.9s into the
+   * cutscene, read back at ten frames a second.
+   */
+  const window = DEEP_FOOTAGE.slice(214, 430)
+
+  it('has an alien on screen for nearly all of it', () => {
+    const seen = window.filter((f) => f.rubble.some((r) => r.kind === 'alien')).length
+    expect(seen / window.length).toBeGreaterThan(0.85)
+  })
+
+  it('has them shooting back', () => {
+    const firing = window.filter((f) => f.shots.length > 0).length
+    expect(firing).toBeGreaterThan(0)
+  })
+
+  it('is long enough to still be moving at the last beat', () => {
+    expect(DEEP_FOOTAGE.length / 10).toBeGreaterThanOrEqual(43)
   })
 })

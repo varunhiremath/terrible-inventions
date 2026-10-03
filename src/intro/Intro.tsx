@@ -23,6 +23,7 @@ import { duckMusic } from '../music/player'
 export function Intro({ story, onDone }: { story: Story; onDone: () => void }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const bandRef = useRef<HTMLDivElement>(null)
   const started = useRef(0)
   /** Which beat has had its line spoken, so it is said once and not per frame. */
   const spoken = useRef(-1)
@@ -36,15 +37,27 @@ export function Intro({ story, onDone }: { story: Story; onDone: () => void }) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
+    /*
+     * How much of the picture the caption is sitting on.
+     *
+     * The band is opaque and across the bottom, and every one of these games
+     * draws the thing you steer down there — so the ship, the car and the
+     * runner were all underneath it. Measured rather than guessed at, because
+     * it is two lines of text on a phone and one on a tablet, and the scene is
+     * given the room that is left.
+     */
+    let band = 0
     const resize = () => {
       const rect = wrap.getBoundingClientRect()
       const dpr = Math.min(2.5, window.devicePixelRatio || 1)
       canvas.width = Math.max(1, Math.round(rect.width * dpr))
       canvas.height = Math.max(1, Math.round(rect.height * dpr))
+      band = Math.round((bandRef.current?.offsetHeight ?? 0) * dpr)
     }
     resize()
     const observer = new ResizeObserver(resize)
     observer.observe(wrap)
+    if (bandRef.current) observer.observe(bandRef.current)
 
     started.current = performance.now()
     spoken.current = -1
@@ -55,10 +68,13 @@ export function Intro({ story, onDone }: { story: Story; onDone: () => void }) {
       const clock = (performance.now() - started.current) / 1000
       const now = beatAt(story, clock)
       const w = canvas.width
-      const h = canvas.height
+      // The picture is what is left above the caption. Never less than half
+      // the canvas, in case the band is ever measured absurdly — a scene drawn
+      // into a sliver is worse than one partly covered.
+      const h = Math.max(canvas.height / 2, canvas.height - band)
 
       ctx.setTransform(1, 0, 0, 1, 0, 0)
-      ctx.clearRect(0, 0, w, h)
+      ctx.clearRect(0, 0, w, canvas.height)
       const scene = SCENES[now.beat.scene]
       if (scene) scene({ ctx, w, h, t: now.t, clock })
 
@@ -71,15 +87,26 @@ export function Intro({ story, onDone }: { story: Story; onDone: () => void }) {
        * the letters land on whatever masonry happens to be there.
        */
       if (now.index === story.beats.length - 1) {
-        const size = Math.min(w * 0.11, h * 0.16)
+        /*
+         * Shrunk to fit rather than set at a fixed size. A width of 0.11 suits
+         * PAPA PANIC and runs THE LONG WAY OUT off both edges of a phone — on
+         * the one story whose title is the longest and whose last beat is the
+         * one worth looking at.
+         */
+        let size = Math.min(w * 0.11, h * 0.16)
+        const room = w * 0.92
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        for (let tries = 0; tries < 12; tries++) {
+          ctx.font = `bold ${size}px ui-monospace, monospace`
+          if (ctx.measureText(story.title).width <= room) break
+          size *= 0.9
+        }
         const show = Math.min(1, now.t * 3)
         ctx.globalAlpha = show
         ctx.fillStyle = 'rgba(8,10,16,0.72)'
         ctx.fillRect(0, h / 2 - size, w, size * 2)
         ctx.fillStyle = '#ffc84a'
-        ctx.font = `bold ${size}px ui-monospace, monospace`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
         ctx.fillText(story.title, w / 2, h / 2)
         ctx.globalAlpha = 1
       }
@@ -149,7 +176,7 @@ export function Intro({ story, onDone }: { story: Story; onDone: () => void }) {
           * colour of his own because whose line it is matters, but it is the
           * warm one now, and both sit on something opaque.
           */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/80 px-4 pb-5 pt-4">
+        <div ref={bandRef} className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/80 px-4 pb-5 pt-4">
           <p
             className={`mx-auto max-w-2xl text-center text-xl font-semibold leading-snug sm:text-2xl ${
               voice === 'papa' ? 'text-bolt' : 'text-chalk'

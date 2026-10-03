@@ -277,7 +277,7 @@ const FOOTAGE: Drive[] = (() => {
   let run = newDrive(1, 99, 0, 12)
   let target: number | null = null
 
-  for (let t = 0; t < 40; t += ROAD_FIXED) {
+  for (let t = 0; t < 46; t += ROAD_FIXED) {
     const gapIn = (lane: number) => {
       let soonest = Infinity
       for (const car of run.cars) {
@@ -310,29 +310,29 @@ const FOOTAGE: Drive[] = (() => {
 
     run = driveOn(run, input, ROAD_FIXED)
     if (run.status !== 'driving') run = { ...run, status: 'driving', fuel: TANK, stunned: 0 }
-    // Every sixth step, which is plenty to read back at any frame rate.
-    if (frames.length < 400 && Math.round(t / ROAD_FIXED) % 6 === 0) frames.push(run)
+    // Every sixth step, which is plenty to read back at any frame rate. The
+    // recording has to outlast the story that reads it: it used to stop at
+    // forty seconds against a forty-two second story, and the last beat was a
+    // photograph of a race rather than a race.
+    if (Math.round(t / ROAD_FIXED) % 6 === 0) frames.push(run)
   }
   return frames
 })()
 
 /**
- * Half a minute of the flight out to Mars, flown once and kept.
+ * A pilot no cleverer than a person, flown once and kept.
  *
  * Same trick as the road, and for the same reason: a scene has to be a pure
  * function of the clock, and the game is a simulation. So it is flown through
- * in advance by a pilot no cleverer than a person — aim for the widest gap in
- * the sky ahead, hold the trigger down — and the cutscene reads the recording
- * back. What you watch is the game, played.
- *
- * Mars rather than Mercury because Mercury is a grey dot and Mars is red, and
- * the beat has to say "space" in the first half second.
+ * in advance — aim for the widest gap in the sky ahead, hold the trigger down
+ * — and the cutscene reads the recording back. What you watch is the game,
+ * played.
  */
-const FLIGHT: Flight[] = (() => {
+function fly(world: number, seed: number, hold: [number, number], seconds = 46): Flight[] {
   const frames: Flight[] = []
-  let run = newFlight(4, 99, 0, 7)
+  let run = newFlight(world, 99, 0, seed)
 
-  for (let t = 0; t < 34; t += SPACE_FIXED) {
+  for (let t = 0; t < seconds; t += SPACE_FIXED) {
     const soon = run.rubble.filter((r) => r.y > 0.2 && r.y < 1)
     const shut = soon
       .map((r): [number, number] => {
@@ -355,19 +355,71 @@ const FLIGHT: Flight[] = (() => {
     const stick: Stick = { left: off < -0.01, right: off > 0.01, fire: true }
     run = flyOn(run, stick, SPACE_FIXED)
     // Knocked or arrived, keep flying: the beat wants thirty seconds of sky,
-    // not an ending.
+    // not an ending. The progress is held inside a band rather than let run,
+    // because the world ahead grows with it and the beat wants it a readable
+    // size the whole way through rather than a dot at one end and a wall at
+    // the other.
     if (run.status !== 'flying') {
-      run = { ...run, status: 'flying', shields: 3, mercy: 0, progress: Math.min(0.9, run.progress) }
+      run = { ...run, status: 'flying', shields: 3, mercy: 0 }
     }
-    if (frames.length < 400 && Math.round(t / SPACE_FIXED) % 6 === 0) frames.push(run)
+    if (run.progress < hold[0] || run.progress > hold[1]) {
+      run = { ...run, progress: hold[0] }
+    }
+    if (Math.round(t / SPACE_FIXED) % 6 === 0) frames.push(run)
   }
   return frames
-})()
+}
+
+/*
+ * Mars rather than Mercury because Mercury is a grey dot and Mars is red, and
+ * the beat has to say "space" in the first half second.
+ */
+const FLIGHT: Flight[] = fly(4, 7, [0.1, 0.9])
+
+/*
+ * And the other half of the game, which the story used to stop short of.
+ *
+ * The cutscene talked about eight worlds and ended at Neptune, which is what
+ * the game was when it was written and is not what it is now — there is a
+ * whole second half out past the planets, and a story that does not mention
+ * it is a story that tells you the game is over when it is not.
+ *
+ * Sagittarius A* for the picture, out of the eight deep worlds, because it is
+ * the one that could not be mistaken for the solar system: a black hole with
+ * the sky bent round it, aliens in the traffic, and a current that pushes the
+ * ship sideways whether it is steering or not. The progress is held high so
+ * the hole is big — the whole point of the beat is that it looks nothing like
+ * the place you started.
+ *
+ * The seed is measured rather than picked. The first one had no alien on
+ * screen at all during the beat that says something lives out here, which is a
+ * line delivered over an empty sky. Twelve were flown and counted; this one
+ * has one in frame for 97 per cent of the five deep beats, against 41 for the
+ * worst of them.
+ */
+const DEEP: Flight[] = fly(15, 97, [0.55, 0.88])
 
 /** The four Machines, in the colours they are on the board. */
 const MACHINES = ['#e8503a', '#f49ac1', '#5ad2e0', '#f0a04b']
 
 /** Every scene any story can name. */
+/**
+ * How long each recorded scene has footage for, in seconds.
+ *
+ * Exported so the stories can be checked against it. A beat that starts after
+ * its recording ran out is not an error and does not look like one: it is a
+ * photograph where there should be a game, held for four seconds, and both the
+ * road and the space story had one at the end.
+ */
+export const FOOTAGE_SECONDS: Record<string, number> = {
+  road: FOOTAGE.length / 10,
+  space: FLIGHT.length / 10,
+  deep: DEEP.length / 10,
+}
+
+/** The deep-space recording, for the test that counts what is in it. */
+export const DEEP_FOOTAGE: readonly Flight[] = DEEP
+
 export const SCENES: Record<string, (stage: Stage) => void> = {
   /**
    * The maze: the real board, the real route, the real characters.
@@ -629,6 +681,18 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
    */
   space({ ctx, w, h, clock }) {
     const frame = FLIGHT[Math.min(FLIGHT.length - 1, Math.floor(clock * 10))]
+    drawFlight(ctx, frame, { w, h, clock }, clock * 0.3)
+  },
+
+  /**
+   * Deep space: the same game, out where the planets have run out.
+   *
+   * A separate recording rather than the same one further along, because the
+   * difference is the point. Different sky, different things coming at you,
+   * and the ship visibly drifting against a current it is not steering into.
+   */
+  deep({ ctx, w, h, clock }) {
+    const frame = DEEP[Math.min(DEEP.length - 1, Math.floor(clock * 10))]
     drawFlight(ctx, frame, { w, h, clock }, clock * 0.3)
   },
 
