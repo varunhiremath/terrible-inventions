@@ -18,10 +18,6 @@ import { useStore } from '../store'
  * more than it sounds: knowing you are about to be asked about flags is half
  * of being ready to answer about flags.
  *
- * A wrong answer costs nothing. Somebody who has just lost a life is not in the
- * mood to be fined, and the explanation runs either way because the point is
- * the idea rather than the mark.
- *
  * It is offered rather than imposed, and that is the whole design.
  *
  * The first version put the question up with no way past it, reasoning that a
@@ -36,11 +32,20 @@ import { useStore } from '../store'
  * does not want to think right now he says so, honestly, in one tap, and
  * nothing is lost. If he does, he means it.
  *
- * And getting one wrong is not the end of the conversation. The explanation
- * comes up and then he can take another, as many as he likes: somebody asking
- * for another question is exactly the thing this whole card exists to
- * encourage, and refusing him on the grounds that he already had a go would
- * be perverse.
+ * ONE question, and the word is doing work.
+ *
+ * A wrong answer used to offer another, as many as he liked, on the reasoning
+ * that somebody asking for another question is exactly what this card exists
+ * to encourage. It is — and the reward made it a loophole rather than an
+ * invitation. Reported from the sofa again: "he is using the questions as a
+ * way to get infinite lives". Of course he was. Every death was recoverable
+ * with certainty, because you could keep taking questions until one of them
+ * came out right, so the lives in the corner of the screen stopped meaning
+ * anything and the game stopped being a game.
+ *
+ * One attempt puts the risk back without taking the generosity away: the
+ * bargain is still offered, a wrong answer still gets its explanation, and
+ * nothing is ever taken off him for guessing. It just does not pay twice.
  */
 export function Interlude({
   onDone,
@@ -74,12 +79,9 @@ export function Interlude({
    * below turns it into an answer and an explanation.
    */
   const [phase, setPhase] = useState<'offer' | 'asking'>('offer')
-  /** Bumped to fetch another question, which is the only thing that rerolls. */
-  const [round, setRound] = useState(0)
 
-  // Chosen once per round, not on every render: a re-render is not a reroll,
-  // and a question that changed under you as you thought about it would be
-  // cruel.
+  // Chosen once, not on every render: a re-render is not a reroll, and a
+  // question that changed under you as you thought about it would be cruel.
   const question = useMemo(
     () =>
       pickQuestion(save.rating, Math.random(), Math.floor(Math.random() * 1e9), {
@@ -99,11 +101,9 @@ export function Interlude({
         topics: FACT_TOPICS,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [round],
+    [],
   )
   const [verdict, setVerdict] = useState<{ correct: boolean; given: string } | null>(null)
-  /** Whether any question this time round has been got right. */
-  const [won, setWon] = useState(false)
 
   /*
    * The chase tune keeps running while a question is on screen otherwise, and
@@ -125,7 +125,6 @@ export function Interlude({
   const settle = (given: string, correct: boolean) => {
     if (verdict) return
     setVerdict({ correct, given })
-    if (correct) setWon(true)
     answered(
       question.kind === 'maths' ? question.problem : null,
       correct,
@@ -133,6 +132,18 @@ export function Interlude({
       topicOf(question),
     )
   }
+
+  /*
+   * Everything gets smaller once it has been answered.
+   *
+   * The card grows by an explanation and a button at the moment of answering,
+   * which is the moment it has the least room to grow into — reported as
+   * having to scroll up and down to find the way back. The question still has
+   * to be readable next to the verdict, so nothing is removed; the parts that
+   * were sized for *choosing* an answer, which nobody is doing any more, give
+   * up their room instead.
+   */
+  const tight = verdict !== null
 
   return (
     /*
@@ -157,24 +168,157 @@ export function Interlude({
       onPointerMove={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
     >
-      <div className="rise-in block-panel max-h-full w-full max-w-xl overflow-y-auto p-5 sm:p-6 short:max-w-3xl short:p-3">
-        {phase === 'offer' && (
-          <div className="fade-in">
-            <p className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-rust">
-              {lastChance ? 'Last one' : 'A question, if you want it'}
-            </p>
-            <p className="mt-2 text-xl leading-snug text-chalk sm:text-2xl short:text-base">
-              {lastChance
-                ? 'That was the last of them. Get one question right and you can keep going.'
-                : `Answer one and you get ${reward ?? 'it'} back. Or carry straight on without.`}
-            </p>
+      {/*
+        * A column with the buttons nailed to the bottom of it.
+        *
+        * The card used to be one scrolling box, so a long explanation pushed
+        * the way out below the fold and getting back into the game meant
+        * scrolling to find it. Whatever happens above, the thing you press is
+        * on the screen: the reading scrolls, the doing does not.
+        */}
+      <div className="rise-in block-panel flex max-h-full w-full max-w-xl flex-col p-5 sm:p-6 short:max-w-3xl short:p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {phase === 'offer' && (
+            <div className="fade-in">
+              <p className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-rust">
+                {lastChance ? 'Last one' : 'A question, if you want it'}
+              </p>
+              <p className="mt-2 text-xl leading-snug text-chalk sm:text-2xl short:text-base">
+                {lastChance
+                  ? 'That was the last of them. Get this one right and you can keep going.'
+                  : `Answer it and you get ${reward ?? 'it'} back. Or carry straight on without.`}
+              </p>
+            </div>
+          )}
+
+          {/* The topic, as a colour first and a word second. */}
+          {phase === 'asking' && (
+            <div className="flex items-center gap-2.5">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: topic.tint }} />
+              <span
+                className="font-mono text-xs font-bold uppercase tracking-[0.2em]"
+                style={{ color: topic.tint }}
+              >
+                {topic.label}
+              </span>
+            </div>
+          )}
+
+          {phase === 'asking' && (question.kind === 'maths' ? (
+            <div className="mt-4">
+              <ProblemView problem={question.problem} locked={verdict !== null} onAnswer={settle} />
+            </div>
+          ) : (
+            <>
+              {question.item.flag && (
+                <div
+                  className={`mx-auto overflow-hidden rounded-xl border-2 border-ink-line shadow-block ${
+                    tight ? 'mt-2 max-w-[9rem] short:mt-1 short:max-w-[7rem]'
+                          : 'mt-4 short:mt-2 short:max-w-[12rem]'
+                  }`}
+                >
+                  <div className="aspect-[3/2] w-full">
+                    <FlagBox name={question.item.flag} className="rounded-none" />
+                  </div>
+                </div>
+              )}
+
+              <p
+                className={`leading-snug text-chalk ${
+                  tight ? 'mt-3 text-base sm:text-lg short:mt-1.5 short:text-sm'
+                        : 'mt-4 text-xl sm:text-2xl short:mt-2 short:text-base'
+                }`}
+              >
+                {fill(question.item.prompt)}
+              </p>
+
+              <div
+                /*
+                 * Two columns when the screen is short.
+                 *
+                 * One column of four full-width answers is 360 pixels of height
+                 * on its own, so on a phone held sideways the fourth answer was
+                 * cut off by the bottom edge and `skip` was below it, off the
+                 * screen entirely. Nobody mid-game is going to scroll a question
+                 * to find out there was a fourth option.
+                 */
+                className={`grid ${tight ? 'mt-3 gap-1.5 short:mt-1.5' : 'mt-5 gap-2.5 short:mt-2.5 short:gap-2'} ${
+                  question.item.showFlags ? 'grid-cols-2' : 'grid-cols-1 short:grid-cols-2'
+                }`}
+              >
+                {question.options.map((option, i) => {
+                  const picked = verdict?.given === option
+                  const right = option === question.answer
+                  // Once answered, the right one is always shown as right,
+                  // whether or not it was the one chosen. Being told only that
+                  // you were wrong teaches nothing at all.
+                  const mark = !verdict ? '' : right ? 'mark-right' : picked ? 'mark-wrong' : 'opacity-40'
+
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      disabled={verdict !== null}
+                      onClick={() => settle(option, right)}
+                      // Staggered, so the options read as a list arriving rather
+                      // than a block appearing.
+                      style={{ animationDelay: `${60 + i * 45}ms` }}
+                      className={`rise-in block-btn flex items-center gap-3 text-left transition-colors
+                                  disabled:opacity-100 ${
+                                    tight
+                                      ? 'px-3 py-1.5 text-sm short:py-1'
+                                      : 'px-4 py-3.5 text-base short:py-2 short:text-sm'
+                                  } ${mark}`}
+                    >
+                      {question.item.showFlags ? (
+                        <span
+                          className={`w-full overflow-hidden rounded-lg border-2 border-ink-line ${
+                            tight ? 'h-8 short:h-6' : 'h-14 sm:h-16 short:h-9'
+                          }`}
+                        >
+                          <FlagBox name={FLAG_OF[option]} className="rounded-none" />
+                        </span>
+                      ) : (
+                        <span className="leading-snug">{option}</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          ))}
+
+          {verdict && (
+            <div className="fade-in mt-3 border-t-2 border-ink-line pt-3 short:mt-2 short:pt-2">
+              <p
+                className={`font-mono text-xs font-bold uppercase tracking-[0.2em] ${
+                  verdict.correct ? 'text-moss' : 'text-rust'
+                }`}
+              >
+                {verdict.correct ? 'Got it' : 'Not that one'}
+              </p>
+              <p className="mt-1.5 text-[0.9rem] leading-relaxed text-chalk/90 short:text-sm">
+                {fill(question.kind === 'maths' ? question.problem.explain : question.item.explain)}
+              </p>
+              {reward && verdict.correct && (
+                <p className="mt-2 font-mono text-xs font-bold uppercase tracking-[0.2em] text-moss">
+                  {reward}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* --- the part you press, which never scrolls ------------------- */}
+        <div className="shrink-0">
+          {phase === 'offer' && (
             <div className="mt-5 grid gap-2.5 short:mt-3 short:grid-cols-2 short:gap-2">
               <button
                 type="button"
                 onClick={() => setPhase('asking')}
                 className="block-btn bg-bolt px-4 py-4 text-lg text-ink short:py-2.5 short:text-base"
               >
-                {lastChance ? 'Give me a question' : `Answer one for ${reward ?? 'it'}`}
+                {lastChance ? 'Give me the question' : `Answer it for ${reward ?? 'it'}`}
               </button>
               <button
                 type="button"
@@ -184,159 +328,41 @@ export function Interlude({
                 {lastChance ? 'No thanks, I am done' : 'Carry on without it'}
               </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* The topic, as a colour first and a word second. */}
-        {phase === 'asking' && (
-        <div className="flex items-center gap-2.5">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: topic.tint }} />
-          <span
-            className="font-mono text-xs font-bold uppercase tracking-[0.2em]"
-            style={{ color: topic.tint }}
-          >
-            {topic.label}
-          </span>
+          {/*
+            * The stakes, while the question is up.
+            *
+            * There used to be a note here explaining that there was no way past
+            * the card, on the reasoning that a reward means nothing if answering
+            * is optional. That turned out to be exactly backwards: with no way
+            * past, the cheapest way out was to guess — so the reward was being
+            * paid out at random and the question was not being read. Offering
+            * the skip up front is what makes the answer mean something.
+            */}
+          {phase === 'asking' && !verdict && reward && (
+            <p className="mt-4 text-center font-mono text-[0.7rem] uppercase tracking-[0.2em] text-moss short:mt-2">
+              {`right answer: ${reward}`}
+            </p>
+          )}
+
+          {/*
+            * One way out, whichever way it went.
+            *
+            * This used to offer another question after a wrong one. That is
+            * how the lives in the corner stopped meaning anything — see the
+            * note at the top of the file.
+            */}
+          {verdict && (
+            <button
+              type="button"
+              onClick={() => onDone(verdict.correct)}
+              className="block-btn mt-4 w-full bg-bolt py-4 text-lg text-ink short:mt-2.5 short:py-2.5 short:text-base"
+            >
+              Back to it
+            </button>
+          )}
         </div>
-        )}
-
-        {phase === 'asking' && (question.kind === 'maths' ? (
-          <div className="mt-4">
-            <ProblemView problem={question.problem} locked={verdict !== null} onAnswer={settle} />
-          </div>
-        ) : (
-          <>
-            {question.item.flag && (
-              <div className="mx-auto mt-4 overflow-hidden rounded-xl border-2 border-ink-line shadow-block short:mt-2 short:max-w-[12rem]">
-                <div className="aspect-[3/2] w-full">
-                  <FlagBox name={question.item.flag} className="rounded-none" />
-                </div>
-              </div>
-            )}
-
-            <p className="mt-4 text-xl leading-snug text-chalk sm:text-2xl short:mt-2 short:text-base">
-              {fill(question.item.prompt)}
-            </p>
-
-            <div
-              /*
-               * Two columns when the screen is short.
-               *
-               * One column of four full-width answers is 360 pixels of height
-               * on its own, so on a phone held sideways the fourth answer was
-               * cut off by the bottom edge and `skip` was below it, off the
-               * screen entirely. Nobody mid-game is going to scroll a question
-               * to find out there was a fourth option.
-               */
-              className={`mt-5 grid gap-2.5 short:mt-2.5 short:gap-2 ${
-                question.item.showFlags ? 'grid-cols-2' : 'grid-cols-1 short:grid-cols-2'
-              }`}
-            >
-              {question.options.map((option, i) => {
-                const picked = verdict?.given === option
-                const right = option === question.answer
-                // Once answered, the right one is always shown as right,
-                // whether or not it was the one chosen. Being told only that
-                // you were wrong teaches nothing at all.
-                const mark = !verdict ? '' : right ? 'mark-right' : picked ? 'mark-wrong' : 'opacity-40'
-
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    disabled={verdict !== null}
-                    onClick={() => settle(option, right)}
-                    // Staggered, so the options read as a list arriving rather
-                    // than a block appearing.
-                    style={{ animationDelay: `${60 + i * 45}ms` }}
-                    className={`rise-in block-btn flex items-center gap-3 px-4 py-3.5 text-left text-base
-                                transition-colors disabled:opacity-100 short:py-2 short:text-sm ${mark}`}
-                  >
-                    {question.item.showFlags ? (
-                      <span className="h-14 w-full overflow-hidden rounded-lg border-2 border-ink-line sm:h-16 short:h-9">
-                        <FlagBox name={FLAG_OF[option]} className="rounded-none" />
-                      </span>
-                    ) : (
-                      <span className="leading-snug">{option}</span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </>
-        ))}
-
-        {verdict && (
-          <div className="fade-in mt-5 border-t-2 border-ink-line pt-4 short:mt-3 short:pt-2">
-            <p
-              className={`font-mono text-xs font-bold uppercase tracking-[0.2em] ${
-                verdict.correct ? 'text-moss' : 'text-rust'
-              }`}
-            >
-              {verdict.correct ? 'Got it' : 'Not that one'}
-            </p>
-            <p className="mt-2 text-[0.95rem] leading-relaxed text-chalk/90 short:mt-1 short:text-sm">
-              {fill(question.kind === 'maths' ? question.problem.explain : question.item.explain)}
-            </p>
-            {reward && verdict.correct && (
-              <p className="mt-3 font-mono text-xs font-bold uppercase tracking-[0.2em] text-moss short:mt-2">
-                {reward}
-              </p>
-            )}
-            {/*
-              * Right: take it and go. Wrong: another one, or go anyway.
-              *
-              * The reward is paid on `won` rather than on this last answer,
-              * so getting one right and then trying another for fun cannot
-              * take it away again.
-              */}
-            {verdict.correct ? (
-              <button
-                type="button"
-                onClick={() => onDone(true)}
-                className="block-btn mt-5 w-full bg-bolt py-4 text-lg text-ink short:mt-3 short:py-2.5 short:text-base"
-              >
-                Back to it
-              </button>
-            ) : (
-              <div className="mt-5 grid gap-2.5 short:mt-3 short:grid-cols-2 short:gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVerdict(null)
-                    setRound((n) => n + 1)
-                  }}
-                  className="block-btn bg-bolt px-4 py-4 text-lg text-ink short:py-2.5 short:text-base"
-                >
-                  Try another one
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDone(won)}
-                  className="block-btn px-4 py-3.5 text-base short:py-2.5 short:text-sm"
-                >
-                  {lastChance ? 'That is enough' : 'Back to it'}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/*
-          * The stakes, while a question is up.
-          *
-          * There used to be a note here explaining that there was no way past
-          * the card, on the reasoning that a reward means nothing if answering
-          * is optional. That turned out to be exactly backwards: with no way
-          * past, the cheapest way out was to guess — so the reward was being
-          * paid out at random and the question was not being read. Offering
-          * the skip up front is what makes the answer mean something.
-          */}
-        {phase === 'asking' && !verdict && reward && (
-          <p className="mt-4 text-center font-mono text-[0.7rem] uppercase tracking-[0.2em] text-moss short:mt-2">
-            {won ? 'already won — this one is for fun' : `right answer: ${reward}`}
-          </p>
-        )}
       </div>
     </div>
   )

@@ -66,12 +66,12 @@ await page.keyboard.down('ArrowUp')
 /*
  * The card opens with an offer, so the wait is for that and not for options.
  *
- * "Answer one and have your car back, or carry straight on." Pressing the
+ * "Answer it and have your car back, or carry straight on." Pressing the
  * first door is what puts a question on screen, and both presses here go
  * through real pointers — that is the whole point of this probe.
  */
 let asked = false
-const offer = () => page.getByRole('button', { name: /^answer one for/i })
+const offer = () => page.getByRole('button', { name: /^answer it for/i })
 for (let wait = 0; wait < 60 && !asked; wait++) {
   await page.waitForTimeout(1000)
   asked = (await offer().count()) > 0

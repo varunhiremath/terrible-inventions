@@ -1,0 +1,50 @@
+<!doctype html>
+<!--
+  A bench for the question card, served by the dev server and left out of the
+  build (Vite only takes index.html as an entry).
+
+  It exists because the card that has to fit on a phone is the *picture* one —
+  a flag at the top and four more down the side — and that is about one
+  question in thirty. Playing a game until one turns up takes minutes a go, so
+  eight runs of the real probe got eight text questions and proved nothing
+  about the case that matters. Here it can be dealt a new question thirty times
+  a second until the right kind comes up.
+
+      npx vite --port 5199
+      node scripts/question-fit.mjs
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>questions</title>
+    <link rel="stylesheet" href="/src/index.css" />
+    <style>
+      html, body, #all { height: 100%; margin: 0; }
+      #all { position: relative; background: #0d1016; }
+    </style>
+  </head>
+  <body>
+    <div id="all"></div>
+    <script type="module">
+      import React from 'react'
+      import { createRoot } from 'react-dom/client'
+      import { Interlude } from '/src/screens/Interlude.tsx'
+      const root = createRoot(document.getElementById('all'))
+      // A fresh card every time, which is a fresh question: the component
+      // picks one once, on mount, so the key is the whole of the reroll.
+      let n = 0
+      window.__deal = () => {
+        n += 1
+        root.render(
+          React.createElement(Interlude, {
+            key: n,
+            reward: 'the life back',
+            onDone: () => {},
+          }),
+        )
+      }
+      window.__deal()
+      window.__ready = true
+    </script>
+  </body>
+</html>

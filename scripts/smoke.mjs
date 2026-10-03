@@ -57,12 +57,12 @@ const clearQuestion = async () => {
   /*
    * The card opens with a choice now, not a question.
    *
-   * "Answer one and have the life back, or carry on without it." Taking the
+   * "Answer it and have the life back, or carry on without it." Taking the
    * question is what this helper is for, so it presses that door first; a
    * probe that only knew the old card reported "the question offered only 3
    * buttons", which were the offer's two and nothing else.
    */
-  const offer = page.getByRole('button', { name: /^(answer one for|give me a question)/i })
+  const offer = page.getByRole('button', { name: /^(answer it for|give me the question)/i })
   if ((await offer.count()) > 0) {
     await offer.first().click()
     await page.waitForTimeout(600)
@@ -87,8 +87,7 @@ const clearQuestion = async () => {
   }
 
   await page.waitForTimeout(700)
-  // A wrong answer offers another question instead of a plain way out, so
-  // take the way out that is there either way.
+  // One question, one way out, whichever way it went.
   if ((await back().count()) > 0) {
     await back().first().click()
     await page.waitForTimeout(900)
@@ -347,11 +346,11 @@ if (!died) {
   /*
    * And take the offer, because the card opens with one.
    *
-   * What comes up first is "answer one and have the life back, or carry on
+   * What comes up first is "answer it and have the life back, or carry on
    * without it" — two buttons, neither of them a question. The checks below
    * are about the question, so this opens it.
    */
-  const takeIt = page.getByRole('button', { name: /^answer one for/i })
+  const takeIt = page.getByRole('button', { name: /^answer it for/i })
   if ((await takeIt.count()) > 0) {
     await takeIt.first().click()
     await page.waitForTimeout(600)
