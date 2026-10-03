@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { VIEW_ROWS } from '../pipes/level'
 import { NO_INPUT, type Input } from '../pipes/physics'
-import { EVENTS, FIXED, newRun, stepRun, type PipeEvent, type Run, type Status } from '../pipes/run'
+import {
+  FIXED, LOUDEST, newRun, stepRun, type PipeEvent, type Run, type Status,
+} from '../pipes/run'
 import { playCue, setHeat, setPace } from '../music/player'
 import type { CueName } from '../music/score'
 import { LEVELS, levelFor } from '../pipes/levels'
@@ -60,20 +62,6 @@ const NOISE: Record<PipeEvent, CueName> = {
   pipe: 'pipeDown',
 }
 
-/**
- * Loudest thing first.
- *
- * A step can easily produce three of these at once — land on a goomba, break
- * the block above, take the coin out of it — and firing all three turns a good
- * moment into a mess. One noise per step, and it is the one that matters most.
- */
-const LOUDEST: PipeEvent[] = [
-  'win', 'die', 'shrink', 'grow', 'pipe', 'sprout', 'stomp', 'kick', 'break', 'knock',
-  'coin', 'jump',
-]
-// Every event has to be in there somewhere, or it can never be the loudest
-// thing in a step and simply never gets heard.
-if (LOUDEST.length !== EVENTS.length) throw new Error('an event with no place in the order')
 
 interface Hud {
   level: number

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NEW_KIT, STARTING_SHIELDS, WORLDS, worldFor, type Kit, type Upgrade } from '../space/level'
 import {
-  FIXED, buy, newRun, resume, step,
+  FIXED, LOUDEST, buy, newRun, resume, step,
   type Input, type Run, type SpaceEvent, type Status,
 } from '../space/run'
 import { createLatch, keyAt, padHeight, padLayout, type Button, type Key } from '../space/controls'
@@ -33,6 +33,7 @@ const MAX_CATCHUP = 0.25
 
 const NOISE: Record<SpaceEvent, CueName> = {
   shot: 'laser',
+  incoming: 'incoming',
   hit: 'ping',
   broke: 'burst',
   knock: 'struck',
@@ -42,10 +43,6 @@ const NOISE: Record<SpaceEvent, CueName> = {
 }
 
 /** Loudest first: one sound a frame, and never the laser if anything else fired. */
-const LOUDEST: SpaceEvent[] = ['arrive', 'knock', 'warn', 'broke', 'scrap', 'hit', 'shot']
-if (LOUDEST.length !== Object.keys(NOISE).length) {
-  throw new Error('a space event with no place in the order')
-}
 
 interface Hud {
   number: number
@@ -209,6 +206,19 @@ export function Space() {
         ctx.clip()
         drawRun(ctx, { ...next, x }, view, travelled.current)
         ctx.restore()
+
+        /*
+         * What is actually out there, for a browser test to sample. Dev and
+         * preview both: "are there aliens, and are they shooting" is a
+         * question about the built game, and a probe that could only ask it of
+         * the dev server would not be asking it of what ships.
+         */
+        const dev = window as unknown as { __spaceDrawn?: unknown }
+        dev.__spaceDrawn = {
+          aliens: next.rubble.filter((r) => r.kind === 'alien').length,
+          shots: next.shots.length,
+          rubble: next.rubble.length,
+        }
 
         ctx.fillStyle = '#0d1016'
         ctx.fillRect(0, 0, w, capH)

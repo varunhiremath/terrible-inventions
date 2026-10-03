@@ -19,7 +19,7 @@ import { FLOOR_DEPTH, drawPrince, drawRoom } from '../arcade/dungeon/draw'
 import { newPrince } from '../arcade/dungeon/prince'
 import { ROOM_COLS } from '../arcade/dungeon/level'
 import { drawRun as drawSpace } from '../space/draw'
-import { newRun as newSpaceRun, type Rubble } from '../space/run'
+import { newRubble, newRun as newSpaceRun, type Rubble } from '../space/run'
 import { drawFinish, drawMine, drawRoad } from '../road/draw'
 import { CAR_LONG, CAR_WIDE, LANES, SIGHT, carNamed, type Racer } from '../road/level'
 import {
@@ -360,13 +360,8 @@ const SCENES: Record<WipeScene, Scene> = {
       const y = ((n / 9 + go * 1.4) % 1.35) - 0.2
       for (const side of [-1, 1]) {
         rubble.push({
+          ...newRubble(n % 3 === 0 ? 'shard' : 'rock', 0.5 + side * (0.27 + ((n * 7) % 5) * 0.012), y),
           id: id++,
-          kind: n % 3 === 0 ? 'shard' : 'rock',
-          x: 0.5 + side * (0.27 + ((n * 7) % 5) * 0.012),
-          y,
-          drift: 0,
-          health: 1,
-          flash: 0,
         })
       }
     }

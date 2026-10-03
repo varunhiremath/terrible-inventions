@@ -115,6 +115,24 @@ export const EVENTS = [
 ] as const
 export type PipeEvent = (typeof EVENTS)[number]
 
+/**
+ * Loudest first, for the screen to pick one noise a frame from.
+ *
+ * A step can easily produce three of these at once — land on a goomba, break
+ * the block above, take the coin out of it — and firing all three turns a good
+ * moment into a mess.
+ *
+ * It lives here rather than in the screen because which of these matters most
+ * is a fact about the game, and because a list inside a screen is a list no
+ * test can reach. Forgetting to add an event to one of these threw on load and
+ * took the whole app down with it, twice in one afternoon in two different
+ * games, with the unit suite green both times. `events.test.ts` reads this now.
+ */
+export const LOUDEST: readonly PipeEvent[] = [
+  'win', 'die', 'shrink', 'grow', 'pipe', 'sprout', 'stomp', 'kick', 'break', 'knock',
+  'coin', 'jump',
+]
+
 const ENEMY_SPEED = 2.2
 const SHELL_SPEED = 11
 const ENEMY_W = 0.8

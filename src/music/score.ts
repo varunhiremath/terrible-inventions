@@ -1462,8 +1462,22 @@ export const CELL: Track = {
 }
 
 /** Space's own set, all in E Phrygian, like the loop they interrupt. */
+/**
+ * Somebody shooting back.
+ *
+ * Downwards, where yours goes up, and on a sawtooth where yours is a thin
+ * pulse — the two have to be told apart with your eyes somewhere else. E
+ * Phrygian, like everything out here.
+ */
+export const INCOMING: Track = {
+  name: 'Incoming',
+  beatsPerMinute: 280,
+  parts: [{ wave: 'sawtooth', gain: 0.045, sustain: 0.35, pattern: 'A4 E4' }],
+}
+
 export const SPACE_CUES = {
   laser: LASER,
+  incoming: INCOMING,
   ping: PING,
   cell: CELL,
   burst: BURST,

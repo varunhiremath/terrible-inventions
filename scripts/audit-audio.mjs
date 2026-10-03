@@ -74,7 +74,7 @@ const enter = async (name) => {
   }
 }
 
-for (const game of ['Papa Panic', 'Dangerous Dave', 'The Dungeon', 'The Pipes']) {
+for (const game of ['Papa Panic', 'The Caves', 'The Dungeon', 'The Pipes', 'The Long Way Out']) {
   await enter(game)
   await reset()
   await page.waitForTimeout(5000)

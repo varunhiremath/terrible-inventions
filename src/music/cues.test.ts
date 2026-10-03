@@ -75,7 +75,12 @@ describe('the dungeon cues', () => {
  * worst of them: the fire button is held down, so one goes every quarter of a
  * second for the whole run out to Neptune.
  */
-const TICKS: CueName[] = ['chomp', 'gem', 'leap', 'overtake', 'laser', 'ping', 'cell', 'light']
+const TICKS: CueName[] = [
+  'chomp', 'gem', 'leap', 'overtake', 'laser', 'ping', 'cell', 'light',
+  // And the other half of a gunfight. Four saucers on the screen at once, each
+  // firing every couple of seconds, is as busy as the laser gets.
+  'incoming',
+]
 
   it('are short enough to be cues rather than tunes', () => {
     // Anything much past this stops being a cue and starts being music playing

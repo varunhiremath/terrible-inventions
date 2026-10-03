@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { drawCan, drawCar, drawMine, drawRacer, drawRoad } from '../road/draw'
 import { ROSTER } from '../road/level'
 import { drawRubble, drawShip, drawSky, drawWorld } from '../space/draw'
+import { newRubble } from '../space/run'
 import { worldFor } from '../space/level'
 import { useStore } from '../store'
 import { UpdatePill } from '../ui/UpdatePill'
@@ -311,7 +312,7 @@ const TILES: Tile[] = [
       drawSky(ctx, view, 0)
       drawWorld(ctx, worldFor(6), 0.62, view)
       const rock = (id: number, x: number, y: number, kind: 'rock' | 'shard' | 'drone') =>
-        drawRubble(ctx, { id, kind, x, y, drift: 0, health: 3, flash: 0 }, view)
+        drawRubble(ctx, { ...newRubble(kind, x, y), id }, view)
       rock(3, 0.22, 0.52, 'rock')
       rock(7, 0.74, 0.44, 'drone')
       rock(5, 0.52, 0.66, 'shard')

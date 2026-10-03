@@ -10,6 +10,7 @@ import {
   step,
   turn,
   useFreeze,
+  LOUDEST,
   type Game,
   type MazeEvent,
 } from '../arcade/maze/game'
@@ -79,18 +80,6 @@ const NOISE: Record<MazeEvent, CueName> = {
   cleared: 'cleared',
 }
 
-/**
- * One sound a frame, most important first.
- *
- * A frame can hold several steps and playing all of them at once is a noise
- * rather than a cue — and the one that matters is never the dot.
- */
-const LOUDEST: MazeEvent[] = ['cleared', 'caught', 'catch', 'pellet', 'dot']
-// Every event needs a place in the order or it can never be the loudest thing
-// in a frame, and so is never heard at all.
-if (LOUDEST.length !== Object.keys(NOISE).length) {
-  throw new Error('a maze event with no place in the order')
-}
 
 export function Arcade() {
   const save = useStore((s) => s.save)

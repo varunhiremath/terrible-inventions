@@ -10,15 +10,33 @@
  */
 import { makeRng, type Rng } from '../engine/rng'
 import {
+  ALIEN_PACE, ALIEN_RELOAD, ALIEN_SWEEP,
   BOLT_SPEED, COSTS, FLYABLE, MAGNET_PULL, MERCY, MOST_OF, MOST_SHIELDS, NEW_KIT,
-  SCRAP_OF, SCRAP_WIDE, SHIP_SPEED, SHIP_TALL, SHIP_WIDE, SIZE_OF, STARTING_SHIELDS,
-  TOUGHNESS, WORTH, reloadFor, worldFor,
+  SCRAP_OF, SCRAP_WIDE, SHIP_SPEED, SHIP_TALL, SHIP_WIDE, SHOT_SPEED, SHOT_WIDE,
+  SIZE_OF, STARTING_SHIELDS, TOUGHNESS, WORTH, reloadFor, worldFor,
   type Hazard, type Kit, type Upgrade, type World,
 } from './level'
 
 export const FIXED = 1 / 60
 
-export type SpaceEvent = 'shot' | 'hit' | 'broke' | 'knock' | 'arrive' | 'warn' | 'scrap'
+export type SpaceEvent =
+  | 'shot' | 'hit' | 'broke' | 'knock' | 'arrive' | 'warn' | 'scrap' | 'incoming'
+
+/**
+ * Loudest first, for the screen to pick one noise a frame from.
+ *
+ * It lives here rather than next to the sound it maps to, because which of
+ * these matters most is a fact about the game and not about the speaker — and
+ * because a list in a screen is a list no test can reach. That is not a
+ * hypothetical: adding an event and forgetting this took the whole app down
+ * with a thrown error on load, twice in one afternoon, in two different games,
+ * and the unit suite was green both times. `events.test.ts` reads this now.
+ */
+export const LOUDEST: readonly SpaceEvent[] = [
+  // Something fired at you comes above your own gun and below everything that
+  // has already happened: it is the only one of these that is a warning.
+  'arrive', 'knock', 'warn', 'broke', 'scrap', 'incoming', 'hit', 'shot',
+]
 
 export interface Input {
   left: boolean
@@ -40,6 +58,32 @@ export interface Rubble {
   health: number
   /** Counts down after a hit, so a knock reads. */
   flash: number
+  /**
+   * Where an alien patrols: the middle of its beat, and how far either side.
+   *
+   * Nought for everything else, which is everything that falls straight. See
+   * `ALIEN_SWEEP` — the width is declared when the thing is sent and the
+   * fairness check counts all of it from that moment, so a thing that wanders
+   * cannot wander into the gap it was measured against.
+   */
+  home: number
+  sweep: number
+  /** How far through its beat it is, 0 to 1, and when it next fires. */
+  beat: number
+  reload: number
+}
+
+/**
+ * Something an alien has fired.
+ *
+ * Deliberately a different list from your own bolts rather than a flag on
+ * them: every rule in here is about one or the other and never both, and a
+ * `mine: boolean` on a bolt would mean remembering to check it in nine places.
+ */
+export interface Shot {
+  id: number
+  x: number
+  y: number
 }
 
 export interface Bolt {
@@ -76,6 +120,8 @@ export interface Run {
   progress: number
   rubble: Rubble[]
   bolts: Bolt[]
+  /** What has been fired at you. */
+  shots: Shot[]
   scrap: Scrap[]
   /** Cells collected and not yet spent. Carried from world to world. */
   purse: number
@@ -109,6 +155,7 @@ export function newRun(
     progress: 0,
     rubble: [],
     bolts: [],
+    shots: [],
     scrap: [],
     purse,
     kit,
@@ -135,15 +182,60 @@ export function resume(run: Run): Run {
     x: 0.5,
     // Nothing left close enough to hit again the moment you reappear.
     rubble: run.rubble.filter((r) => r.y < 0.45),
+    // And nothing already in the air with your name on it.
+    shots: [],
     // The scrap that was in the air stays there. Losing a shield already
     // costs enough without also emptying your pockets onto the floor.
     scrap: run.scrap.filter((c) => c.y < 0.45),
   }
 }
 
+/**
+ * One piece of whatever is out there.
+ *
+ * A constructor rather than an object literal at each call site, because a
+ * literal goes stale the first time a field is added to the type — which is
+ * exactly what happened when the aliens arrived and four places had to be
+ * taught about a patrol they do not have.
+ */
+export function newRubble(kind: Hazard, x: number, y: number, sweep = 0): Rubble {
+  return {
+    id: 0,
+    kind,
+    x,
+    y,
+    drift: 0,
+    health: TOUGHNESS[kind],
+    flash: 0,
+    home: x,
+    sweep,
+    beat: 0,
+    reload: ALIEN_RELOAD,
+  }
+}
+
+/**
+ * Where something is, right now.
+ *
+ * For hitting things with: a bolt meets an alien where the alien actually is.
+ */
 const spread = (r: Rubble): [number, number] => {
   const half = SIZE_OF[r.kind] / 2
   return [r.x - half, r.x + half]
+}
+
+/**
+ * Everywhere something will ever be, for as long as it is on the screen.
+ *
+ * This is the one the fairness check uses, and the difference between the two
+ * is the whole reason an alien is allowed to move at all. A gap measured
+ * against where a thing is now stops being true the moment it goes anywhere;
+ * a gap measured against where it can *get to* is true for ever. The same
+ * answer the road reached after breaking it three times.
+ */
+const claim = (r: Rubble): [number, number] => {
+  const half = SIZE_OF[r.kind] / 2
+  return [r.home - r.sweep - half, r.home + r.sweep + half]
 }
 
 const overlaps = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[0] < a[1]
@@ -157,7 +249,8 @@ const overlaps = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[
 export function widestGap(rubble: readonly Rubble[], from: number, to: number): number {
   const shut = rubble
     .filter((r) => r.y + SIZE_OF[r.kind] / 2 >= from && r.y - SIZE_OF[r.kind] / 2 <= to)
-    .map(spread)
+    // Everywhere it could get to, not where it happens to be this frame.
+    .map(claim)
     .sort((a, b) => a[0] - b[0])
 
   let widest = 0
@@ -178,9 +271,23 @@ function send(run: Run, rng: Rng): void {
   // Ten attempts at a spot that keeps a flyable gap. If none of them works the
   // band is busy enough already and nothing is sent, which is the right answer.
   for (let tries = 0; tries < 10; tries++) {
-    const x = half + rng.next() * (1 - half * 2)
+    /*
+     * An alien needs room for its whole beat, not just for itself, so it is
+     * put down somewhere its patrol fits on the screen — and `claim` below
+     * counts all of it against the gap from this moment on.
+     */
+    const sweep = kind === 'alien' ? ALIEN_SWEEP : 0
+    const edge = half + sweep
+    const x = edge + rng.next() * Math.max(0, 1 - edge * 2)
     const would: Rubble = {
-      id: run.nextId, kind, x, y: -half, drift: 0, health: TOUGHNESS[kind], flash: 0,
+      ...newRubble(kind, x, -half, sweep),
+      id: run.nextId,
+      // Started part way along, so two of them sent together do not sweep in
+      // lockstep like a chorus line.
+      beat: rng.next(),
+      // And not firing the instant it appears: something that shoots before
+      // you have seen it is not a fight, it is a trap.
+      reload: ALIEN_RELOAD * (0.6 + rng.next() * 0.6),
     }
     /*
      * Judged over every band this could ever share with something.
@@ -196,14 +303,7 @@ function send(run: Run, rng: Rng): void {
     const band = run.rubble.filter((r) => r.y < 0.65)
     if (widestGap([...band, would], -0.2, 0.65) < FLYABLE) continue
 
-    run.rubble.push({
-      ...would,
-      id: run.nextId++,
-      // A shard skitters sideways; the rest come more or less straight down.
-      // Straight down, always. See the note on FLYABLE: anything moving
-      // sideways eats into a gap that was measured when it was sent.
-      drift: 0,
-    })
+    run.rubble.push({ ...would, id: run.nextId++, drift: 0 })
     return
   }
 }
@@ -245,6 +345,7 @@ export function step(run: Run, input: Input, dt: number): Run {
     events: [],
     rubble: run.rubble.map((r) => ({ ...r })),
     bolts: run.bolts.map((b) => ({ ...b })),
+    shots: run.shots.map((s) => ({ ...s })),
     scrap: run.scrap.map((c) => ({ ...c })),
     seed: (run.seed * 1664525 + 1013904223) >>> 0,
   }
@@ -280,8 +381,36 @@ export function step(run: Run, input: Input, dt: number): Run {
   for (const rock of next.rubble) {
     rock.y += next.world.fall * dt
     if (rock.flash > 0) rock.flash = Math.max(0, rock.flash - dt)
+
+    if (rock.kind !== 'alien') continue
+    /*
+     * An alien flies its beat and shoots down it.
+     *
+     * A cosine rather than a bounce between two ends, because a thing that
+     * slows at the turn and speeds through the middle reads as something
+     * flying and a thing at constant speed reads as something on a rail. It
+     * never leaves the stretch `claim` reserved for it when it was sent.
+     */
+    rock.beat = (rock.beat + ALIEN_PACE * dt) % 1
+    rock.x = rock.home + Math.sin(rock.beat * Math.PI * 2) * rock.sweep
+
+    /*
+     * And it fires only once it is on the screen and above you, which is the
+     * difference between a fight and an ambush: whatever is coming, you can
+     * see where it came from.
+     */
+    rock.reload = Math.max(0, rock.reload - dt)
+    if (rock.reload === 0 && rock.y > 0.08 && rock.y < 0.74) {
+      rock.reload = ALIEN_RELOAD
+      next.shots.push({ id: next.nextId++, x: rock.x, y: rock.y + SIZE_OF.alien / 2 })
+      next.events.push('incoming')
+    }
   }
   next.rubble = next.rubble.filter((r) => r.y < 1.25)
+
+  // --- and what they have fired -----------------------------------------------
+  for (const shot of next.shots) shot.y += SHOT_SPEED * dt
+  next.shots = next.shots.filter((s) => s.y < 1.25)
 
   // --- bolts meeting rubble --------------------------------------------------
   for (const bolt of next.bolts) {
@@ -318,6 +447,28 @@ export function step(run: Run, input: Input, dt: number): Run {
   next.bolts = next.bolts.filter((b) => b.y > -0.05)
   next.rubble = next.rubble.filter((r) => r.health > 0 || TOUGHNESS[r.kind] === 0)
 
+  /*
+   * Shooting down what has been shot at you.
+   *
+   * Worth having for its own sake — it is the most satisfying thing in any
+   * game of this shape — and it is also what keeps the promise honest. An
+   * alien's shot is small and slow enough to go round, and if you would rather
+   * meet it head on, you can.
+   */
+  for (const bolt of next.bolts) {
+    for (const shot of next.shots) {
+      if (shot.y < -1) continue
+      if (Math.abs(bolt.x - shot.x) > SHOT_WIDE) continue
+      if (Math.abs(bolt.y - shot.y) > SHOT_WIDE) continue
+      shot.y = -2
+      next.score += 15
+      next.events.push('hit')
+      if (!bolt.pierces) { bolt.y = -1; break }
+    }
+  }
+  next.bolts = next.bolts.filter((b) => b.y > -0.05)
+  next.shots = next.shots.filter((s) => s.y > -1)
+
   // --- scrap ------------------------------------------------------------------
   for (const cell of next.scrap) {
     cell.y += next.world.fall * dt
@@ -347,6 +498,14 @@ export function step(run: Run, input: Input, dt: number): Run {
   // --- rubble meeting you ----------------------------------------------------
   if (next.mercy === 0) {
     const mine: [number, number] = [next.x - SHIP_WIDE / 2, next.x + SHIP_WIDE / 2]
+    for (const shot of next.shots) {
+      if (Math.abs(shot.y - (1 - SHIP_TALL / 2)) > SHOT_WIDE / 2 + SHIP_TALL / 2) continue
+      if (!overlaps(mine, [shot.x - SHOT_WIDE / 2, shot.x + SHOT_WIDE / 2])) continue
+      next.shields -= 1
+      next.status = next.shields > 0 ? 'knocked' : 'lost'
+      next.events.push('knock')
+      return next
+    }
     for (const rock of next.rubble) {
       const half = SIZE_OF[rock.kind] / 2
       if (Math.abs(rock.y - (1 - SHIP_TALL / 2)) > half + SHIP_TALL / 2) continue

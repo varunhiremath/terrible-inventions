@@ -45,7 +45,7 @@ export const STARTING_SHIELDS = 3
  */
 export const FLYABLE = SHIP_WIDE * 2.1
 
-export type Hazard = 'rock' | 'shard' | 'drone' | 'mine'
+export type Hazard = 'rock' | 'shard' | 'drone' | 'mine' | 'alien'
 
 /** How big each sort is, across, as a fraction of the screen. */
 export const SIZE_OF: Record<Hazard, number> = {
@@ -53,6 +53,7 @@ export const SIZE_OF: Record<Hazard, number> = {
   shard: 0.09,
   drone: 0.11,
   mine: 0.1,
+  alien: 0.13,
 }
 
 /** How many hits it takes. A mine takes none: it cannot be shot at all. */
@@ -61,6 +62,7 @@ export const TOUGHNESS: Record<Hazard, number> = {
   shard: 1,
   drone: 2,
   mine: 0,
+  alien: 3,
 }
 
 /** What each is worth. */
@@ -69,7 +71,41 @@ export const WORTH: Record<Hazard, number> = {
   shard: 25,
   drone: 120,
   mine: 0,
+  alien: 200,
 }
+
+// --- the ones that are flying it ---------------------------------------------
+//
+// Asked for in one line: "how about fighting aliens when you are in deep
+// space". Everything out here until now was weather — rock that falls, which
+// you dodge or break. An alien is the first thing in this game that is trying.
+//
+// It patrols a stretch of sky rather than coming straight down, and it shoots
+// back. Both of those are things this game has said no to before, for the best
+// of reasons, and both are allowed here for one specific reason each.
+
+/**
+ * How far either side of where it was sent an alien will wander.
+ *
+ * Sideways movement is the thing that broke the fairness promise on the road
+ * three times and in this game once, and the rule it broke is simple: a gap
+ * measured when something was sent is only still there if nothing has moved
+ * relative to anything else since.
+ *
+ * So an alien does not get to invalidate the measurement — the measurement
+ * counts the whole stretch it will *ever* occupy, from the moment it is sent.
+ * It is treated as being everywhere it could be, for as long as it is there.
+ * That is the same answer the road arrived at: count where it is going, not
+ * where it is.
+ */
+export const ALIEN_SWEEP = 0.16
+/** How fast it sweeps, in full passes a second. */
+export const ALIEN_PACE = 0.45
+/** Seconds between its shots, and how fast they come down. */
+export const ALIEN_RELOAD = 1.9
+export const SHOT_SPEED = 0.85
+/** How big one of its shots is, which is small on purpose. See `shotRoom`. */
+export const SHOT_WIDE = 0.035
 
 export interface Moon {
   name: string
@@ -115,14 +151,14 @@ export const WORLDS: readonly World[] = [
     fact: 'The Moon is drifting away from us by about 3.8 centimetres a year, roughly the rate your fingernails grow.',
     body: '#3d7bff', band: '#2f9e44',
     moons: [{ name: 'the Moon', size: 0.3 }],
-    seconds: 55, traffic: 4, fall: 0.24, sends: ['rock', 'shard', 'drone'],
+    seconds: 55, traffic: 4, fall: 0.24, sends: ['rock', 'shard', 'drone', 'alien'],
   },
   {
     name: 'Mars',
     fact: 'Olympus Mons on Mars is the tallest volcano in the solar system, about two and a half times the height of Everest.',
     body: '#c1440e', band: '#8a2f0a',
     moons: [{ name: 'Phobos', size: 0.16 }, { name: 'Deimos', size: 0.12 }],
-    seconds: 60, traffic: 5, fall: 0.26, sends: ['rock', 'shard', 'drone', 'mine'],
+    seconds: 60, traffic: 5, fall: 0.26, sends: ['rock', 'shard', 'drone', 'mine', 'alien'],
   },
   {
     name: 'Jupiter',
@@ -132,28 +168,28 @@ export const WORLDS: readonly World[] = [
       { name: 'Io', size: 0.16 }, { name: 'Europa', size: 0.15 },
       { name: 'Ganymede', size: 0.2 }, { name: 'Callisto', size: 0.18 },
     ],
-    seconds: 65, traffic: 6, fall: 0.28, sends: ['rock', 'shard', 'drone', 'mine'],
+    seconds: 65, traffic: 6, fall: 0.28, sends: ['rock', 'shard', 'drone', 'mine', 'alien'],
   },
   {
     name: 'Saturn',
     fact: 'Saturn’s rings are mostly water ice. Its moon Titan has thick air and lakes of liquid methane.',
     body: '#e6d3a3', band: '#bfa670', rings: true,
     moons: [{ name: 'Titan', size: 0.22 }],
-    seconds: 70, traffic: 6, fall: 0.3, sends: ['rock', 'shard', 'drone', 'mine'],
+    seconds: 70, traffic: 6, fall: 0.3, sends: ['rock', 'shard', 'drone', 'mine', 'alien'],
   },
   {
     name: 'Uranus',
     fact: 'Uranus is tipped right over on its side, so it rolls round the Sun rather than spinning upright like the rest.',
     body: '#8fd7e0', band: '#5aa8b5',
     moons: [{ name: 'Titania', size: 0.16 }, { name: 'Oberon', size: 0.15 }],
-    seconds: 75, traffic: 7, fall: 0.32, sends: ['rock', 'shard', 'drone', 'mine'],
+    seconds: 75, traffic: 7, fall: 0.32, sends: ['rock', 'shard', 'drone', 'mine', 'alien'],
   },
   {
     name: 'Neptune',
     fact: 'Neptune has the fastest winds in the solar system, around 2,000 km/h, and its moon Triton orbits backwards.',
     body: '#3b5fd1', band: '#28409a',
     moons: [{ name: 'Triton', size: 0.18 }],
-    seconds: 80, traffic: 8, fall: 0.34, sends: ['rock', 'shard', 'drone', 'mine'],
+    seconds: 80, traffic: 8, fall: 0.34, sends: ['rock', 'shard', 'drone', 'mine', 'alien'],
   },
 ]
 
@@ -222,7 +258,7 @@ export function reloadFor(kit: Kit): number {
 
 /** What a broken-up thing leaves behind. A mine leaves nothing: it is his. */
 export const SCRAP_OF: Record<Hazard, number> = {
-  rock: 3, shard: 1, drone: 5, mine: 0,
+  rock: 3, shard: 1, drone: 5, mine: 0, alien: 8,
 }
 
 /** How wide a cell of scrap is, and how fast it leans when a magnet is fitted. */

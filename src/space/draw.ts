@@ -10,8 +10,10 @@
  * looking at Jupiter.
  */
 import { drawHint } from '../ui/padHints'
-import { SCRAP_WIDE, SHIP_TALL, SHIP_WIDE, SIZE_OF, TOUGHNESS, type World } from './level'
-import type { Bolt, Rubble, Run, Scrap } from './run'
+import {
+  SCRAP_WIDE, SHIP_TALL, SHIP_WIDE, SHOT_WIDE, SIZE_OF, TOUGHNESS, type World,
+} from './level'
+import type { Bolt, Rubble, Run, Scrap, Shot } from './run'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -30,6 +32,13 @@ export const INK = {
   droneDark: '#8f2a1c',
   mine: '#b07de0',
   scrap: '#ffd23f',
+  // The ones that are flying it. Green, because nothing else out here is, and
+  // a thing that shoots back has to be recognised before it is identified.
+  alien: '#5bd97a',
+  alienDark: '#1f7a3c',
+  alienGlass: '#d9fff0',
+  /** What they fire. Not the colour of your own bolt, for obvious reasons. */
+  incoming: '#ff5fa2',
 } as const
 
 export interface View {
@@ -66,14 +75,40 @@ export function columnOf(view: View): { width: number; left: number } {
 /** Inside the column: the view a piece of rubble is positioned against. */
 const inside = (view: View): View => ({ ...view, w: columnOf(view).width })
 
-const px = (view: View, x: number) => x * view.w
+/**
+ * How far away something is, as a size.
+ *
+ * Asked for as "perhaps turning the game 3D somehow", and this is the somehow.
+ * The model already has a depth in it and always has: `y` runs from nought at
+ * the far end to one at the ship. Nothing about where things are had to
+ * change — only what that number is taken to *mean*, which until now was
+ * "down the screen" and is now "away from you".
+ *
+ * So a thing arrives small, near the middle, and grows and fans outward as it
+ * comes, until at the ship's own line it is full size and exactly where the
+ * model says it is. That last part is the one that matters: the fan converges
+ * on nothing at the only moment anything is decided.
+ *
+ * What is deliberately *not* done is move anything up or down. The screen
+ * height a thing is at still tracks its distance exactly as before, so the
+ * time you have to react to something at a given place on the screen is the
+ * same number it has always been. A perspective that also compressed the far
+ * half would have made everything rush at the end, which is a harder game
+ * wearing a graphics change as a disguise.
+ */
+const DEPTH = 0.62
+export const sizeAt = (y: number) => 1 / (1 + DEPTH * (1 - Math.max(0, Math.min(1, y))))
+
+const px = (view: View, x: number, y = 1) => (0.5 + (x - 0.5) * sizeAt(y)) * view.w
 const py = (view: View, y: number) => y * view.h
 
 /**
  * The starfield.
  *
- * Three layers at different speeds, which is the cheapest way to say "moving"
- * when there is nothing else on screen to measure against.
+ * Three layers, streaming out from the point everything comes from. Scrolling
+ * them straight down was the cheapest way to say "moving"; radiating them is
+ * the cheapest way to say which direction, and it is the thing that makes the
+ * screen read as a tunnel rather than a waterfall.
  */
 export function drawSky(ctx: Ctx, view: View, travelled: number): void {
   const sky = ctx.createLinearGradient(0, 0, 0, view.h)
@@ -83,17 +118,29 @@ export function drawSky(ctx: Ctx, view: View, travelled: number): void {
   ctx.fillRect(0, 0, view.w, view.h)
 
   for (let layer = 0; layer < 3; layer++) {
-    const speed = 12 + layer * 26
-    const size = 1 + layer * 0.8
-    ctx.fillStyle = `rgba(232,235,245,${0.25 + layer * 0.25})`
+    const speed = 0.1 + layer * 0.16
     for (let i = 0; i < 26; i++) {
       // Fixed pseudo-random positions, scrolled: the same stars every time, so
       // the sky does not boil.
       const seed = Math.sin(i * 12.9898 + layer * 78.233) * 43758.5453
       const fx = seed - Math.floor(seed)
       const fy = (((seed * 7.13) % 1) + 1) % 1
-      const y = ((fy * view.h + travelled * speed) % (view.h + 20)) - 10
-      ctx.fillRect(fx * view.w, y, size, size)
+      /*
+       * Each star runs the same journey the rubble does — from the far end to
+       * the near one — so it grows, fans out and streaks as it passes. Its
+       * `fx` is where in the sky it lives; `fy` only staggers them so they do
+       * not all arrive at once.
+       */
+      const at = (fy + travelled * speed) % 1
+      const grow = sizeAt(at)
+      const x = (0.5 + (fx - 0.5) * grow) * view.w
+      const y = at * view.h
+      const size = (0.6 + layer * 0.5) * (0.4 + grow)
+      // A streak rather than a dot once it is close, which is what speed looks
+      // like when there is nothing else out there to measure against.
+      const tail = size * (1 + at * 5)
+      ctx.fillStyle = `rgba(232,235,245,${(0.2 + layer * 0.22) * (0.35 + at * 0.8)})`
+      ctx.fillRect(x, y - tail, size, tail)
     }
   }
 }
@@ -190,9 +237,11 @@ function seeded(id: number): (which: number) => number {
 }
 
 export function drawRubble(ctx: Ctx, rock: Rubble, view: View): void {
-  const x = px(view, rock.x)
+  const x = px(view, rock.x, rock.y)
   const y = py(view, rock.y)
-  const size = SIZE_OF[rock.kind] * view.w * 0.5
+  // Smaller the further off it is. See `sizeAt`: by the time it reaches the
+  // ship's line it is full size and exactly where the model says.
+  const size = SIZE_OF[rock.kind] * view.w * 0.5 * sizeAt(rock.y)
   const lit = rock.flash > 0
 
   if (rock.kind === 'shard') {
@@ -227,6 +276,52 @@ export function drawRubble(ctx: Ctx, rock: Rubble, view: View): void {
     ctx.beginPath()
     ctx.arc(x, y - size * 0.3, size * 0.2, 0, Math.PI * 2)
     ctx.fill()
+    return
+  }
+
+  if (rock.kind === 'alien') {
+    /*
+     * A saucer, and it is a saucer on purpose.
+     *
+     * It needs to be told apart from a drone at a glance and while something
+     * else is happening: the drone is a red arrowhead pointing down, this is a
+     * green disc with a dome, and the two share no line. Drawn from arcs and
+     * ellipses like everything in this project; nothing is copied.
+     */
+    const tilt = Math.sin(view.clock * 2 + rock.id) * 0.12
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate(tilt)
+
+    // The hull: a flattened disc with a rim under it.
+    ctx.fillStyle = lit ? '#ffffff' : INK.alienDark
+    ctx.beginPath()
+    ctx.ellipse(0, size * 0.18, size, size * 0.3, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = lit ? '#ffffff' : INK.alien
+    ctx.beginPath()
+    ctx.ellipse(0, 0, size, size * 0.34, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // The dome, and somebody inside it.
+    ctx.fillStyle = lit ? '#ffffff' : INK.alienGlass
+    ctx.beginPath()
+    ctx.ellipse(0, -size * 0.12, size * 0.44, size * 0.42, 0, Math.PI, 0)
+    ctx.fill()
+    ctx.fillStyle = INK.alienDark
+    ctx.beginPath()
+    ctx.ellipse(0, -size * 0.2, size * 0.17, size * 0.2, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Lamps round the rim, chasing, which is how you tell it is alive.
+    for (let i = 0; i < 5; i++) {
+      const lamp = (Math.floor(view.clock * 7) + i) % 5 === 0
+      ctx.fillStyle = lamp ? '#ffe08a' : INK.alienDark
+      ctx.beginPath()
+      ctx.arc(-size * 0.7 + (i * size * 1.4) / 4, size * 0.2, size * 0.1, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
     return
   }
 
@@ -336,9 +431,9 @@ export function drawRubble(ctx: Ctx, rock: Rubble, view: View): void {
  * like a mine, which is the other small round thing in the sky.
  */
 export function drawCell(ctx: Ctx, cell: Scrap, view: View): void {
-  const x = px(view, cell.x)
+  const x = px(view, cell.x, cell.y)
   const y = py(view, cell.y)
-  const size = SCRAP_WIDE * view.w * (cell.worth >= 5 ? 1.25 : 1)
+  const size = SCRAP_WIDE * view.w * (cell.worth >= 5 ? 1.25 : 1) * sizeAt(cell.y)
   const turn = view.clock * 3 + cell.id
 
   // A squashed hexagon, spinning about its upright: a coin seen edge-on and
@@ -374,16 +469,46 @@ export function drawCell(ctx: Ctx, cell: Scrap, view: View): void {
   ctx.fill()
 }
 
+/**
+ * Something coming the other way.
+ *
+ * A ball with a tail behind it rather than a line like yours, and in a colour
+ * your own fire never uses — at the moment there are six things on the screen
+ * the only question worth answering in a fiftieth of a second is "is that one
+ * mine".
+ */
+export function drawShot(ctx: Ctx, shot: Shot, view: View): void {
+  const x = px(view, shot.x, shot.y)
+  const y = py(view, shot.y)
+  const r = SHOT_WIDE * view.w * 0.5 * sizeAt(shot.y)
+
+  ctx.fillStyle = 'rgba(255,95,162,0.35)'
+  ctx.beginPath()
+  ctx.ellipse(x, y - r * 1.6, r * 0.7, r * 2.2, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = INK.incoming
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#ffe3ef'
+  ctx.beginPath()
+  ctx.arc(x, y, r * 0.42, 0, Math.PI * 2)
+  ctx.fill()
+}
+
 export function drawBolt(ctx: Ctx, bolt: Bolt, view: View): void {
-  const x = px(view, bolt.x)
+  const x = px(view, bolt.x, bolt.y)
   const y = py(view, bolt.y)
-  const long = view.h * 0.035
+  // Yours shrinks as it goes away from you, which is the other half of the
+  // depth: without it the bolt is the one thing on the screen with no distance.
+  const long = view.h * 0.035 * sizeAt(bolt.y)
   const grad = ctx.createLinearGradient(x, y - long, x, y + long)
   grad.addColorStop(0, 'rgba(143,240,255,0)')
   grad.addColorStop(0.5, INK.bolt)
   grad.addColorStop(1, 'rgba(143,240,255,0)')
   ctx.fillStyle = grad
-  ctx.fillRect(x - view.w * 0.008, y - long, view.w * 0.016, long * 2)
+  const wide = view.w * 0.016 * sizeAt(bolt.y)
+  ctx.fillRect(x - wide / 2, y - long, wide, long * 2)
 }
 
 /**
@@ -464,7 +589,19 @@ export function drawRun(ctx: Ctx, run: Run, view: View, travelled: number): void
   drawWorld(ctx, run.world, run.progress, play)
   for (const bolt of run.bolts) drawBolt(ctx, bolt, play)
   for (const cell of run.scrap) drawCell(ctx, cell, play)
-  for (const rock of run.rubble) drawRubble(ctx, rock, play)
+  /*
+   * Furthest first, so the near thing is the one in front.
+   *
+   * It did not matter while everything was the same size and simply fell: two
+   * rocks overlapping looked like two rocks overlapping whichever order they
+   * went down in. It matters the moment there is depth, because a saucer drawn
+   * over a rock that is plainly closer than it is reads as a mistake — which
+   * is exactly what the first picture of this showed.
+   */
+  for (const rock of [...run.rubble].sort((a, b) => a.y - b.y)) drawRubble(ctx, rock, play)
+  // Over the rubble whatever its distance: what is about to hit you is never
+  // the thing hidden behind something else.
+  for (const shot of run.shots) drawShot(ctx, shot, play)
   drawShip(ctx, run.x, play, run.mercy, view.clock)
   ctx.restore()
 }

@@ -137,6 +137,16 @@ export type Status = 'playing' | 'died' | 'levelComplete' | 'gameOver'
  */
 export type MazeEvent = 'dot' | 'pellet' | 'catch' | 'caught' | 'cleared'
 
+/**
+ * Loudest first, for the screen to pick one noise a frame from.
+ *
+ * A frame can hold several steps and playing all of them at once is a noise
+ * rather than a cue — and the one that matters is never the dot. It lives here
+ * rather than in the screen so a test can read it; see the note in
+ * `src/space/run.ts`.
+ */
+export const LOUDEST: readonly MazeEvent[] = ['cleared', 'caught', 'catch', 'pellet', 'dot']
+
 export interface PowerUps {
   /** Extra lives bought in the shop. */
   spareLives: number

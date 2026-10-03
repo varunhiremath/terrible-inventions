@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   COSTS, FLYABLE, MOST_OF, MOST_SHIELDS, NEW_KIT, SCRAP_OF, SHIP_SPEED, SHIP_WIDE,
-  SIZE_OF, TOUGHNESS, WORLDS, reloadFor, worldFor, type Hazard,
+  SIZE_OF, WORLDS, reloadFor, worldFor, type Hazard,
 } from './level'
 import {
-  FIXED, NO_INPUT, buy, canBuy, newRun, resume, step, widestGap, type Input, type Run,
+  FIXED, NO_INPUT, buy, canBuy, newRubble, newRun, resume, step, widestGap,
+  type Input, type Run,
 } from './run'
 
 /**
@@ -23,7 +24,7 @@ import {
  * middle of the widest opening. If this cannot get to Neptune, nor can a
  * child.
  */
-function makePilot() {
+export function makePilot() {
   return (run: Run): Input => {
     /*
      * The clear runs across the band ahead, measured with each hazard's real
@@ -144,7 +145,7 @@ describe('the ship', () => {
     const run = newRun(1)
     const hit: Run = {
       ...run,
-      rubble: [{ id: 1, kind: 'rock', x: run.x, y: 0.97, drift: 0, health: 3, flash: 0 }],
+      rubble: [{ ...newRubble('rock', run.x, 0.97), id: 1 }],
     }
     const after = step(hit, NO_INPUT, FIXED)
     expect(after.shields).toBe(run.shields - 1)
@@ -200,9 +201,7 @@ describe('the scrap', () => {
   const breakOne = (kind: Hazard, kit = NEW_KIT): Run => {
     // Put one thing directly over the ship and shoot it until it goes.
     let run: Run = { ...newRun(1), kit, x: 0.5 }
-    run.rubble.push({
-      id: 99, kind, x: 0.5, y: 0.5, drift: 0, health: TOUGHNESS[kind], flash: 0,
-    })
+    run.rubble.push({ ...newRubble(kind, 0.5, 0.5), id: 99 })
     for (let shot = 0; shot < 10 && run.rubble.length > 0; shot++) {
       run = { ...run, reload: 0 }
       run = fly(run, { left: false, right: false, fire: true }, 0.5)
@@ -356,8 +355,8 @@ describe('the kit, once it is fitted', () => {
     const stack = (pierces: boolean) => {
       let run: Run = { ...newRun(1), x: 0.5, kit: { ...NEW_KIT, pierce: pierces } }
       // Two shards in a line: one hit each, so a piercing bolt takes both.
-      run.rubble.push({ id: 1, kind: 'shard', x: 0.5, y: 0.55, drift: 0, health: 1, flash: 0 })
-      run.rubble.push({ id: 2, kind: 'shard', x: 0.5, y: 0.35, drift: 0, health: 1, flash: 0 })
+      run.rubble.push({ ...newRubble('shard', 0.5, 0.55), id: 1 })
+      run.rubble.push({ ...newRubble('shard', 0.5, 0.35), id: 2 })
       return fly(run, { left: false, right: false, fire: true }, 0.35).broken
     }
     expect(stack(false)).toBe(1)
