@@ -272,7 +272,23 @@ function canGo(board: Board, cell: Cell, dir: Dir): boolean {
  * what lets a whole level be played out inside a test.
  */
 export function step(game: Game, dt: number, roll: () => number = Math.random): Game {
-  if (game.status !== 'playing') return game
+  /*
+   * A finished run still has to clear its events.
+   *
+   * Returning it untouched keeps the last step's events attached, and the
+   * screen reads events every frame — so the noise that ended the run
+   * re-announces itself sixty times a second for as long as the card is up.
+   * Dozens of copies of the same cue land on top of each other and sum past
+   * full scale, which is a buzz. Reported twice as "plenty of cracking and
+   * static noise when a question pops", and measured at a peak of 1.17 with a
+   * hundred and fifty clipped samples where the game itself runs at 0.06.
+   *
+   * The road and the space run already did this, each after finding it the
+   * hard way. There is a test over all six now.
+   */
+  if (game.status !== 'playing') {
+    return game.events.length === 0 ? game : { ...game, events: [] }
+  }
 
   const next: Game = {
     ...game,

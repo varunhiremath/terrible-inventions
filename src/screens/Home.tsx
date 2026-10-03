@@ -8,10 +8,21 @@ import { useStore } from '../store'
 import { UpdatePill } from '../ui/UpdatePill'
 import type { Screen } from '../store'
 import { drawFigure, type Look } from '../arcade/dungeon/figure'
-import { poseFor } from '../arcade/dungeon/draw'
-import { drawHero } from '../pipes/draw'
+import { FLOOR_DEPTH, drawRoom, poseFor } from '../arcade/dungeon/draw'
+import { drawHero, drawLevel as drawPipes, drawSky as drawPipeSky } from '../pipes/draw'
 import { VIEW_TOP } from '../pipes/level'
 import { newBody } from '../pipes/physics'
+import { newRun as newPipeRun } from '../pipes/run'
+import { drawRunner, drawMachine, MACHINE_INK } from '../render/silhouettes'
+import { WALL_THICKNESS, wallBars } from '../render/mazeGeometry'
+import { MAZE_INK } from '../render/mazeInk'
+import { TILE as MAZE_TILE } from '../arcade/maze/maze'
+import { drawDave, drawFrame, drawLevel as drawCave, drawSky as drawCaveSky } from '../dave/draw'
+import { newDave } from '../dave/physics'
+import {
+  CAVE_FLOOR, CAVE_TUNNEL, KEEP_HALL, KEEP_WALK, MAZE_DOTS, MAZE_LANE, MAZE_STRIP,
+  PIPE_GROUND, PIPE_RUN, PIPE_WALK,
+} from '../ui/wipeWorlds'
 import { fill } from '../config/profile'
 
 /**
@@ -59,72 +70,56 @@ const TILES: Tile[] = [
     title: 'Papa Panic',
     blurb: 'Clear the maze. Four machines want a word.',
     tint: '#1b2340',
+    /*
+     * Drawn with the game's own pieces, like every other tile on this screen.
+     *
+     * It used to be a hand-made boy with a face and a red box on treads, and
+     * neither of them is in the game: the one you play is a wedge-nosed yellow
+     * scout and the ones chasing you are the Machines out of `silhouettes.ts`.
+     * Reported as "match the display images of the games with the actual
+     * character in the game", which is the third time this exact fault has
+     * been found — in the level transitions, then here.
+     *
+     * The maze is a corner of the same strip the transition walks down, drawn
+     * with the same `wallBars` at the same thickness in the same pink as the
+     * board.
+     */
     emblem(ctx, w, h) {
-      const s = Math.min(w, h)
-      const floor = h * 0.62
+      const cols = 9
+      const rows = MAZE_STRIP.length
+      const size = Math.min(w / cols, h / rows)
+      const left = (w - size * cols) / 2
+      const top = (h - size * rows) / 2
 
-      // Maze corridors behind them, with the dots still to be eaten.
-      ctx.strokeStyle = '#3d4f8f'
-      ctx.lineWidth = s * 0.045
-      for (const y of [0.24, 0.82]) {
-        ctx.beginPath()
-        ctx.moveTo(w * 0.08, h * y)
-        ctx.lineTo(w * 0.92, h * y)
-        ctx.stroke()
+      ctx.fillStyle = MAZE_INK.back
+      ctx.fillRect(0, 0, w, h)
+      ctx.save()
+      ctx.translate(left, top)
+
+      ctx.fillStyle = MAZE_INK.wall
+      for (const bar of wallBars(MAZE_STRIP, MAZE_TILE.WALL, WALL_THICKNESS)) {
+        ctx.fillRect(
+          (bar.x - bar.width / 2 + 0.5) * size,
+          (bar.z - bar.depth / 2 + 0.5) * size,
+          bar.width * size + 0.5,
+          bar.depth * size + 0.5,
+        )
       }
-      ctx.fillStyle = '#f2d98c'
-      for (let i = 0; i < 5; i++) {
+      ctx.fillStyle = MAZE_INK.dot
+      for (const dot of MAZE_DOTS) {
+        if (dot.x < 3) continue
         ctx.beginPath()
-        ctx.arc(w * (0.12 + i * 0.19), floor + s * 0.02, s * 0.028, 0, Math.PI * 2)
+        ctx.arc((dot.x + 0.5) * size, (dot.y + 0.5) * size, size * 0.14, 0, Math.PI * 2)
         ctx.fill()
       }
 
-      // The machine, chasing: a box on treads with one eye and an aerial.
-      const mx = w * 0.66
-      const mw = s * 0.3
-      const mh = s * 0.32
-      ctx.strokeStyle = '#8e2f26'
-      ctx.lineWidth = s * 0.02
-      ctx.beginPath()
-      ctx.moveTo(mx + mw * 0.1, floor - mh)
-      ctx.lineTo(mx + mw * 0.1, floor - mh - s * 0.1)
-      ctx.stroke()
-      ctx.fillStyle = '#e8503a'
-      ctx.beginPath()
-      ctx.arc(mx + mw * 0.1, floor - mh - s * 0.12, s * 0.035, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = '#c94436'
-      ctx.fillRect(mx - mw / 2, floor - mh, mw, mh)
-      ctx.fillStyle = '#2a1a1a'
-      ctx.fillRect(mx - mw / 2, floor - s * 0.07, mw, s * 0.07)
-      ctx.fillStyle = '#ffe9b0'
-      ctx.beginPath()
-      ctx.arc(mx - mw * 0.05, floor - mh * 0.62, s * 0.055, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = '#1b2340'
-      ctx.beginPath()
-      ctx.arc(mx - mw * 0.11, floor - mh * 0.62, s * 0.025, 0, Math.PI * 2)
-      ctx.fill()
-
-      // And the one being chased, running the other way.
-      const px = w * 0.27
-      ctx.fillStyle = '#2f5f9e'
-      ctx.fillRect(px - s * 0.05, floor - s * 0.11, s * 0.04, s * 0.11)
-      ctx.fillRect(px + s * 0.02, floor - s * 0.11, s * 0.04, s * 0.11)
-      ctx.fillStyle = '#ffd23f'
-      ctx.fillRect(px - s * 0.08, floor - s * 0.28, s * 0.16, s * 0.18)
-      ctx.fillStyle = '#e8b98a'
-      ctx.beginPath()
-      ctx.arc(px, floor - s * 0.34, s * 0.075, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = '#2b1d14'
-      ctx.beginPath()
-      ctx.arc(px, floor - s * 0.375, s * 0.075, Math.PI, 0)
-      ctx.fill()
-      ctx.fillStyle = '#1b2340'
-      ctx.beginPath()
-      ctx.arc(px - s * 0.03, floor - s * 0.335, s * 0.014, 0, Math.PI * 2)
-      ctx.fill()
+      // Him in the passage, and one of them coming the other way.
+      drawRunner(ctx, 3.5 * size, (MAZE_LANE + 0.5) * size, size * 0.46, 0, 0.25)
+      drawMachine(
+        ctx, 8.2 * size, (MAZE_LANE + 0.5) * size, size * 0.46,
+        -1, 0, 0.3, MACHINE_INK('#e8503a'),
+      )
+      ctx.restore()
     },
   },
   {
@@ -132,57 +127,30 @@ const TILES: Tile[] = [
     title: 'The Caves',
     blurb: 'Ten caves. Take the trophy, find the door.',
     tint: '#2b1810',
+    /*
+     * The real Dave, in a real cave. The one here before was a hand-made
+     * figure in a blue jacket and a red helmet; his are a red cap, a red shirt
+     * and blue trousers, and the brick is the caves' own brick.
+     */
     emblem(ctx, w, h) {
-      const s = Math.min(w, h)
-      const floor = h * 0.72
-
-      ctx.fillStyle = '#7a3508'
-      ctx.fillRect(0, floor, w, h)
-      ctx.fillRect(0, 0, w, h * 0.12)
-      ctx.fillStyle = '#5d2806'
-      for (let x = 0; x < w; x += s * 0.22) ctx.fillRect(x, floor, s * 0.2, s * 0.05)
-
-      // The trophy, which is the whole reason for going in.
-      const tx = w * 0.72
-      ctx.fillStyle = '#f4c430'
+      const cols = 11
+      const size = Math.min(w / cols, h / CAVE_TUNNEL.rows.length)
+      const view = { camera: 14, size, clock: 0 }
+      const band = size * CAVE_TUNNEL.rows.length
+      ctx.save()
+      ctx.translate(0, (h - band) / 2)
       ctx.beginPath()
-      ctx.moveTo(tx - s * 0.1, floor - s * 0.3)
-      ctx.lineTo(tx + s * 0.1, floor - s * 0.3)
-      ctx.lineTo(tx + s * 0.04, floor - s * 0.12)
-      ctx.lineTo(tx - s * 0.04, floor - s * 0.12)
-      ctx.closePath()
-      ctx.fill()
-      ctx.fillRect(tx - s * 0.07, floor - s * 0.1, s * 0.14, s * 0.035)
-      ctx.strokeStyle = '#f4c430'
-      ctx.lineWidth = s * 0.022
-      for (const side of [-1, 1]) {
-        ctx.beginPath()
-        ctx.arc(tx + side * s * 0.1, floor - s * 0.26, s * 0.045, -Math.PI / 2, Math.PI / 2, side < 0)
-        ctx.stroke()
-      }
-
-      // Dave himself: helmet, jacket, boots.
-      const dx = w * 0.3
-      ctx.fillStyle = '#2f2f3a'
-      ctx.fillRect(dx - s * 0.075, floor - s * 0.08, s * 0.06, s * 0.08)
-      ctx.fillRect(dx + s * 0.015, floor - s * 0.08, s * 0.06, s * 0.08)
-      ctx.fillStyle = '#3a6ed0'
-      ctx.fillRect(dx - s * 0.09, floor - s * 0.27, s * 0.18, s * 0.19)
-      ctx.fillStyle = '#2b529e'
-      ctx.fillRect(dx - s * 0.09, floor - s * 0.27, s * 0.18, s * 0.05)
-      ctx.fillStyle = '#e0a878'
-      ctx.beginPath()
-      ctx.arc(dx, floor - s * 0.335, s * 0.075, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = '#c0392b'
-      ctx.beginPath()
-      ctx.arc(dx, floor - s * 0.35, s * 0.08, Math.PI, 0)
-      ctx.fill()
-      ctx.fillRect(dx - s * 0.08, floor - s * 0.36, s * 0.16, s * 0.022)
-      ctx.fillStyle = '#1a1208'
-      ctx.beginPath()
-      ctx.arc(dx + s * 0.03, floor - s * 0.33, s * 0.014, 0, Math.PI * 2)
-      ctx.fill()
+      ctx.rect(0, 0, w, band)
+      ctx.clip()
+      drawCaveSky(ctx, view, w, band)
+      drawCave(ctx, CAVE_TUNNEL, view, new Set(), true, w)
+      drawFrame(ctx, CAVE_TUNNEL, view, w, band)
+      drawDave(
+        ctx,
+        { ...newDave({ x: 16.5, y: CAVE_FLOOR - 1 }), vx: 4, onGround: true, facing: 1 },
+        view,
+      )
+      ctx.restore()
     },
   },
   {
@@ -190,41 +158,38 @@ const TILES: Tile[] = [
     title: 'The Dungeon',
     blurb: 'Thirteen floors. One hour. It never stops.',
     tint: '#151a22',
+    /*
+     * The room is the dungeon's own now as well as the figure. It was a
+     * hand-laid pattern of grey rectangles with a torch painted on top, which
+     * is not the stone the game is built from — and the torch the game draws
+     * throws its light differently.
+     */
     emblem(ctx, w, h) {
-      const s = Math.min(w, h)
-      ctx.fillStyle = '#232a33'
-      for (let y = 0; y < h; y += s * 0.16) {
-        for (let x = -s * 0.1; x < w; x += s * 0.26) {
-          const off = Math.round(y / (s * 0.16)) % 2 === 0 ? 0 : s * 0.13
-          ctx.fillRect(x + off, y, s * 0.24, s * 0.14)
-        }
-      }
-      const floor = h * 0.72
-      ctx.fillStyle = '#79838f'
-      ctx.fillRect(0, floor, w, h * 0.04)
-
-      // The torch, and the light it throws down the wall.
-      const glow = ctx.createRadialGradient(w * 0.76, h * 0.3, s * 0.02, w * 0.76, h * 0.3, s * 0.55)
-      glow.addColorStop(0, 'rgba(255,180,80,0.75)')
-      glow.addColorStop(1, 'rgba(255,150,50,0)')
-      ctx.fillStyle = glow
-      ctx.fillRect(0, 0, w, h)
-      ctx.fillStyle = '#3b3b44'
-      ctx.fillRect(w * 0.75, h * 0.3, s * 0.025, s * 0.14)
-      ctx.fillStyle = '#ffb347'
+      // Six columns rather than a whole room of ten: a tile is a glimpse, and
+      // at ten the prince is a speck in the middle of a lot of wall.
+      const size = w / 6
+      const floorHeight = size / 0.78
+      const rows = Math.max(1, Math.min(KEEP_HALL.rows.length, Math.round(h / floorHeight)))
+      const view = { col: 0, row: 0, rows, size, floorHeight, clock: 0 }
+      const band = floorHeight * (rows + FLOOR_DEPTH)
+      ctx.save()
+      ctx.translate(0, (h - band) / 2)
       ctx.beginPath()
-      ctx.ellipse(w * 0.762, h * 0.27, s * 0.045, s * 0.075, 0, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = '#ffe9b0'
-      ctx.beginPath()
-      ctx.ellipse(w * 0.762, h * 0.28, s * 0.022, s * 0.04, 0, 0, Math.PI * 2)
-      ctx.fill()
-
-      // Him, drawn with the dungeon's own figure code.
+      ctx.rect(0, 0, w, band)
+      ctx.clip()
+      drawRoom(ctx, KEEP_HALL, view, w, band, true, [])
       drawFigure(
-        ctx, w * 0.36, floor, s * 0.34, 1,
-        poseFor('run', 1, 'none'), PRINCE_LOOK, 'warrior', false,
+        ctx,
+        size * 3.5,
+        floorHeight * (KEEP_WALK.row + 1),
+        size * 1.5,
+        1,
+        poseFor('run', 1, 'none'),
+        PRINCE_LOOK,
+        'warrior',
+        false,
       )
+      ctx.restore()
     },
   },
   {
@@ -232,44 +197,39 @@ const TILES: Tile[] = [
     title: 'The Pipes',
     blurb: 'Run, jump, stomp. The flag is a long way off.',
     tint: '#1d3a6e',
+    /*
+     * The ground, the blocks and the pipe are the game's own tiles now, drawn
+     * from the same stretch of level the transition runs along. The hand-made
+     * ones were the right colours and the wrong shapes, which is the way this
+     * sort of thing is usually wrong.
+     */
     emblem(ctx, w, h) {
-      const s = Math.min(w, h)
-      const floor = h * 0.74
-
-      ctx.fillStyle = '#a05a20'
-      ctx.fillRect(0, floor, w, h)
-      ctx.fillStyle = '#4fae2e'
-      ctx.fillRect(0, floor, w, h * 0.055)
-
-      // A question block to bump, and a coin already out of it.
-      ctx.fillStyle = '#d98b1f'
-      ctx.fillRect(w * 0.56, h * 0.3, s * 0.17, s * 0.17)
-      ctx.fillStyle = '#f7c948'
-      ctx.fillRect(w * 0.575, h * 0.315, s * 0.14, s * 0.14)
-      ctx.fillStyle = '#8a5a12'
-      ctx.font = `bold ${s * 0.12}px ui-monospace, monospace`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText('?', w * 0.645, h * 0.315 + s * 0.075)
-
-      ctx.fillStyle = '#3cc03c'
-      ctx.fillRect(w * 0.76, h * 0.5, s * 0.26, floor - h * 0.5)
-      ctx.fillStyle = '#7ae87a'
-      ctx.fillRect(w * 0.79, h * 0.5, s * 0.07, floor - h * 0.5)
-
-      // Him, standing on the ground, drawn with the pipes' own code. Its rows
-      // are counted from the top of the visible level, so the feet have to be
-      // converted rather than guessed — guessing once put a figure clean off
-      // the top of a picture entirely.
-      const tile = s * 0.36
-      const feet = VIEW_TOP + floor / tile
+      /*
+       * Nine columns, and the ground pushed to the bottom of the tile.
+       *
+       * Sized to fit the whole eleven rows the game shows, nearly all of a
+       * tile is the sky those rows are mostly made of — true to the game and a
+       * waste of a picture. This crops off the top instead.
+       */
+      const size = w / 9
+      const rows = PIPE_RUN.rows.length - VIEW_TOP
+      const view = { col: PIPE_WALK.from - 1.5, size, clock: 0 }
+      const band = size * rows
+      ctx.save()
+      ctx.translate(0, h - band)
+      ctx.beginPath()
+      ctx.rect(0, 0, w, band)
+      ctx.clip()
+      drawPipeSky(ctx, w, band)
+      drawPipes(ctx, newPipeRun(PIPE_RUN, 1), view, w)
       drawHero(
         ctx,
-        { ...newBody(0, 0), x: (w * 0.28) / tile, y: feet, facing: 1, onGround: true },
-        { col: 0, size: tile, clock: 0 },
+        { ...newBody(PIPE_WALK.from + 1, PIPE_GROUND), facing: 1, onGround: true },
+        view,
         0,
         0,
       )
+      ctx.restore()
     },
   },
   {
@@ -311,10 +271,12 @@ const TILES: Tile[] = [
       const view = { w, h, clock: 0 }
       drawSky(ctx, view, 0)
       drawWorld(ctx, worldFor(6), 0.62, view)
-      const rock = (id: number, x: number, y: number, kind: 'rock' | 'shard' | 'drone') =>
+      const rock = (id: number, x: number, y: number, kind: 'rock' | 'shard' | 'alien') =>
         drawRubble(ctx, { ...newRubble(kind, x, y), id }, view)
       rock(3, 0.22, 0.52, 'rock')
-      rock(7, 0.74, 0.44, 'drone')
+      // A saucer, because that is what is out there now and the tile should
+      // say so before anybody gets as far as Neptune to find out.
+      rock(7, 0.74, 0.44, 'alien')
       rock(5, 0.52, 0.66, 'shard')
       drawShip(ctx, 0.4, view, 0, 0)
     },

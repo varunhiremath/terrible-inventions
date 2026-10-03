@@ -148,7 +148,23 @@ function say(run: Run, message: string, seconds = 2): Run {
  * @param roll 0 to 1, for the guards' choices
  */
 export function step(run: Run, input: Input, move: Move, roll: () => number): Run {
-  if (run.status !== 'playing') return run
+  /*
+   * A finished run still has to clear its events.
+   *
+   * Returning it untouched keeps the last step's events attached, and the
+   * screen reads events every frame — so the noise that ended the run
+   * re-announces itself sixty times a second for as long as the card is up.
+   * Dozens of copies of the same cue land on top of each other and sum past
+   * full scale, which is a buzz. Reported twice as "plenty of cracking and
+   * static noise when a question pops", and measured at a peak of 1.17 with a
+   * hundred and fifty clipped samples where the game itself runs at 0.06.
+   *
+   * The road and the space run already did this, each after finding it the
+   * hard way. There is a test over all six now.
+   */
+  if (run.status !== 'playing') {
+    return run.event === 'none' ? run : { ...run, event: 'none' }
+  }
 
   let next: Run = { ...run, event: 'none' }
 
