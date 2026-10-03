@@ -29,7 +29,14 @@ const browser = await chromium.launch({
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
          '--autoplay-policy=no-user-gesture-required'],
 })
-const page = await browser.newPage({ viewport: { width: 420, height: 880 } })
+/*
+ * Where to listen. The default is the local preview of `dist`, which is the
+ * same artifact the deploy builds from. Point SITE at the live URL to check
+ * what the son's phone actually gets; the proxy in front of this container
+ * re-signs HTTPS, so the certificate has to be let through for that to work.
+ */
+const SITE = process.env.SITE ?? 'http://127.0.0.1:4173/'
+const page = await browser.newPage({ viewport: { width: 420, height: 880 }, ignoreHTTPSErrors: true })
 page.on('pageerror', (e) => console.log('page error:', e.message))
 
 await page.addInitScript(() => {
@@ -169,7 +176,7 @@ const since = (was) => {
   return now
 }
 
-await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
+await page.goto(SITE, { waitUntil: 'networkidle' })
 await page.waitForTimeout(800)
 /*
  * Papa Panic rather than the caves. The report named the caves as an example —
