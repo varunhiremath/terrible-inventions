@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEEP_FOOTAGE, DUNGEON_PATH, floorUnder, SCENES } from './scenes'
+import { DEEP_FOOTAGE, DUNGEON_PATH, gardenFootage as gardenFilm, floorUnder, SCENES } from './scenes'
 import { isSolid as dungeonSolid } from '../arcade/dungeon/level'
 import { levelFor as dungeonLevel } from '../arcade/dungeon/levels'
 
@@ -158,7 +158,7 @@ describe('the deep-space recording', () => {
    * The window is the five beats that use this scene: 21.4s to 42.9s into the
    * cutscene, read back at ten frames a second.
    */
-  const window = DEEP_FOOTAGE.slice(214, 430)
+  const window = DEEP_FOOTAGE().slice(214, 430)
 
   it('has an alien on screen for nearly all of it', () => {
     const seen = window.filter((f) => f.rubble.some((r) => r.kind === 'alien')).length
@@ -171,6 +171,27 @@ describe('the deep-space recording', () => {
   })
 
   it('is long enough to still be moving at the last beat', () => {
-    expect(DEEP_FOOTAGE.length / 10).toBeGreaterThanOrEqual(43)
+    expect(DEEP_FOOTAGE().length / 10).toBeGreaterThanOrEqual(43)
+  })
+})
+
+describe('the garden recording', () => {
+  /*
+   * The beats that run over this stretch are the ones about looping round onto
+   * your own tail, which is the one move in that game nobody will find on
+   * their own. The first cut played them over a snake going in a straight line
+   * eating — true of the game, useless as an explanation.
+   *
+   * The window is beats five and six: 21.4s to 31.6s into the cutscene, read
+   * back at ten frames a second.
+   */
+  it('closes a ring while the beats about rings are playing', () => {
+    const window = gardenFilm().slice(214, 317)
+    const curled = window.some((f) => f.ring !== null && f.ring.length > 5)
+    expect(curled, 'the snake never loops while the line about looping is said').toBe(true)
+  })
+
+  it('is long enough to still be moving at the last beat', () => {
+    expect(gardenFilm().length / 10).toBeGreaterThanOrEqual(42)
   })
 })

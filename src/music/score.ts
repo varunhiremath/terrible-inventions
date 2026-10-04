@@ -1659,8 +1659,84 @@ export const SPACE_CUES = {
   cooling: COOLING,
 } as const
 
+
+/*
+ * The garden.
+ *
+ * G major, unhurried, and the only tune in here with nothing chasing anybody
+ * in it. This is the one game that is about growing rather than surviving, so
+ * the tune grows too: a simple round that keeps coming back to the same four
+ * notes, with more of it arriving as the round gets dangerous.
+ *
+ * Played on the instruments the pipes brought in, because a garden has no
+ * business sounding like a chip.
+ */
+
+const GARDEN_LEAD = [
+  'D5 .  G5 .  .  F#5 D5 . ',
+  'E5 .  .  .  B4 .  .  . ',
+  'C5 .  E5 .  .  D5 B4 . ',
+  'A4 .  .  .  .  .  .  . ',
+  'D5 .  G5 .  B5 .  A5 . ',
+  'G5 .  .  E5 .  .  D5 . ',
+  'C5 .  D5 .  E5 .  G5 . ',
+  'D5 .  .  .  .  .  .  . ',
+].join(' ')
+
+const GARDEN_BASS = [
+  'G2 .  D3 .  G2 .  B2 . ',
+  'E2 .  B2 .  E3 .  G2 . ',
+  'C3 .  G3 .  C3 .  E3 . ',
+  'D3 .  A3 .  D3 .  F#3 .',
+  'G2 .  D3 .  G2 .  B2 . ',
+  'C3 .  G3 .  C3 .  E3 . ',
+  'A2 .  E3 .  A2 .  C3 . ',
+  'D3 .  A2 .  D3 D3 A2 . ',
+].join(' ')
+
+/** The chord, held: open fifths, so the tune above decides major or minor. */
+const GARDEN_BED = [
+  'G3 .  .  .  .  .  .  . ',
+  'E3 .  .  .  .  .  .  . ',
+  'C4 .  .  .  .  .  .  . ',
+  'D4 .  .  .  .  .  .  . ',
+  'G3 .  .  .  .  .  .  . ',
+  'C4 .  .  .  .  .  .  . ',
+  'A3 .  .  .  .  .  .  . ',
+  'D4 .  .  .  .  .  .  . ',
+].join(' ')
+
+/** And the part that only turns up when the round is nearly done. */
+const GARDEN_PUSH = [
+  '.  G3 .  G3 .  G3 .  G3',
+  '.  E3 .  E3 .  E3 .  E3',
+  '.  C3 .  C3 .  C3 .  C3',
+  '.  D3 .  D3 .  D3 .  D3',
+  '.  G3 .  G3 .  G3 .  G3',
+  '.  C3 .  C3 .  C3 .  C3',
+  '.  A2 .  A2 .  A2 .  A2',
+  '.  D3 .  D3 .  D3 D3 D3',
+].join(' ')
+
+const GARDEN_DRUMS = '- - x - - - x - '.repeat(7) + '- - x - x - x x'
+
+export const GARDEN: Track = {
+  name: 'The Garden',
+  beatsPerMinute: 108,
+  hotter: 12,
+  swing: 0.18,
+  drums: GARDEN_DRUMS,
+  parts: [
+    { wave: 'piano', gain: 0.095, sustain: 0.95, pattern: GARDEN_LEAD },
+    { wave: 'pluck', gain: 0.08, sustain: 0.8, pattern: GARDEN_BASS },
+    { wave: 'strings', gain: 0.03, sustain: 1, chord: [0, 7], pattern: GARDEN_BED },
+    { wave: 'pulse', duty: 0.25, gain: 0.045, sustain: 0.26, pattern: GARDEN_PUSH, from: 0.55 },
+  ],
+}
+
 export const TRACKS = {
   chase: CHASE,
+  garden: GARDEN,
   thinking: THINKING,
   pipes: PIPES,
   cavern: CAVERN,
@@ -1768,8 +1844,113 @@ export const WIPE_CUES = {
   travel: TRAVEL,
 } as const
 
+
+/*
+ * The garden.
+ *
+ * G major, which no other game in here uses, because a cue is recognised by
+ * the key it is in long before anybody works out which sound it was. Bright
+ * and pastoral against the maze's menace and the caves' gloom: this is the one
+ * game that is about growing rather than surviving.
+ */
+
+/**
+ * A pellet.
+ *
+ * The smallest noise in the project, and it has to be: a snake crossing a
+ * field eats several a second for two and a half minutes. Two notes a fifth
+ * apart and gone, built like the maze's dot for the same reason.
+ */
+export const NIBBLE: Track = {
+  name: 'Nibble',
+  beatsPerMinute: 260,
+  parts: [{ wave: 'pulse', duty: 0.25, gain: 0.05, sustain: 0.3, pattern: 'D5 G4' }],
+}
+
+/** Every so often, as a snake passes a round number. */
+export const SWELL: Track = {
+  name: 'Swell',
+  beatsPerMinute: 200,
+  parts: [{ wave: 'pulse', duty: 0.5, gain: 0.085, sustain: 0.5, pattern: 'G4 .  B4 .  D5 .  ' }],
+}
+
+/** A power picked up: a bell, because it is a present. */
+export const CHARM: Track = {
+  name: 'Charm',
+  beatsPerMinute: 180,
+  parts: [
+    { wave: 'bell', gain: 0.07, sustain: 1, pattern: 'D5 .  G5 .  ' },
+    { wave: 'strings', gain: 0.045, sustain: 1, pattern: 'G3 .  .  .  ' },
+  ],
+}
+
+/** A ring closed on nothing: a soft thud, because it cost you length. */
+export const SLIP: Track = {
+  name: 'Slip',
+  beatsPerMinute: 190,
+  parts: [{ wave: 'triangle', gain: 0.1, sustain: 0.6, pattern: 'B3 .  G3 .  ' }],
+}
+
+/** A ring closed: the sound of something being drawn shut. */
+export const LOOP: Track = {
+  name: 'Loop',
+  beatsPerMinute: 210,
+  parts: [
+    { wave: 'pulse', duty: 0.125, gain: 0.08, sustain: 0.5, pattern: 'G4 .  B4 .  D5 .  G5 .  ' },
+  ],
+}
+
+/** And a ring closed on somebody: the same shape, twice as pleased. */
+export const SNARE: Track = {
+  name: 'Snare',
+  beatsPerMinute: 190,
+  parts: [
+    { wave: 'piano', gain: 0.1, sustain: 0.9, chord: [0, 7, 12], pattern: 'G4 .  C5 .  D5 .  G5 .  ' },
+    { wave: 'pluck', gain: 0.085, sustain: 0.7, pattern: 'G2 .  .  .  D3 .  .  .  ' },
+  ],
+}
+
+/** Bitten: down, and done with. */
+export const BITTEN: Track = {
+  name: 'Bitten',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'triangle', gain: 0.12, sustain: 0.8, pattern: 'D4 .  B3 .  G3 .  .  .  ' },
+    { wave: 'pulse', duty: 0.5, gain: 0.055, sustain: 0.6, pattern: 'G3 .  .  .  .  .  .  .  ' },
+  ],
+}
+
+/** Somebody else going, which is news rather than an event. */
+export const FADE: Track = {
+  name: 'Fade',
+  beatsPerMinute: 230,
+  parts: [{ wave: 'pulse', duty: 0.25, gain: 0.05, sustain: 0.4, pattern: 'B4 .  G4 .  ' }],
+}
+
+/** The last life gone, which is the end of a run. */
+export const CHIME: Track = {
+  name: 'Chime',
+  beatsPerMinute: 130,
+  parts: [
+    { wave: 'bell', gain: 0.085, sustain: 1, pattern: 'G4 .  D5 .  G5 .  .  .  ' },
+    { wave: 'strings', gain: 0.05, sustain: 1, pattern: 'G3 .  .  .  .  .  .  .  ' },
+  ],
+}
+
+export const GARDEN_CUES = {
+  nibble: NIBBLE,
+  swell: SWELL,
+  charm: CHARM,
+  loop: LOOP,
+  snare: SNARE,
+  bitten: BITTEN,
+  fade: FADE,
+  chime: CHIME,
+  slip: SLIP,
+} as const
+
 export const CUES = {
   ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES, ...SPACE_CUES,
-  ...WIPE_CUES,
+  ...GARDEN_CUES, ...WIPE_CUES,
 } as const
 export type CueName = keyof typeof CUES

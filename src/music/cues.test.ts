@@ -6,6 +6,7 @@ import {
   MAZE_CUES,
   PIPE_CUES,
   ROAD_CUES,
+  GARDEN_CUES,
   SPACE_CUES,
   WIPE_CUES,
   eighthSeconds,
@@ -80,6 +81,9 @@ const TICKS: CueName[] = [
   // And the other half of a gunfight. Four saucers on the screen at once, each
   // firing every couple of seconds, is as busy as the laser gets.
   'incoming',
+  // And a pellet in the garden, which is the busiest of the lot: a snake
+  // crossing a field takes several a second for the whole of a round.
+  'nibble',
 ]
 
   it('are short enough to be cues rather than tunes', () => {
@@ -245,7 +249,8 @@ describe('every cue', () => {
      * above — there is no one scale it could be held to.
      */
     const sets = [
-      DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES, WIPE_CUES,
+      DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES, GARDEN_CUES,
+      WIPE_CUES,
     ]
     const seen = new Set<string>()
     for (const set of sets) {
@@ -314,5 +319,31 @@ describe('the space cues', () => {
     expect(upTo).toBeGreaterThan(upFrom)
     const [downFrom, downTo] = ends('struck')
     expect(downTo).toBeLessThan(downFrom)
+  })
+})
+
+/**
+ * The garden's cues are held to G major, which no other game in here uses.
+ *
+ * A cue is recognised by the key it is in long before anybody works out which
+ * sound it was, so a set that wanders is a set that stops belonging to its
+ * game. Same reason as the dungeon's and the pipes'.
+ */
+describe('the garden cues', () => {
+  const MAJOR = [7, 9, 11, 0, 2, 4, 6]
+
+  it('stay in G major', () => {
+    for (const name of Object.keys(GARDEN_CUES) as CueName[]) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          expect(MAJOR, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain(pitchClass(note.frequency))
+        }
+      }
+    }
+  })
+
+  it('keeps the pellet short enough to keep up with a snake', () => {
+    expect(loopLength(CUES.nibble) * eighthSeconds(CUES.nibble)).toBeLessThan(0.3)
   })
 })

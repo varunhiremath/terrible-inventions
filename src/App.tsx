@@ -6,6 +6,7 @@ import { Intro } from './intro/Intro'
 import { STORIES } from './intro/stories'
 import { Pipes } from './screens/Pipes'
 import { Road } from './screens/Road'
+import { Snake } from './screens/Snake'
 import { Space } from './screens/Space'
 import { Workshop } from './screens/Workshop'
 import { Prince } from './screens/Prince'
@@ -63,6 +64,7 @@ export default function App() {
       : screen === 'pipes' ? 'pipes'
       : screen === 'road' ? 'road'
       : screen === 'space' ? 'space'
+      : screen === 'snake' ? 'garden'
       // The workshop gets the thinking tune: it is the one screen where
       // somebody is sitting still working something out.
       : screen === 'workshop' ? 'thinking'
@@ -94,6 +96,8 @@ export default function App() {
       return <Road />
     case 'space':
       return <Space />
+    case 'snake':
+      return <Snake />
     case 'workshop':
       return <Workshop />
     case 'note':

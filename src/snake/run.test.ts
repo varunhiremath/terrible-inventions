@@ -1,0 +1,294 @@
+import { describe, expect, it } from 'vitest'
+import { ARENA, BEAD, NEW_LENGTH, PELLET_FEEDS, POWER_LASTS, SPEED, TURN } from './level'
+import {
+  FIXED, LOUDEST, NO_INPUT, bodyOf, dist, headOf, inside, newRun, ringArea, step,
+  type Input, type Run,
+} from './run'
+
+/**
+ * The garden.
+ *
+ * Almost nothing here can be checked by looking at it. Whether a ring closed,
+ * what was inside it, whether a head met a body rather than passed a pixel
+ * from one — all of it is arithmetic that happens in a frame and is gone, and
+ * a screenshot of a snake tells you nothing about any of it.
+ */
+
+const fly = (run: Run, input: Input, seconds: number): Run => {
+  let now = run
+  for (let t = 0; t < seconds; t += FIXED) now = step(now, input, FIXED)
+  return now
+}
+
+/**
+ * The player alone in an empty garden, so a test is about one snake.
+ *
+ * The emptiness has to be asked for rather than cleared afterwards: the garden
+ * tops its food up every step, so a run handed an empty pellet list grew a
+ * hundred and fifty of them on the first frame, and three tests about a
+ * snake's length spent their whole run measuring a snake that was eating.
+ */
+const alone = (seed = 1): Run => newRun(seed, 0, 0, 0)
+
+describe('a snake', () => {
+  it('starts the length it is supposed to be', () => {
+    const run = alone()
+    const body = run.snakes[0].body
+    let along = 0
+    for (let i = 1; i < body.length; i++) along += dist(body[i - 1], body[i])
+    expect(along).toBeCloseTo(NEW_LENGTH, 1)
+  })
+
+  it('goes the way it is pointed, at the pace it is meant to', () => {
+    const run = alone()
+    const from = { ...headOf(run.snakes[0]) }
+    const after = fly({ ...run, snakes: [{ ...run.snakes[0], heading: 0 }] }, NO_INPUT, 1)
+    const head = headOf(after.snakes[0])
+    expect(head.x - from.x).toBeCloseTo(SPEED, 1)
+    expect(head.y - from.y).toBeCloseTo(0, 1)
+  })
+
+  it('cannot turn faster than it is allowed to', () => {
+    /*
+     * The one number the whole feel rests on. Too quick and it corkscrews into
+     * itself on a thumb twitch; too slow and the ring needed for an encircle
+     * is wider than the garden.
+     */
+    const run = { ...alone(), snakes: [{ ...alone().snakes[0], heading: 0 }] }
+    // Stick hard over to the opposite heading, which is the most it can ever
+    // be asked for.
+    const after = step(run, { x: -1, y: 0, dash: false }, FIXED)
+    const turned = Math.abs(after.snakes[0].heading - 0)
+    expect(turned).toBeLessThanOrEqual(TURN * FIXED + 1e-9)
+  })
+
+  it('holds its length steady when it is not eating', () => {
+    const run = alone()
+    const after = fly(run, NO_INPUT, 3)
+    const body = after.snakes[0].body
+    let along = 0
+    for (let i = 1; i < body.length; i++) along += dist(body[i - 1], body[i])
+    expect(along).toBeCloseTo(NEW_LENGTH, 1)
+  })
+
+  it('grows when it eats, and the body grows with it', () => {
+    let run = alone()
+    const head = headOf(run.snakes[0])
+    run = {
+      ...run,
+      snakes: [{ ...run.snakes[0], heading: 0 }],
+      pellets: [{ id: 99, x: head.x + 0.3, y: head.y, worth: 1, big: false }],
+    }
+    const after = fly(run, NO_INPUT, 0.5)
+    expect(after.pellets).toHaveLength(0)
+    expect(after.snakes[0].length).toBeCloseTo(NEW_LENGTH + PELLET_FEEDS, 2)
+    expect(bodyOf(after.snakes[0]).length).toBeGreaterThan(bodyOf(run.snakes[0]).length)
+  })
+
+  it('dies on the garden wall', () => {
+    const run = alone()
+    const out = { ...run, snakes: [{ ...run.snakes[0], heading: 0, body: run.snakes[0].body.map((p) => ({ ...p, x: p.x + ARENA - 0.1 })) }] }
+    const after = fly(out, NO_INPUT, 1)
+    expect(after.status).toBe('lost')
+    expect(after.snakes[0].alive).toBe(false)
+  })
+
+  it('does not die on its own neck, which it is always touching', () => {
+    // The beads right behind the head are within a girth of it by definition —
+    // that is what being attached means — so a check that counted them would
+    // kill every snake on its first step.
+    const after = fly(alone(), { x: 1, y: 0, dash: false }, 4)
+    expect(after.status).toBe('playing')
+    expect(after.snakes[0].alive).toBe(true)
+  })
+})
+
+describe('the geometry an encircle rests on', () => {
+  /*
+   * Checked on shapes whose answers are known by hand, because every other
+   * test in this file would pass with a point-in-polygon that always said yes.
+   */
+  const square = [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 2, y: 2 }, { x: 0, y: 2 }]
+
+  it('knows inside from outside', () => {
+    expect(inside(square, { x: 1, y: 1 })).toBe(true)
+    expect(inside(square, { x: 3, y: 1 })).toBe(false)
+    expect(inside(square, { x: 1, y: 3 })).toBe(false)
+    expect(inside(square, { x: -1, y: 1 })).toBe(false)
+  })
+
+  it('is not fooled by a dent in the shape', () => {
+    // A ring made by a snake is rarely convex: it is whatever shape the thumb
+    // drew. A C is the case that catches a convex-only test.
+    const c = [
+      { x: 0, y: 0 }, { x: 3, y: 0 }, { x: 3, y: 1 }, { x: 1, y: 1 },
+      { x: 1, y: 2 }, { x: 3, y: 2 }, { x: 3, y: 3 }, { x: 0, y: 3 },
+    ]
+    expect(inside(c, { x: 0.5, y: 1.5 })).toBe(true)
+    expect(inside(c, { x: 2, y: 1.5 })).toBe(false)
+  })
+
+  it('measures how much ground a ring covers', () => {
+    expect(ringArea(square)).toBeCloseTo(4, 6)
+  })
+})
+
+describe('closing a ring', () => {
+  it('is what happens when a long snake turns inside itself', () => {
+    let run = alone()
+    // Long enough that a full circle fits inside its own body, which is the
+    // condition for a ring at all.
+    run = { ...run, snakes: [{ ...run.snakes[0], length: 9 }] }
+    let saw = false
+    let input: Input = { x: 0, y: 0, dash: false }
+    for (let t = 0; t < 6; t += FIXED) {
+      const want = run.snakes[0].heading + 1
+      input = { x: Math.cos(want), y: Math.sin(want), dash: false }
+      run = step(run, input, FIXED)
+      if (run.events.includes('ring') || run.events.includes('close')) saw = true
+    }
+    expect(saw, 'a snake curled on itself for six seconds and never closed a ring').toBe(true)
+  })
+
+  it('costs the snake the length it looped over', () => {
+    let run = alone()
+    run = { ...run, snakes: [{ ...run.snakes[0], length: 9 }] }
+    const was = run.snakes[0].length
+    for (let t = 0; t < 6; t += FIXED) {
+      const want = run.snakes[0].heading + 1
+      run = step(run, { x: Math.cos(want), y: Math.sin(want), dash: false }, FIXED)
+      if (run.snakes[0].length < was) break
+    }
+    expect(run.snakes[0].length).toBeLessThan(was)
+    expect(run.snakes[0].alive, 'closing a ring killed the snake that closed it').toBe(true)
+  })
+
+  it('catches a snake whose head is inside it', () => {
+    /*
+     * Built rather than played: a ring drawn by hand round a rival, so the
+     * question is whether the rule fires and not whether a bot can be herded.
+     */
+    let run = newRun(1, 1, 0, 0)
+    const you = run.snakes[0]
+    const them = run.snakes[1]
+    // A circle of body, head last, with the rival sitting in the middle.
+    const ring: { x: number; y: number }[] = []
+    const beads = Math.round((Math.PI * 2 * 0.9) / BEAD)
+    for (let i = 0; i <= beads; i++) {
+      const a = (i / beads) * Math.PI * 2
+      ring.push({ x: Math.cos(-a) * 0.9, y: Math.sin(-a) * 0.9 })
+    }
+    run = {
+      ...run,
+      snakes: [
+        { ...you, body: ring, length: beads * BEAD, heading: Math.PI / 2 },
+        { ...them, body: them.body.map((_, i) => ({ x: 0 - i * BEAD, y: 0 })), heading: 0 },
+      ],
+    }
+    const after = step(run, NO_INPUT, FIXED)
+    expect(after.snakes[1].alive, 'a snake sitting in the middle of a closed ring survived').toBe(false)
+    expect(after.caught).toBe(1)
+    expect(after.events).toContain('trap')
+  })
+
+  it('leaves what it caught on the ground to be eaten', () => {
+    let run = newRun(2, 1, 0, 0)
+    const you = run.snakes[0]
+    const them = run.snakes[1]
+    const ring: { x: number; y: number }[] = []
+    const beads = Math.round((Math.PI * 2 * 0.9) / BEAD)
+    for (let i = 0; i <= beads; i++) {
+      const a = (i / beads) * Math.PI * 2
+      ring.push({ x: Math.cos(-a) * 0.9, y: Math.sin(-a) * 0.9 })
+    }
+    run = {
+      ...run,
+      snakes: [
+        { ...you, body: ring, length: beads * BEAD },
+        { ...them, body: them.body.map((_, i) => ({ x: 0 - i * BEAD, y: 0 })) },
+      ],
+    }
+    const after = step(run, NO_INPUT, FIXED)
+    expect(after.pellets.filter((p) => p.big).length).toBeGreaterThan(3)
+  })
+})
+
+describe('running into somebody', () => {
+  /**
+   * Their body laid flat across the garden, with their head at the far end of
+   * it and well clear of yours.
+   *
+   * The far end matters. Written the other way round, their head sat inside
+   * the stretch of garden your own body occupies — so the test for "the one
+   * that was run into survives" was watching them die of running into you.
+   *
+   * And the length has to be set with the body. A snake is trimmed to the
+   * length it says it is on every step, so a body laid out five units long on
+   * a snake that says it is two and a half becomes two and a half on the first
+   * frame — the wall simply was not there any more by the time anybody
+   * reached it, and the test reported that running into somebody is survivable.
+   */
+  const laidOut = (seed: number) => {
+    const run = newRun(seed, 1, 0, 0)
+    const wall = Array.from({ length: 40 }, (_, i) => ({ x: 3.46 - i * BEAD, y: 0 }))
+    const mine = Array.from({ length: 18 }, (_, i) => ({ x: -0.5 - i * BEAD, y: 0 }))
+    return { run, wall, mine, wallLong: wall.length * BEAD, mineLong: mine.length * BEAD }
+  }
+
+  it('kills the one that did the running', () => {
+    const { run: base, wall, mine, wallLong, mineLong } = laidOut(3)
+    const run = {
+      ...base,
+      snakes: [
+        { ...base.snakes[0], heading: 0, body: mine, length: mineLong },
+        { ...base.snakes[1], body: wall, length: wallLong },
+      ],
+    }
+    const after = fly(run, NO_INPUT, 0.6)
+    expect(after.snakes[0].alive).toBe(false)
+    expect(after.status).toBe('lost')
+  })
+
+  it('does not kill the one that was run into', () => {
+    const { run: base, wall, mine, wallLong, mineLong } = laidOut(3)
+    const run = {
+      ...base,
+      snakes: [
+        { ...base.snakes[0], heading: 0, body: mine, length: mineLong },
+        { ...base.snakes[1], body: wall, length: wallLong },
+      ],
+    }
+    const after = fly(run, NO_INPUT, 0.6)
+    expect(after.snakes[1].alive).toBe(true)
+  })
+
+  it('lets a ghost through', () => {
+    const { run: base, wall, mine, wallLong, mineLong } = laidOut(3)
+    const run = {
+      ...base,
+      snakes: [
+        { ...base.snakes[0], heading: 0, held: { ghost: POWER_LASTS.ghost }, body: mine, length: mineLong },
+        { ...base.snakes[1], body: wall, length: wallLong },
+      ],
+    }
+    const after = fly(run, NO_INPUT, 0.6)
+    expect(after.snakes[0].alive).toBe(true)
+  })
+})
+
+describe('the noises', () => {
+  it('has a place in the order for everything that can happen', () => {
+    const all: string[] = ['eat', 'grow', 'power', 'ring', 'trap', 'died', 'kill', 'close']
+    expect([...LOUDEST].sort()).toEqual([...all].sort())
+  })
+
+  it('says nothing more once the round is over', () => {
+    // The crackle, which cost an afternoon in four other games: a finished run
+    // handed back untouched re-announces its ending sixty times a second.
+    let run: Run = { ...alone(), status: 'lost', events: ['died'] }
+    for (let i = 0; i < 5; i++) {
+      run = step(run, NO_INPUT, FIXED)
+      expect(run.events).toHaveLength(0)
+    }
+  })
+})

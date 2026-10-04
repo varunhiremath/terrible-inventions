@@ -53,7 +53,7 @@ export const STORIES: Record<string, Story> = {
     beats: [
       { seconds: 4.6, scene: 'dungeon', voice: 'narrator', line: 'Thirteen floors down, and one hour on the clock.' },
       { seconds: 5.5, scene: 'dungeon', voice: 'papa', line: 'One hour! For all thirteen! Even I could not do that.' },
-      { seconds: 5.2, scene: 'dungeon', voice: 'narrator', line: 'The clock never stops. Not when you slip, not between floors. Never.' },
+      { seconds: 5.4, scene: 'dungeon', voice: 'narrator', line: 'The clock never stops. Not when you slip, not between floors. Never.' },
       { seconds: 7.1, scene: 'dungeon', voice: 'narrator', line: 'Every move is a commitment. Start a running jump and you are going wherever it lands.' },
       { seconds: 6.3, scene: 'dungeon', voice: 'narrator', line: 'Walk, jump, and a careful step for the edges. Guards want the pointy end.' },
       { seconds: 3.4, scene: 'dungeon', voice: 'papa', line: 'Fifty-nine minutes. Fifty-eight. Oh dear.' },
@@ -64,7 +64,7 @@ export const STORIES: Record<string, Story> = {
     id: 'pipes',
     title: 'THE PIPES',
     beats: [
-      { seconds: 4.8, scene: 'pipes', voice: 'narrator', line: 'The pipes under the garden. {papa} filled them with wind-up machines.' },
+      { seconds: 4.9, scene: 'pipes', voice: 'narrator', line: 'The pipes under the garden. {papa} filled them with wind-up machines.' },
       { seconds: 6.3, scene: 'pipes', voice: 'papa', line: 'They only walk forwards! That is the beauty of it! No brains at all!' },
       { seconds: 5.9, scene: 'pipes', voice: 'narrator', line: 'Land on one and it is finished. Walk into one and you are.' },
       { seconds: 5.4, scene: 'pipes', voice: 'narrator', line: 'Hold jump for longer and you go higher. That is the whole game, really.' },
@@ -115,9 +115,35 @@ export const STORIES: Record<string, Story> = {
       { seconds: 4.7, scene: 'deep', voice: 'papa', line: 'Something lives out here. It shoots back. Not my doing!' },
       { seconds: 4.2, scene: 'deep', voice: 'narrator', line: 'Shoot their shots out of the sky, then shoot them.' },
       { seconds: 4.6, scene: 'deep', voice: 'narrator', line: 'A black hole drags the whole sky sideways. Fly across it.' },
-      { seconds: 4.1, scene: 'deep', voice: 'papa', line: 'Stars, nebulae, galaxies. It does not stop. Off you go.' },
+      { seconds: 4.3, scene: 'deep', voice: 'papa', line: 'Stars, nebulae, galaxies. It does not stop. Off you go.' },
+    ],
+  },
+
+  /*
+   * The garden.
+   *
+   * The one beat that has to land is the ring, because it is the only move in
+   * here nobody will find on their own: every other snake game ever made kills
+   * you for touching yourself, and this one does not — it gives you what you
+   * looped over. Said twice, in two different ways, and shown over a snake
+   * long enough to do it.
+   */
+  snake: {
+    id: 'snake',
+    title: 'THE GARDEN',
+    beats: [
+      { seconds: 4.3, scene: 'garden', voice: 'narrator', line: 'A garden, five others in it, and all of you hungry.' },
+      { seconds: 4.3, scene: 'garden', voice: 'papa', line: 'I grew them! They grow! Everything grows!' },
+      { seconds: 4.1, scene: 'garden', voice: 'narrator', line: 'Hold anywhere and drag. That is the whole control.' },
+      { seconds: 4.6, scene: 'garden', voice: 'narrator', line: 'Eat, and you get longer. Longer is the whole idea.' },
+      { seconds: 4.8, scene: 'garden', voice: 'narrator', line: 'Touch somebody else and you are finished. Nothing else is.' },
+      { seconds: 5.2, scene: 'garden', voice: 'narrator', line: 'Loop round onto your own tail and the loop shuts. That is allowed.' },
+      { seconds: 5.0, scene: 'garden', voice: 'narrator', line: 'Whatever is caught inside is yours. It costs you the tail.' },
+      { seconds: 4.9, scene: 'garden', voice: 'narrator', line: 'The charms on the ground are worth a detour. All four help.' },
+      { seconds: 4.2, scene: 'garden', voice: 'papa', line: 'Go on then. Mind Rust. Off you go.' },
     ],
   },
 }
 
-export const STORY_ORDER = ['arcade', 'dave', 'prince', 'pipes', 'road', 'space'] as const
+export const STORY_ORDER =
+  ['arcade', 'dave', 'prince', 'pipes', 'road', 'space', 'snake'] as const

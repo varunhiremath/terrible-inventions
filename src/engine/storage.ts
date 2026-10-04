@@ -105,7 +105,7 @@ export interface SaveState {
   /**
    * Coins, and what they have bought.
    *
-   * One purse for all six games. Playing earns them, maths in the workshop
+   * One purse for every game. Playing earns them, maths in the workshop
    * earns them faster, and they buy the same few permanent upgrades whichever
    * game you spend them on — which is what makes maths worth doing when it is
    * not being forced on you mid-game.

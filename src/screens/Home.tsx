@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { drawCan, drawCar, drawMine, drawRacer, drawRoad } from '../road/draw'
+import { BEAD as SNAKE_BEAD, ROSTER as SNAKE_ROSTER } from '../snake/level'
+import { newRun as newGarden, newSnake } from '../snake/run'
+import { drawRun as drawGarden } from '../snake/draw'
 import { ROSTER } from '../road/level'
 import { drawRubble, drawShip, drawSky, drawWorld } from '../space/draw'
 import { newRubble } from '../space/run'
@@ -46,7 +49,7 @@ interface Tile {
 }
 
 /**
- * The six tiles.
+ * The tiles.
  *
  * Each one shows the character you will actually be, drawn with that game's
  * own code wherever there is any — the dungeon's figure and the pipes'
@@ -281,6 +284,44 @@ const TILES: Tile[] = [
       drawShip(ctx, 0.4, view, 0, 0)
     },
   },
+  {
+    id: 'snake',
+    title: 'The Garden',
+    blurb: 'Grow. Mind the others. Ring one and it is yours.',
+    tint: '#0b1410',
+    emblem(ctx, w, h) {
+      /*
+       * The real game's drawing, with a run built by hand: one of yours in the
+       * middle of closing a ring round a rival, which is the move the whole
+       * game is for and the one thing a still picture can show about it.
+       */
+      const view = { w, h, clock: 0 }
+      const ring: { x: number; y: number }[] = []
+      const beads = Math.round((Math.PI * 2 * 1.5) / SNAKE_BEAD)
+      // A little short of all the way round, so it reads as a loop being drawn
+      // rather than a circle that has always been there.
+      for (let i = 0; i <= beads * 0.93; i++) {
+        const a = (i / beads) * Math.PI * 2 - 2.1
+        ring.push({ x: Math.cos(-a) * 1.5, y: Math.sin(-a) * 1.5 })
+      }
+      const you = { ...newSnake(1, null, { x: 0, y: 0 }, 0), body: ring, length: ring.length * SNAKE_BEAD }
+      const caught = newSnake(2, SNAKE_ROSTER[1], { x: 0.1, y: 0.1 }, 1.2)
+      const base = newGarden(7, 0, 0, 0)
+      drawGarden(ctx, {
+        ...base,
+        snakes: [you, caught],
+        pellets: [
+          { id: 10, x: 2.4, y: -1.6, worth: 1, big: false },
+          { id: 11, x: -2.6, y: 1.9, worth: 1, big: false },
+          { id: 12, x: 1.1, y: 2.7, worth: 2, big: true },
+          { id: 13, x: -1.9, y: -2.4, worth: 1, big: false },
+        ],
+        drops: [{ id: 14, x: 2.8, y: 1.3, kind: 'lure', bob: 0 }],
+        ring,
+        ringFor: 0.8,
+      }, view)
+    },
+  },
 ]
 
 function Emblem({ tile }: { tile: Tile }) {
@@ -328,7 +369,7 @@ export function Home() {
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <p className="text-sm text-dim">
-          {fill('{papa}')} built six terrible machines. Pick one.
+          {fill('{papa}')} built seven terrible machines. Pick one.
         </p>
         {/* The front screen is the one place it is safe to reload, so this is
             the one place the update takes itself. */}

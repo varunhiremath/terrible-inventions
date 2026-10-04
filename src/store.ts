@@ -15,7 +15,7 @@ import type { Trail } from './road/run'
 import type { Attempt, Problem } from './engine/types'
 
 export type Screen =
-  | 'home' | 'arcade' | 'dave' | 'prince' | 'pipes' | 'road' | 'space'
+  | 'home' | 'arcade' | 'dave' | 'prince' | 'pipes' | 'road' | 'space' | 'snake'
   | 'workshop' | 'coop' | 'note' | 'settings'
 
 /** How far above his solo level a two-player puzzle is pitched. */
@@ -29,6 +29,7 @@ const INTRO_FOR: Partial<Record<Screen, string>> = {
   pipes: 'pipes',
   road: 'road',
   space: 'space',
+  snake: 'snake',
 }
 
 

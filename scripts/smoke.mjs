@@ -141,7 +141,10 @@ const scoreNow = async () => Number((await hud()).match(/1up (\d+)/i)?.[1] ?? -1
 await page.goto(URL, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1500)
 
-const GAMES = ['Papa Panic', 'The Caves', 'The Dungeon', 'The Pipes', 'The Road', 'The Long Way Out']
+const GAMES = [
+  'Papa Panic', 'The Caves', 'The Dungeon', 'The Pipes', 'The Road', 'The Long Way Out',
+  'The Garden',
+]
 const homeText = await page.innerText('body')
 for (const game of GAMES) {
   if (!new RegExp(game, 'i').test(homeText)) problems.push(`${game} is not on the front screen`)
@@ -154,11 +157,11 @@ for (const game of GAMES) {
  * is the opposite arrangement — the games are all right there, and it is a
  * side door for spending what they earn — so what is checked now is that
  * every game can be reached without going through it, which the loop below
- * does by walking into all six.
+ * does by walking into every one of them.
  */
 if (!/workshop/i.test(homeText)) problems.push('the workshop is not on the front screen')
 if ((await page.locator('canvas').count()) !== GAMES.length) {
-  problems.push('the four tiles are not each drawing their own emblem')
+  problems.push('the tiles are not each drawing their own emblem')
 }
 
 /** Opens a game from the front door, and gets past its story. */
@@ -560,6 +563,49 @@ if (await enter('The Long Way Out')) {
   }
 }
 
+// --- the garden -------------------------------------------------------------
+{
+  /*
+   * A snake that steers and eats.
+   *
+   * Driven with a real pointer rather than the keyboard, because the stick is
+   * a touch control and "works by keyboard, fails by finger" has cost this
+   * project three separate evenings. A drag from the middle of the board is
+   * exactly what a thumb does.
+   */
+  await page.goto(URL, { waitUntil: 'networkidle' })
+  await page.waitForTimeout(500)
+  await page.getByRole('button', { name: /the garden/i }).first().click()
+  await page.waitForTimeout(400)
+  const skip = page.getByRole('button', { name: /skip/i })
+  if (await skip.count()) { await skip.first().click(); await page.waitForTimeout(700) }
+
+  const grab = async () => (await page.locator('p.font-mono').allTextContents()).join(' ')
+  const before = await grab()
+
+  const box = await page.locator('canvas').first().boundingBox()
+  if (!box) problems.push('the garden has no board')
+  else {
+    const cx = box.x + box.width / 2
+    const cy = box.y + box.height / 2
+    await page.mouse.move(cx, cy)
+    await page.mouse.down()
+    // Round in a circle, which both steers and is the shape the whole game is
+    // about.
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 12) * Math.PI * 2
+      await page.mouse.move(cx + Math.cos(a) * 70, cy + Math.sin(a) * 70)
+      await page.waitForTimeout(70)
+    }
+    await page.mouse.up()
+  }
+
+  const after = await grab()
+  const longOf = (text) => Number((text.match(/([\d.]+) long/)?.[1] ?? '0'))
+  if (longOf(after) === 0) problems.push('the garden never reported a length')
+  if (after === before) problems.push('the garden did not change while it was being steered')
+}
+
 await browser.close()
 
 // No screen may grow a score for being right at maths. The question between
@@ -572,4 +618,4 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, went down into the dungeon, ran the pipes, drove the road, and flew out towards Mercury')
+console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, went down into the dungeon, ran the pipes, drove the road, flew out towards Mercury, and took a snake round the garden')

@@ -42,6 +42,12 @@ import { FIXED as ROAD_FIXED, NO_INPUT as ROAD_STILL, newRun as newDrive, step a
 import { SHIP_WIDE, SIZE_OF as RUBBLE_SIZE } from '../space/level'
 import { drawRun as drawFlight } from '../space/draw'
 import { FIXED as SPACE_FIXED, newRun as newFlight, step as flyOn, type Input as Stick, type Run as Flight } from '../space/run'
+import { ARENA as GARDEN_EDGE } from '../snake/level'
+import { drawRun as drawGarden } from '../snake/draw'
+import {
+  FIXED as GARDEN_FIXED, headOf as crawlHead, newRun as newGarden, respawn as crawlAgain,
+  step as crawlOn, type Run as Crawl,
+} from '../snake/run'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -272,7 +278,10 @@ const DUNGEON_PACE = 1.8
  * advance, and the cutscene reads off the recording. Driven by something no
  * cleverer than a person: hold the pedal, move to whichever lane is clear.
  */
-const FOOTAGE: Drive[] = (() => {
+let roadFilm: Drive[] | null = null
+
+function roadFootage(): Drive[] {
+  if (roadFilm) return roadFilm
   const frames: Drive[] = []
   let run = newDrive(1, 99, 0, 12)
   let target: number | null = null
@@ -316,11 +325,19 @@ const FOOTAGE: Drive[] = (() => {
     // photograph of a race rather than a race.
     if (Math.round(t / ROAD_FIXED) % 6 === 0) frames.push(run)
   }
+  roadFilm = frames
   return frames
-})()
+}
 
 /**
  * A pilot no cleverer than a person, flown once and kept.
+ *
+ * Flown on demand, not at the top of the file. All four of these recordings
+ * used to be built the moment anything imported this module, which is the
+ * moment the app starts — and between them that was two and a half seconds of
+ * a blank screen before the front door appeared, for everybody, whether or not
+ * they were about to watch a cutscene. Measured, after it made the smoke test
+ * flaky and the reason took three wrong guesses to find.
  *
  * Same trick as the road, and for the same reason: a scene has to be a pure
  * function of the clock, and the game is a simulation. So it is flown through
@@ -374,7 +391,18 @@ function fly(world: number, seed: number, hold: [number, number], seconds = 46):
  * Mars rather than Mercury because Mercury is a grey dot and Mars is red, and
  * the beat has to say "space" in the first half second.
  */
-const FLIGHT: Flight[] = fly(4, 7, [0.1, 0.9])
+const flights = new Map<string, Flight[]>()
+
+function flown(world: number, seed: number, hold: [number, number]): Flight[] {
+  const key = `${world}:${seed}`
+  const had = flights.get(key)
+  if (had) return had
+  const made = fly(world, seed, hold)
+  flights.set(key, made)
+  return made
+}
+
+const FLIGHT = () => flown(4, 7, [0.1, 0.9])
 
 /*
  * And the other half of the game, which the story used to stop short of.
@@ -397,12 +425,89 @@ const FLIGHT: Flight[] = fly(4, 7, [0.1, 0.9])
  * has one in frame for 97 per cent of the five deep beats, against 41 for the
  * worst of them.
  */
-const DEEP: Flight[] = fly(15, 97, [0.55, 0.88])
+const DEEP = () => flown(15, 97, [0.55, 0.88])
 
 /** The four Machines, in the colours they are on the board. */
 const MACHINES = ['#e8503a', '#f49ac1', '#5ad2e0', '#f0a04b']
 
 /** Every scene any story can name. */
+/**
+ * The garden, grown once and kept.
+ *
+ * Same trick again: the scene has to be a pure function of the clock and the
+ * game is five snakes making decisions, so it is played through in advance by
+ * somebody who keeps off the walls and eats, and the cutscene reads it back.
+ *
+ * It is played at a length that shows the thing the game is for — a snake long
+ * enough to ring somebody — because a beat about encircling over a picture of
+ * two short worms says nothing.
+ *
+ * Grown on demand rather than at the top of the file, unlike the race and the
+ * two flights. Those are cheap; this one is five snakes making decisions for
+ * forty-six seconds, which is a couple of seconds of work — and done at module
+ * load that is a couple of seconds of white screen before the front door
+ * appears, for everybody, including the six people who were not going to watch
+ * this cutscene.
+ */
+let gardenFilmed: Crawl[] | null = null
+
+function gardenFilm(): Crawl[] {
+  if (gardenFilmed) return gardenFilmed
+  const frames: Crawl[] = []
+  let run = newGarden(31)
+  // A head start on length, so the beats that talk about rings are played over
+  // a snake that could actually close one.
+  run = { ...run, snakes: run.snakes.map((s, i) => (i === 0 ? { ...s, length: 11 } : s)) }
+
+  for (let t = 0; t < 46; t += GARDEN_FIXED) {
+    const you = run.snakes[0]
+    const head = crawlHead(you)
+    let want = you.heading
+    /*
+     * And from twenty seconds in, it curls.
+     *
+     * Because the two beats that run over that stretch are the ones about
+     * looping round onto your own tail, and the first cut of this played them
+     * over a snake going in a straight line eating. That is the one move
+     * nobody will find on their own and the one the whole game is for; a beat
+     * explaining it over a picture of something else is worse than no beat.
+     *
+     * Scripted rather than hoped for, which a cutscene is allowed to be.
+     */
+    if (t > 19 && t < 34) {
+      want = you.heading + 1
+    } else if (Math.hypot(head.x, head.y) > GARDEN_EDGE * 0.6) {
+      // Turn in, and keep turning: a snake wandering the rim of the garden is
+      // a snake the camera follows into an empty corner for ten seconds.
+      want = Math.atan2(-head.y, -head.x)
+    } else {
+      let near = Infinity
+      for (const p of run.pellets) {
+        const gap = Math.hypot(p.x - head.x, p.y - head.y)
+        if (gap < near) { near = gap; want = Math.atan2(p.y - head.y, p.x - head.x) }
+      }
+    }
+    run = crawlOn(run, { x: Math.cos(want), y: Math.sin(want), dash: false }, GARDEN_FIXED)
+    if (run.status !== 'playing') run = crawlAgain(run)
+    /*
+     * Kept long, however the round goes.
+     *
+     * A snake that comes back after being caught comes back the length it
+     * started, and a snake that short cannot close a ring at all: a full turn
+     * at this speed is nearly six units round and it is two and a half long.
+     * So the beats about looping played over a snake physically incapable of
+     * it, and the reason was a death fifteen seconds earlier that nothing in
+     * the picture showed.
+     */
+    if (run.snakes[0].length < 10) {
+      run = { ...run, snakes: run.snakes.map((sn, i) => (i === 0 ? { ...sn, length: 11 } : sn)) }
+    }
+    if (Math.round(t / GARDEN_FIXED) % 6 === 0) frames.push(run)
+  }
+  gardenFilmed = frames
+  return frames
+}
+
 /**
  * How long each recorded scene has footage for, in seconds.
  *
@@ -412,13 +517,24 @@ const MACHINES = ['#e8503a', '#f49ac1', '#5ad2e0', '#f0a04b']
  * road and the space story had one at the end.
  */
 export const FOOTAGE_SECONDS: Record<string, number> = {
-  road: FOOTAGE.length / 10,
-  space: FLIGHT.length / 10,
-  deep: DEEP.length / 10,
+  get road() { return roadFootage().length / 10 },
+  get space() { return FLIGHT().length / 10 },
+  get deep() { return DEEP().length / 10 },
+  /*
+   * The only one of these that has to be grown to be measured. It is a
+   * one-off at the moment the stories are first checked against their footage,
+   * which is a test and the first play of the cutscene, and never again.
+   */
+  get garden() { return gardenFilm().length / 10 },
 }
 
 /** The deep-space recording, for the test that counts what is in it. */
-export const DEEP_FOOTAGE: readonly Flight[] = DEEP
+export const DEEP_FOOTAGE = DEEP
+
+/** And the garden's, for the test that checks it actually closes a ring. */
+export const gardenFootage = gardenFilm
+
+
 
 export const SCENES: Record<string, (stage: Stage) => void> = {
   /**
@@ -661,7 +777,8 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
    * game's own code, rather than a picture of the game.
    */
   road({ ctx, w, h, clock }) {
-    const frame = FOOTAGE[Math.min(FOOTAGE.length - 1, Math.floor(clock * 10))]
+    const film = roadFootage()
+    const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
     const lane = Math.min(w / (ROAD_LANES + 1.6), h / (ROAD_SIGHT * 0.55))
     drawRoadRun(ctx, frame, frame.lane, {
       lane,
@@ -680,8 +797,21 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
    * phone held either way round without anything being laid out twice.
    */
   space({ ctx, w, h, clock }) {
-    const frame = FLIGHT[Math.min(FLIGHT.length - 1, Math.floor(clock * 10))]
+    const film = FLIGHT()
+    const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
     drawFlight(ctx, frame, { w, h, clock }, clock * 0.3)
+  },
+
+  /**
+   * The garden: a snake going about its business.
+   *
+   * Drawn by the game's own code at the game's own size, so what the beats
+   * talk about is what is on the screen while they say it.
+   */
+  garden({ ctx, w, h, clock }) {
+    const film = gardenFilm()
+    const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
+    drawGarden(ctx, frame, { w, h, clock })
   },
 
   /**
@@ -692,7 +822,8 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
    * and the ship visibly drifting against a current it is not steering into.
    */
   deep({ ctx, w, h, clock }) {
-    const frame = DEEP[Math.min(DEEP.length - 1, Math.floor(clock * 10))]
+    const film = DEEP()
+    const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
     drawFlight(ctx, frame, { w, h, clock }, clock * 0.3)
   },
 

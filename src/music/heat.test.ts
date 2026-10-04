@@ -80,7 +80,7 @@ describe('the loops that heat up', () => {
   it('covers every game that has a loop running under it', () => {
     // The thinking track is the exception and is meant to be: it plays while a
     // question is on screen and is supposed to sit still.
-    expect(heated.sort()).toEqual(['cavern', 'chase', 'pipes', 'road', 'space'])
+    expect(heated.sort()).toEqual(['cavern', 'chase', 'garden', 'pipes', 'road', 'space'])
   })
 
   it('keeps the same number of bars at every heat', () => {
