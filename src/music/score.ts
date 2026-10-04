@@ -2421,7 +2421,33 @@ export const CLACK: Track = {
   parts: [{ wave: 'triangle', gain: 0.018, sustain: 0.15, pattern: 'A4 E4 ' }],
 }
 
+/**
+ * A find that takes the whole row and column with it.
+ *
+ * The biggest thing in the game, and it needed its own noise: it was sharing
+ * one with an ordinary run of two, which made the best moment in a chamber
+ * sound exactly like the second-best.
+ */
+export const HAUL: Track = {
+  name: 'Haul',
+  beatsPerMinute: 190,
+  parts: [
+    { wave: 'piano', gain: 0.07, sustain: 0.9, chord: [0, 4, 7], pattern: 'A4 .  E5 .  A5 .  .  .  ' },
+    { wave: 'bell', gain: 0.04, sustain: 1, pattern: '-  -  E5 .  A5 .  C6 .  ' },
+    { wave: 'pluck', gain: 0.05, sustain: 0.6, pattern: 'A2 .  A2 .  E3 .  .  .  ' },
+  ],
+}
+
+/** The board handing you something new when there was nothing left to find. */
+export const FRESH: Track = {
+  name: 'Fresh',
+  beatsPerMinute: 230,
+  parts: [{ wave: 'bell', gain: 0.045, sustain: 0.9, pattern: 'E5 A5 C6 ' }],
+}
+
 export const FLOOD_CUES = {
+  haul: HAUL,
+  fresh: FRESH,
   crunch: CRUNCH,
   chain: CHAIN,
   clunk: CLUNK,

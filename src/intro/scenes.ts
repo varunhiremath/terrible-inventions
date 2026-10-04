@@ -50,9 +50,9 @@ import {
 import { drawRun as drawGarden } from '../snake/draw'
 import { drawRun as drawFlood } from '../sums/draw'
 import {
-  newRun as newFlood, step as stepFlood, tap as tapFlood, type Run as Flood,
+  newRun as newFlood, step as stepFlood, grab as grabFlood, reach as reachFlood,
+  release as releaseFlood, findsOn as floodFinds, type Run as Flood,
 } from '../sums/run'
-import { COLS as FLOOD_COLS, isRight as isRightSum } from '../sums/level'
 import { drawRun as drawPencil } from '../puzzles/draw'
 import {
   newRun as newPencil, touch as touchPencil, drag as dragPencil, lift as liftPencil,
@@ -595,22 +595,42 @@ let floodFilmed: Flood[] | null = null
 function floodFilm(): Flood[] {
   if (floodFilmed) return floodFilmed
   const frames: Flood[] = []
-  let run = newFlood(2, 1100, 99, 0, 12)
+  let run = newFlood(2, 1200, 99, 0, 12)
   const step = 1 / 60
   let waited = 0
+  /** Partway through dragging a find: which blocks of it are under the finger. */
+  let drawing: number[] | null = null
+  let got = 0
+
   for (let t = 0; t < 46; t += step) {
     waited += step
-    if (waited > 1.35 && run.status === 'playing') {
+    if (drawing && waited > 0.16) {
       waited = 0
-      // Two deliberate misses, far enough apart to read as two mistakes.
-      const slip = (t > 11 && t < 12.5) || (t > 19.5 && t < 21)
-      const i = run.cells.findIndex((c) => isRightSum(c.sum) !== slip)
-      if (i >= 0) run = tapFlood(run, i % FLOOD_COLS, Math.floor(i / FLOOD_COLS))
+      got += 1
+      if (got <= drawing.length - 1) {
+        run = reachFlood(run, drawing[got])
+      } else {
+        // Held on the finished selection for a moment before letting go, so
+        // the green that says "this reads as something" is actually seen.
+        run = releaseFlood(run)
+        drawing = null
+      }
+    } else if (!drawing && waited > 1.1) {
+      waited = 0
+      const found = floodFinds(run.cells, 1)[0]
+      if (found) {
+        drawing = found.cells
+        got = 0
+        run = grabFlood(run, found.cells[0])
+      }
     }
     run = stepFlood(run, step)
     // Never finishes: the footage is a chamber being worked at, and a run that
     // ends halfway through leaves the beats talking over a still picture.
-    if (run.status !== 'playing') run = { ...newFlood(run.level + 1, 1100, 99, run.score, 12), water: 0.3 }
+    if (run.status !== 'playing') {
+      run = { ...newFlood(run.level + 1, 1200, 99, run.score, 12), water: 0.3 }
+      drawing = null
+    }
     if (frames.length < Math.floor(t * 10) + 1) frames.push(run)
   }
   floodFilmed = frames

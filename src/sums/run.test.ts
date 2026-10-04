@@ -1,260 +1,335 @@
 import { describe, expect, it } from 'vitest'
+import { makeRng } from '../engine/rng'
 import {
-  CELLS, COLS, DRAIN, LEAST_TRUE, LIVES, MOST_COMBO, ROWS, SURGE, TO_CLEAR, isRight,
+  BANDS, CELLS, COLS, DRAIN_PER_BLOCK, LEAST_FINDS, LIVES, ROWS, SURGE, TO_CLEAR,
+  at, bandFor, colOf, rowOf, writeFind,
 } from './level'
-import { FIXED, LOUDEST, breakable, newRun, riseFor, step, tap, tryAgain, type Run } from './run'
+import { LEAST_FIND, readLine } from './find'
+import {
+  FIXED, LOUDEST, blastOf, findsOn, grab, letGo, newRun, reach, release, riseFor, runBetween,
+  step, tryAgain, worthOf, type FloodEvent, type Run,
+} from './run'
 
-/** Run a whole run forward, always tapping the first true one. */
-function play(run: Run, seconds: number, tapEvery = 0.5): Run {
-  let next = run
-  let since = 0
-  for (let t = 0; t < seconds; t += FIXED) {
-    next = step(next, FIXED)
-    since += FIXED
-    if (since >= tapEvery) {
-      since = 0
-      const i = next.cells.findIndex((c) => isRight(c.sum))
-      if (i >= 0) next = tap(next, i % COLS, Math.floor(i / COLS))
-    }
-    if (next.status !== 'playing') break
-  }
-  return next
+/** Play a find through the real finger: down on the first block, up on the last. */
+function take(run: Run, cells: number[]): Run {
+  let on = grab(run, cells[0])
+  for (const cell of cells.slice(1)) on = reach(on, cell)
+  return release(on)
 }
 
-describe('the board', () => {
-  it('is the shape it says it is', () => {
+/** The first find on the board, as the player would have to see it. */
+const firstFind = (run: Run) => findsOn(run.cells, 1)[0] ?? null
+
+describe('a board', () => {
+  it('is the size it says it is, with every block different', () => {
     const run = newRun()
     expect(run.cells).toHaveLength(CELLS)
-    expect(run.cells.every((c) => c.lift === 0)).toBe(true)
     expect(new Set(run.cells.map((c) => c.id)).size).toBe(CELLS)
+    expect(run.cells.every((c) => c.lift === 0)).toBe(true)
   })
 
-  it('always has something that can be broken, however long it is played', () => {
+  it('always has something to find on it, in every band', () => {
     /*
-     * The promise. Everything else in this game can go wrong and still be a
-     * game; a board with no legal move is a player watching the water come up
-     * with nothing to do about it and no way of knowing it is not their fault.
-     *
-     * So it is checked after every single tap of a long game rather than on a
-     * fresh board, because a fresh board is the easy case — the refills are
-     * where a promise like this gets lost.
+     * The promise. A grid of randomly chosen numbers and signs holds a true
+     * line about never, so the finds are written in first — and this checks the
+     * board that comes out, not the writing that went in.
      */
-    for (let seed = 1; seed <= 25; seed++) {
-      let run = newRun(1, 1150, 99, 0, seed)
-      for (let i = 0; i < 300; i++) {
-        expect(breakable(run), `seed ${seed} tap ${i}`).toBeGreaterThanOrEqual(LEAST_TRUE)
-        const j = run.cells.findIndex((c) => isRight(c.sum))
-        run = tap(run, j % COLS, Math.floor(j / COLS))
+    for (let rating = 800; rating <= 1500; rating += 100) {
+      for (let seed = 1; seed <= 60; seed++) {
+        const run = newRun(1, rating, LIVES, 0, seed)
+        expect(findsOn(run.cells, LEAST_FINDS).length, `rating ${rating} seed ${seed}`)
+          .toBeGreaterThanOrEqual(LEAST_FINDS)
+      }
+    }
+  })
+
+  it('keeps the promise through a long game, not just on a fresh board', () => {
+    // The refills are where a promise like this gets lost.
+    for (let seed = 1; seed <= 12; seed++) {
+      let run = newRun(1, 1200, 99, 0, seed)
+      for (let go = 0; go < 60; go++) {
+        const found = firstFind(run)
+        expect(found, `seed ${seed} go ${go}: nothing to find`).not.toBe(null)
+        if (!found) break
+        run = take(run, found.cells)
         run = { ...run, left: TO_CLEAR, status: 'playing', water: 0 }
       }
     }
   })
 
-  it('keeps every id different, so the drawing can follow a cell', () => {
-    let run = newRun()
-    const seen = new Set(run.cells.map((c) => c.id))
-    for (let i = 0; i < 200; i++) {
-      const j = run.cells.findIndex((c) => isRight(c.sum))
-      run = tap(run, j % COLS, Math.floor(j / COLS))
-      run = { ...run, left: TO_CLEAR, status: 'playing' }
-      for (const cell of run.cells) {
-        if (!seen.has(cell.id)) seen.add(cell.id)
+  it('does not give the planted finds away by the size of their numbers', () => {
+    /*
+     * The filler is drawn from the same range the finds use. It was not, in the
+     * first cut — the filler went up to the band's maximum while a planted
+     * step started small — and a board where the answer is the group of small
+     * numbers is a board you can read without doing any arithmetic.
+     */
+    const run = newRun(1, 1200, LIVES, 0, 4)
+    const inFinds = new Set(findsOn(run.cells).flatMap((f) => f.cells))
+    const sizeOf = (only: boolean) => {
+      const ns = run.cells
+        .map((c, i) => ({ c, i }))
+        .filter(({ c, i }) => c.token.kind === 'num' && inFinds.has(i) === only)
+        .map(({ c }) => (c.token as { n: number }).n)
+      return ns.reduce((a, b) => a + b, 0) / Math.max(1, ns.length)
+    }
+    const inside = sizeOf(true)
+    const outside = sizeOf(false)
+    expect(Math.abs(inside - outside) / Math.max(inside, outside),
+      `planted ${inside.toFixed(0)} vs filler ${outside.toFixed(0)}`).toBeLessThan(0.6)
+  })
+
+  it('gets harder with the rating and with how deep he is', () => {
+    expect(bandFor(800, 1).name).toBe('adding')
+    expect(bandFor(1500, 1).name).toBe('the lot')
+    // Four chambers in, the same rating has opened something new up.
+    expect(BANDS.indexOf(bandFor(800, 9))).toBeGreaterThan(BANDS.indexOf(bandFor(800, 1)))
+    // And it stops at the top rather than running off the end.
+    expect(bandFor(1500, 99).name).toBe('the lot')
+  })
+
+  it('only ever writes a find that reads as one', () => {
+    // The generator and the reader are separate pieces of code and have to
+    // agree; this is the only place they are put in a room together.
+    for (const band of BANDS) {
+      const rng = makeRng(9)
+      for (const kind of ['sum', ...band.runs] as const) {
+        for (let go = 0; go < 120; go++) {
+          const want = kind === 'sum' ? 5 : rng.pick([4, 5, 6])
+          const tokens = writeFind(kind, band, want, rng)
+          if (!tokens) continue
+          expect(readLine(tokens), `${band.name}/${kind}: ${tokens.map((t) => 'n' in t ? t.n : 'op' in t ? t.op : '=').join(' ')}`)
+            .not.toBe(null)
+          // And backwards, since half of them are written that way.
+          expect(tokens.length).toBeGreaterThanOrEqual(LEAST_FIND)
+        }
       }
-      expect(new Set(run.cells.map((c) => c.id)).size, `tap ${i}`).toBe(CELLS)
     }
   })
 })
 
-describe('a tap', () => {
-  it('drops the column and fills the top when it is right', () => {
-    let run = newRun(1, 1000, LIVES, 0, 4)
-    const i = run.cells.findIndex((c) => isRight(c.sum) && Math.floor(c.id / 1) > COLS * 3)
-    const col = i % COLS
-    const row = Math.floor(i / COLS)
-    const above = run.cells.slice(0, row).map((_, r) => run.cells[r * COLS + col].id)
-    run = tap(run, col, row)
-    // Everything that was above it is now one row lower, and falling.
-    for (let r = 0; r < row; r++) {
-      expect(run.cells[(r + 1) * COLS + col].id).toBe(above[r])
-      expect(run.cells[(r + 1) * COLS + col].lift).toBeGreaterThan(0)
-    }
-    expect(run.cells[col].id).toBeGreaterThan(CELLS)
+describe('a selection', () => {
+  it('is the run between where the finger went down and where it is', () => {
+    expect(runBetween(at(1, 2), at(4, 2))).toEqual([at(1, 2), at(2, 2), at(3, 2), at(4, 2)])
+    // Backwards is the same blocks, read the other way.
+    expect(runBetween(at(4, 2), at(1, 2))).toEqual([at(4, 2), at(3, 2), at(2, 2), at(1, 2)])
+    expect(runBetween(at(3, 0), at(3, 3))).toEqual([at(3, 0), at(3, 1), at(3, 2), at(3, 3)])
   })
 
-  it('leaves the other columns alone', () => {
-    let run = newRun(1, 1000, LIVES, 0, 9)
-    const i = run.cells.findIndex((c) => isRight(c.sum))
-    const col = i % COLS
-    const before = run.cells.map((c) => c.id)
-    run = tap(run, col, Math.floor(i / COLS))
-    for (let c = 0; c < COLS; c++) {
-      if (c === col) continue
-      for (let r = 0; r < ROWS; r++) {
-        expect(run.cells[r * COLS + c].id).toBe(before[r * COLS + c])
-      }
+  it('is nothing at all when the two are not in a line', () => {
+    expect(runBetween(at(1, 1), at(3, 4))).toEqual([])
+  })
+
+  it('cannot be tied in a knot by a wandering finger', () => {
+    /*
+     * The selection is an anchor and a head, not a path — so a finger that
+     * goes out, comes back and sets off again still leaves a straight run.
+     */
+    let run = grab(newRun(), at(1, 3))
+    run = reach(run, at(5, 3))
+    run = reach(run, at(2, 3))
+    run = reach(run, at(4, 3))
+    expect(run.picked).toEqual([at(1, 3), at(2, 3), at(3, 3), at(4, 3)])
+    // And across to another row, which is not a line, so nothing changes.
+    const was = run.picked
+    run = reach(run, at(4, 6))
+    expect(run.picked).toEqual(was)
+  })
+
+  it('says while it is being dragged whether it reads as something', () => {
+    // So the blocks can light up under the finger before it is let go.
+    for (let seed = 1; seed <= 20; seed++) {
+      const run = newRun(1, 1200, LIVES, 0, seed)
+      const found = firstFind(run)
+      if (!found) continue
+      let on = grab(run, found.cells[0])
+      for (const cell of found.cells.slice(1)) on = reach(on, cell)
+      expect(on.reading, `seed ${seed}`).not.toBe(null)
+      expect(on.reading?.length).toBe(found.cells.length)
+    }
+  })
+})
+
+describe('letting go', () => {
+  it('crushes a find, and takes water out for every block of it', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const run = { ...newRun(1, 1200, LIVES, 0, seed), water: 0.8 }
+      const found = firstFind(run)
+      if (!found) continue
+      const after = take(run, found.cells)
+      const gone = blastOf(found.cells).length
+      expect(after.water, `seed ${seed}`).toBeCloseTo(0.8 - gone * DRAIN_PER_BLOCK, 5)
+      expect(after.left).toBe(TO_CLEAR - gone)
+      expect(after.score).toBeGreaterThan(0)
+      expect(after.said?.length).toBe(found.cells.length)
     }
   })
 
-  it('costs water and the streak when it is wrong, and nothing else', () => {
-    const run = { ...newRun(1, 1000, LIVES, 0, 2), water: 0.5, streak: 3, lives: 3 }
-    const i = run.cells.findIndex((c) => !isRight(c.sum))
-    const after = tap(run, i % COLS, Math.floor(i / COLS))
-    expect(after.water).toBeCloseTo(0.5 + SURGE)
+  it('costs a little water and the streak when it is not a find, and nothing else', () => {
+    const run = { ...newRun(1, 1000, LIVES, 0, 3), water: 0.5, streak: 3 }
+    // A run that is not a find: four blocks is long enough to be judged.
+    const wrong = [at(0, 0), at(1, 0), at(2, 0), at(3, 0)]
+    const reads = readLine(wrong.map((i) => run.cells[i].token))
+    if (reads) return
+    const after = take(run, wrong)
+    expect(after.water).toBeCloseTo(0.5 + SURGE, 5)
     expect(after.streak).toBe(0)
-    // Not a life, and not the board either: a wrong answer does not take the
-    // block away, because the block is the thing you got wrong.
-    expect(after.lives).toBe(3)
+    expect(after.lives).toBe(LIVES)
     expect(after.cells.map((c) => c.id)).toEqual(run.cells.map((c) => c.id))
-    expect(after.events).toEqual(['wrong'])
+    expect(after.events).toEqual(['miss'])
   })
 
-  it('drains the water and never below empty', () => {
-    const run = { ...newRun(1, 1000, LIVES, 0, 3), water: DRAIN / 2 }
-    const i = run.cells.findIndex((c) => isRight(c.sum))
-    const after = tap(run, i % COLS, Math.floor(i / COLS))
-    expect(after.water).toBe(0)
-    expect(after.events).toContain('drain')
+  it('costs nothing at all for a selection too short to be anything', () => {
+    /*
+     * Looking is how this game is played. A finger that goes down, drags two
+     * blocks and thinks better of it has not made a mistake.
+     */
+    const run = { ...newRun(1, 1000, LIVES, 0, 3), water: 0.4 }
+    const after = take(run, [at(0, 0), at(1, 0), at(2, 0)])
+    expect(after.water).toBe(0.4)
+    expect(after.streak).toBe(run.streak)
+    expect(after.events).toEqual([])
   })
 
-  it('pays more for a run of right answers, up to a point', () => {
-    let run = newRun(1, 1000, 99, 0, 6)
-    const paid: number[] = []
-    for (let i = 0; i < MOST_COMBO + 3; i++) {
-      const was = run.score
-      const j = run.cells.findIndex((c) => isRight(c.sum))
-      run = tap(run, j % COLS, Math.floor(j / COLS))
-      run = { ...run, left: TO_CLEAR, status: 'playing' }
-      paid.push(run.score - was)
+  it('pays far more for a long find than for a short one', () => {
+    // Not twice as much for twice as long — much more, because that is the
+    // thing worth hunting for.
+    expect(worthOf(8, 1) / worthOf(4, 1)).toBeGreaterThan(4)
+    for (let n = LEAST_FIND; n < 9; n++) {
+      expect(worthOf(n + 1, 1), `${n} to ${n + 1}`).toBeGreaterThan(worthOf(n, 1))
     }
-    expect(paid[0]).toBeLessThan(paid[1])
-    expect(run.streak).toBe(MOST_COMBO)
-    expect(paid[MOST_COMBO + 1]).toBe(paid[MOST_COMBO + 2])
+    // And a run of them is worth more again.
+    expect(worthOf(5, 3)).toBeGreaterThan(worthOf(5, 1))
   })
 
-  it('does nothing off the board, or once it is over', () => {
-    const run = newRun()
-    expect(tap(run, -1, 0)).toBe(run)
-    expect(tap(run, COLS, 0)).toBe(run)
-    expect(tap(run, 0, ROWS)).toBe(run)
-    const done = { ...run, status: 'saved' as const }
-    expect(tap(done, 0, 0)).toBe(done)
+  it('takes more of the board than it covers, once a find is long', () => {
+    const short = blastOf([at(1, 4), at(2, 4), at(3, 4), at(4, 4)])
+    expect(short).toHaveLength(4)
+
+    // Five or six: the blocks either side of it as well.
+    const middling = blastOf([at(1, 4), at(2, 4), at(3, 4), at(4, 4), at(5, 4)])
+    expect(middling.length).toBeGreaterThan(5)
+    expect(middling).toContain(at(1, 3))
+    expect(middling).toContain(at(1, 5))
+
+    // Seven: the whole row and the whole column it crosses.
+    const whole = blastOf(Array.from({ length: 7 }, (_, i) => at(i, 4)))
+    for (let c = 0; c < COLS; c++) expect(whole).toContain(at(c, 4))
+    for (let r = 0; r < ROWS; r++) expect(whole).toContain(at(3, r))
+  })
+
+  it('reaches the biggest prize going across as well as going down', () => {
+    // A row is seven blocks wide, so a threshold of eight would have made the
+    // best thing in the game a downwards-only rule nobody would ever guess.
+    const across = blastOf(Array.from({ length: COLS }, (_, i) => at(i, 2)))
+    const down = blastOf(Array.from({ length: COLS }, (_, i) => at(2, i)))
+    expect(across.length).toBeGreaterThan(COLS + 2)
+    expect(down.length).toBeGreaterThan(COLS + 2)
+  })
+
+  it('drops the blocks above a crush and fills the top', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const run = newRun(1, 1200, LIVES, 0, seed)
+      const found = firstFind(run)
+      if (!found) continue
+      const after = take(run, found.cells)
+      expect(after.cells).toHaveLength(CELLS)
+      expect(new Set(after.cells.map((c) => c.id)).size, `seed ${seed}: a block twice`).toBe(CELLS)
+      // Something is falling, and nothing is below where it belongs.
+      expect(after.cells.some((c) => c.lift > 0), `seed ${seed}`).toBe(true)
+      expect(after.cells.every((c) => c.lift >= 0)).toBe(true)
+    }
+  })
+
+  it('settles everything it set falling', () => {
+    let run = newRun(1, 1200, 99, 0, 5)
+    const found = firstFind(run)
+    if (!found) return
+    run = take(run, found.cells)
+    for (let i = 0; i < 300; i++) run = step(run, FIXED)
+    expect(run.cells.every((c) => c.lift === 0)).toBe(true)
   })
 })
 
 describe('the water', () => {
-  it('comes up on its own and faster every level', () => {
-    const first = step(newRun(1), 1)
-    const tenth = step(newRun(10), 1)
-    expect(first.water).toBeCloseTo(riseFor(1))
-    expect(tenth.water).toBeGreaterThan(first.water)
+  it('comes up on its own and faster every chamber, up to a limit', () => {
+    expect(step(newRun(1), 1).water).toBeCloseTo(riseFor(1))
+    expect(riseFor(10)).toBeGreaterThan(riseFor(1))
+    expect(riseFor(400)).toBe(riseFor(200))
   })
 
   it('takes a life when it goes over his head, and ends it on the last one', () => {
-    const nearly = { ...newRun(1, 1000, 2), water: 0.999 }
-    const soaked = step(nearly, 1)
+    const soaked = step({ ...newRun(1, 1000, 2), water: 0.999 }, 1)
     expect(soaked.status).toBe('soaked')
     expect(soaked.lives).toBe(1)
-    expect(soaked.events).toContain('soaked')
-
-    const last = { ...newRun(1, 1000, 1), water: 0.999 }
-    const over = step(last, 1)
+    const over = step({ ...newRun(1, 1000, 1), water: 0.999 }, 1)
     expect(over.status).toBe('over')
-    expect(over.events).toContain('over')
   })
 
-  it('can be beaten at a pace a person can read at', () => {
+  it('gives him time to actually look for a find', () => {
     /*
-     * The balance question, and the only one that matters: is there time to
-     * *read* the sums? Fourteen right answers at one every two and a half
-     * seconds — slow, for a nine-year-old who has to work some of them out —
-     * should still get him there with water to spare.
+     * The balance question, and the only one that matters now that the game is
+     * hunting rather than tapping. Scanning sixty-three blocks for a run of
+     * square numbers is twenty seconds of work for a nine-year-old, not two —
+     * so the question is how many seconds a chamber allows per find, and the
+     * answer has to be measured.
      */
-    for (let seed = 1; seed <= 20; seed++) {
-      const run = play(newRun(1, 1000, LIVES, 0, seed), 120, 2.5)
-      expect(run.status, `seed ${seed} ended ${run.status} at ${run.water.toFixed(2)}`).toBe('saved')
-    }
-  })
-
-  it('cannot be beaten by ignoring it', () => {
-    // The other half: a player who taps nothing goes under, so the water is a
-    // real clock and not decoration.
-    const run = play(newRun(1, 1000, 1, 0, 1), 120, 1e9)
-    expect(run.status).toBe('over')
-  })
-
-  it('gets harder every level, but never faster than a person can read', () => {
-    /*
-     * The pacing, stated as the thing it is: how many seconds a chamber gives
-     * you per answer. It must come down level by level, or the game never gets
-     * harder; and it must not come down past about a second and a half, or it
-     * stops being a game about arithmetic and becomes one about luck.
-     *
-     * The first draft of these constants demanded an answer every 1.3 seconds
-     * by the tenth chamber and was impossible by the thirtieth — which only
-     * showed up when it was measured like this.
-     */
-    const paceOf = (level: number): number => {
+    const paceOf = (level: number, rating: number): number => {
       let slowest = 0
-      for (let p = 0.6; p <= 5; p += 0.1) {
+      for (let gap = 2; gap <= 40; gap += 2) {
         let every = true
-        for (let seed = 1; seed <= 10; seed++) {
-          if (play(newRun(level, 1100, LIVES, 0, seed), 200, p).status !== 'saved') {
-            every = false
-            break
+        for (let seed = 1; seed <= 8; seed++) {
+          let run = newRun(level, rating, LIVES, 0, seed)
+          let since = 0
+          for (let t = 0; t < 600; t += FIXED) {
+            run = step(run, FIXED)
+            since += FIXED
+            if (since >= gap) {
+              since = 0
+              const found = firstFind(run)
+              if (found) run = take(run, found.cells)
+            }
+            if (run.status !== 'playing') break
           }
+          if (run.status !== 'saved') { every = false; break }
         }
-        if (every) slowest = p
+        if (every) slowest = gap
       }
       return slowest
     }
 
-    const paces = [1, 5, 10, 20, 40].map(paceOf)
-    const said = paces.map((p, i) => `L${[1, 5, 10, 20, 40][i]} ${p.toFixed(1)}s`).join(', ')
-    // Comfortable at the start: time to work one out on your fingers.
-    expect(paces[0], said).toBeGreaterThanOrEqual(3)
-    // Harder as it goes, and the deepest chamber still has a floor.
-    for (let i = 1; i < paces.length; i++) {
-      expect(paces[i], said).toBeLessThanOrEqual(paces[i - 1])
-    }
-    expect(paces[2], said).toBeLessThan(paces[0])
-    expect(paces[paces.length - 1], said).toBeGreaterThanOrEqual(1.5)
+    const first = paceOf(1, 1000)
+    const tenth = paceOf(10, 1200)
+    const said = `first ${first}s a find, tenth ${tenth}s`
+    // Room to think at the start.
+    expect(first, said).toBeGreaterThanOrEqual(14)
+    // Harder later, but never a game of luck.
+    expect(tenth, said).toBeLessThan(first)
+    expect(tenth, said).toBeGreaterThanOrEqual(8)
+  }, 60_000)
+
+  it('cannot be beaten by ignoring it', () => {
+    let run = newRun(1, 1000, 1)
+    for (let t = 0; t < 400 && run.status === 'playing'; t += FIXED) run = step(run, FIXED)
+    expect(run.status).toBe('over')
   })
 })
 
 describe('a finished run', () => {
   it('raises no events, ever again', () => {
-    /*
-     * The crackle. An event raised every frame of a finished game is a noise
-     * played sixty times a second, which is what it sounds like.
-     */
-    let run = { ...newRun(1, 1000, 1), water: 0.999 }
-    run = step(run, 1)
+    let run = step({ ...newRun(1, 1000, 1), water: 0.999 }, 1)
     expect(run.events).toContain('over')
     for (let i = 0; i < 600; i++) {
       run = step(run, FIXED)
       expect(run.events).toEqual([])
     }
-  })
-
-  it('does not let the water keep rising after it is lost', () => {
-    let run = { ...newRun(1, 1000, 1), water: 0.999 }
-    run = step(run, 1)
-    const level = run.water
-    for (let i = 0; i < 120; i++) run = step(run, FIXED)
-    expect(run.water).toBe(level)
-  })
-
-  it('says it is saved the moment the last one is broken, not a frame later', () => {
-    let run = { ...newRun(1, 1000, LIVES, 0, 8), left: 1 }
-    const i = run.cells.findIndex((c) => isRight(c.sum))
-    run = tap(run, i % COLS, Math.floor(i / COLS))
-    expect(run.status).toBe('saved')
-    expect(run.events).toContain('saved')
+    // And a finger does nothing on it.
+    expect(grab(run, 0)).toBe(run)
+    expect(release(run)).toBe(run)
   })
 
   it('comes back with the score and the lives it had', () => {
-    const run = { ...newRun(1, 1000, 2, 1700), status: 'soaked' as const }
-    const again = tryAgain(run, 1000)
+    const again = tryAgain({ ...newRun(1, 1000, 2, 1700), status: 'soaked' as const }, 1000)
     expect(again.status).toBe('playing')
     expect(again.score).toBe(1700)
     expect(again.lives).toBe(2)
@@ -263,67 +338,60 @@ describe('a finished run', () => {
   })
 })
 
-describe('the flashes', () => {
-  it('outlive the cell they came from', () => {
-    // The whole reason they are kept beside the board: the crushed cell is
-    // replaced by its neighbour before anything could draw it.
-    let run = newRun(1, 1000, LIVES, 0, 5)
-    const i = run.cells.findIndex((c) => isRight(c.sum))
-    run = tap(run, i % COLS, Math.floor(i / COLS))
-    expect(run.pops).toHaveLength(1)
-    expect(run.pops[0].good).toBe(true)
-    run = step(run, FIXED)
-    expect(run.pops).toHaveLength(1)
-  })
+describe('the noises', () => {
+  it('has a place in the order for every event the game can raise', () => {
+    const raised = new Set<FloodEvent>()
+    const watch = (run: Run) => { for (const e of run.events) raised.add(e) }
 
-  it('clear themselves up rather than piling up for ever', () => {
-    let run = newRun(1, 1000, 99, 0, 5)
-    for (let i = 0; i < 20; i++) {
-      const j = run.cells.findIndex((c) => isRight(c.sum))
-      run = tap(run, j % COLS, Math.floor(j / COLS))
-      run = { ...run, left: TO_CLEAR, status: 'playing' }
-      for (let f = 0; f < 30; f++) run = step(run, FIXED)
+    for (let seed = 1; seed <= 25; seed++) {
+      let run = newRun(1, 1200, 2, 0, seed)
+      for (let go = 0; go < 30; go++) {
+        const found = firstFind(run)
+        if (!found) break
+        // Played well.
+        let on = grab(run, found.cells[0]); watch(on)
+        for (const cell of found.cells.slice(1)) { on = reach(on, cell); watch(on) }
+        run = release(on); watch(run)
+        for (let f = 0; f < 60; f++) { run = step(run, FIXED); watch(run) }
+        // And badly: a run that is almost certainly not a find.
+        const wrong = [at(0, 8), at(1, 8), at(2, 8), at(3, 8), at(4, 8)]
+        let bad = grab(run, wrong[0])
+        for (const cell of wrong.slice(1)) bad = reach(bad, cell)
+        const judged = release(bad)
+        watch(judged)
+        if (judged.events.includes('miss')) run = judged
+        if (run.status !== 'playing') run = { ...run, status: 'playing', left: TO_CLEAR, water: 0.2 }
+      }
     }
-    expect(run.pops).toHaveLength(0)
+
+    // And the two ends of the game, which only happen by doing nothing.
+    for (const lives of [2, 1]) {
+      let run = newRun(1, 1000, lives)
+      for (let t = 0; t < 400 && run.status === 'playing'; t += FIXED) {
+        run = step(run, FIXED); watch(run)
+      }
+    }
+    // And a chamber cleared.
+    let won = newRun(1, 1200, 3, 0, 2)
+    won = { ...won, left: 1 }
+    const found = firstFind(won)
+    if (found) watch(take(won, found.cells))
+
+    for (const e of raised) expect(LOUDEST, `${e} is not in the order`).toContain(e)
+    expect([...raised].sort()).toEqual([...LOUDEST].sort())
+  }, 60_000)
+
+  it('lets a drag be abandoned without judging it', () => {
+    const run = reach(grab(newRun(), at(0, 0)), at(4, 0))
+    const gone = letGo(run)
+    expect(gone.picked).toEqual([])
+    expect(gone.events).toEqual([])
+    expect(gone.water).toBe(run.water)
   })
 })
 
-describe('the noises', () => {
-  it('has a place in the order for every event the game can raise', () => {
-    // An event missing from this list is an event the screen silently drops.
-    const raised = new Set<string>()
-    const watch = (run: Run) => { for (const e of run.events) raised.add(e) }
-
-    // Somebody playing well: mostly right, so a streak builds, with the odd
-    // wrong one. This is where everything but the drowning comes from.
-    for (let seed = 1; seed <= 30; seed++) {
-      let run = newRun(1, 1000, 2, 0, seed)
-      for (let t = 0; t < 60; t += FIXED) {
-        run = step(run, FIXED)
-        watch(run)
-        if (t % 0.5 < FIXED) {
-          const slip = Math.floor(t / 0.5) % 7 === 6
-          const i = run.cells.findIndex((c) => (slip ? !isRight(c.sum) : isRight(c.sum)))
-          if (i >= 0) {
-            run = tap(run, i % COLS, Math.floor(i / COLS))
-            watch(run)
-          }
-        }
-        if (run.status !== 'playing') run = { ...run, status: 'playing', left: TO_CLEAR }
-      }
-    }
-
-    // And somebody doing nothing at all, twice over, which is the only way to
-    // hear the water take a life and then the last one.
-    for (const lives of [2, 1]) {
-      let run = newRun(1, 1000, lives)
-      for (let t = 0; t < 120 && run.status === 'playing'; t += FIXED) {
-        run = step(run, FIXED)
-        watch(run)
-      }
-    }
-    for (const e of raised) expect(LOUDEST, `${e} is not in the order`).toContain(e)
-    // And the other way: nothing in the order that the game never raises.
-    expect([...raised].sort()).toEqual([...LOUDEST].sort())
+describe('the shape of the board', () => {
+  it('agrees with itself about where a block is', () => {
+    for (let i = 0; i < CELLS; i++) expect(at(colOf(i), rowOf(i))).toBe(i)
   })
 })

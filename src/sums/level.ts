@@ -2,212 +2,277 @@
  * The flood.
  *
  * "Blocks filled with equations, some correct and some wrong, and you can only
- * crush the correct ones. The goal is not to match colours but to find correct
- * relationships. And to make the game interesting keep some time challenge
- * like to save a person from water."
+ * crush the correct ones... keep some time challenge like to save a person
+ * from water."
  *
- * So the board is sums and the clock is a person. Water rises in a chamber
- * above the board; every equation you break takes some of it away, every one
- * you get wrong puts some back. There is no countdown anywhere — the timer is
- * a thing you are doing something about, which is the difference between a
- * game with a clock in it and a game about hurrying.
+ * And then: "he is good with maths so we can really challenge him. We can also
+ * add operators like powers. Sequences too. The bigger the sequence he finds
+ * the more points he gets and more blocks crushed."
  *
- * This is the only game in here where the maths *is* the game rather than the
- * price of another go at one, which is why the sums are pitched off the same
- * rating the rest of the app uses. A wall of sums a year too easy is a wall of
- * tapping; a year too hard is a wall of water.
+ * So the board is one number or one sign per block, and the game is dragging
+ * along a line that reads as something true — `2 + 3 = 5` is five blocks,
+ * `1 1 2 3 5 8` is six. Above it somebody is standing in a chamber the water
+ * is coming up in: every block crushed takes some of it away, so a long find
+ * is visibly a big gulp out of the tank. There is no countdown anywhere; the
+ * timer is a person, and the way to stop it is to be right.
+ *
+ * Nothing on this board is random in the way it looks. A grid of randomly
+ * chosen numbers and signs contains a true line about never, so the finds are
+ * written in first and the rest of the board is filled in around them.
  */
-import { makeRng, type Rng } from '../engine/rng'
+import type { Rng } from '../engine/rng'
+import { EQ, num, op, type FindKind, type Op, type Token } from './find'
 
-export const COLS = 5
-export const ROWS = 8
-
-/** How many on the board at once, which is also how many are in play. */
+export const COLS = 7
+export const ROWS = 9
 export const CELLS = COLS * ROWS
 
-export type Sign = '+' | '-' | '×' | '÷'
+export const at = (col: number, row: number): number => row * COLS + col
+export const colOf = (i: number): number => i % COLS
+export const rowOf = (i: number): number => Math.floor(i / COLS)
 
-export interface Sum {
-  /** The two sides and the sign, kept apart so the drawing can lay them out. */
-  a: number
-  b: number
-  sign: Sign
-  /** What the block claims the answer is. */
-  claim: number
-}
+// --- how hard ----------------------------------------------------------------
 
-/** What a sum actually comes to. */
-export function worksOut(sum: Sum): number {
-  switch (sum.sign) {
-    case '+': return sum.a + sum.b
-    case '-': return sum.a - sum.b
-    case '×': return sum.a * sum.b
-    case '÷': return sum.a / sum.b
-  }
-}
-
-/** Whether a block is one you are allowed to break. */
-export const isRight = (sum: Sum): boolean => worksOut(sum) === sum.claim
-
-/**
- * How hard the sums are, from the rating the rest of the app keeps.
- *
- * Five bands rather than a smooth curve, because the step from "both numbers
- * under ten" to "one of them over twenty" is a real step for a person and
- * pretending otherwise produces a band of sums that are all slightly wrong for
- * everybody.
- */
 export interface Band {
   name: string
-  signs: readonly Sign[]
-  /** The biggest either side gets. */
+  /** What may appear in an equation. */
+  ops: readonly Op[]
+  /** The biggest number that goes on a block in a planted find. */
   most: number
-  /** The biggest a times-table question gets. */
-  table: number
+  /** Which sequences are planted. */
+  runs: readonly FindKind[]
+  /** Whether equations with two operators in them are planted. */
+  twoStep: boolean
 }
 
 export const BANDS: readonly Band[] = [
-  { name: 'ones', signs: ['+', '-'], most: 9, table: 5 },
-  { name: 'tens', signs: ['+', '-'], most: 20, table: 6 },
-  { name: 'tables', signs: ['+', '-', '×'], most: 30, table: 9 },
-  { name: 'sharing', signs: ['+', '-', '×', '÷'], most: 50, table: 10 },
-  { name: 'the lot', signs: ['+', '-', '×', '÷'], most: 99, table: 12 },
+  { name: 'adding', ops: ['+', '-'], most: 20, runs: ['step'], twoStep: false },
+  { name: 'tables', ops: ['+', '-', '×'], most: 50, runs: ['step', 'times'], twoStep: false },
+  {
+    name: 'sharing', ops: ['+', '-', '×', '÷'], most: 99,
+    runs: ['step', 'times', 'square', 'triangle'], twoStep: false,
+  },
+  {
+    name: 'powers', ops: ['+', '-', '×', '÷', '^'], most: 144,
+    runs: ['step', 'times', 'square', 'triangle', 'fib', 'cube'], twoStep: true,
+  },
+  {
+    name: 'the lot', ops: ['+', '-', '×', '÷', '^'], most: 200,
+    runs: ['step', 'times', 'square', 'triangle', 'fib', 'cube', 'prime', 'doubleAdd'],
+    twoStep: true,
+  },
 ]
 
-/** Which band a rating lands in. The thresholds match the Lab's own bands. */
-export function bandFor(rating: number): Band {
-  if (rating < 950) return BANDS[0]
-  if (rating < 1050) return BANDS[1]
-  if (rating < 1150) return BANDS[2]
-  if (rating < 1300) return BANDS[3]
-  return BANDS[4]
+/**
+ * Which band, from the rating the rest of the app keeps and how deep he is.
+ *
+ * Both, rather than the rating alone. The rating says what he can do; the
+ * chamber says how long he has been at it, and a game that never shows him
+ * anything new until his rating moves is a game that looks finished after
+ * twenty minutes.
+ */
+export function bandFor(rating: number, level = 1): Band {
+  const fromRating =
+    rating < 950 ? 0 : rating < 1050 ? 1 : rating < 1150 ? 2 : rating < 1300 ? 3 : 4
+  const fromDepth = Math.floor((level - 1) / 4)
+  return BANDS[Math.min(BANDS.length - 1, fromRating + fromDepth)]
 }
 
-/**
- * A sum that is true.
- *
- * Division and subtraction are built backwards from the answer, so there are
- * no remainders and no negatives — a block reading `7-9=-2` is a correct
- * equation and a cruel one to put in front of somebody who has not met
- * negative numbers.
- */
-export function trueSum(band: Band, rng: Rng): Sum {
-  const sign = rng.pick(band.signs)
+// --- writing a find ----------------------------------------------------------
+
+const SQUARES = Array.from({ length: 20 }, (_, i) => (i + 1) * (i + 1))
+const TRIANGLES = Array.from({ length: 20 }, (_, i) => ((i + 1) * (i + 2)) / 2)
+const CUBES = Array.from({ length: 8 }, (_, i) => (i + 1) ** 3)
+const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71]
+
+/** A run of `want` consecutive entries from a list, starting somewhere random. */
+function fromList(list: readonly number[], want: number, most: number, rng: Rng): Token[] | null {
+  const fits = list.filter((_, i) => i + want <= list.length && list[i + want - 1] <= most)
+  if (fits.length === 0) return null
+  const start = list.indexOf(rng.pick(fits))
+  return list.slice(start, start + want).map(num)
+}
+
+/** An equation that is true, with no remainder and nothing below nought. */
+function anEquation(band: Band, rng: Rng, twoStep: boolean): Token[] {
+  const sign = rng.pick(band.ops)
+
+  if (sign === '^') {
+    const base = rng.int(2, 5)
+    const power = rng.int(2, base <= 3 ? 4 : 3)
+    return [num(base), op('^'), num(power), EQ, num(base ** power)]
+  }
+
+  let a: number
+  let b: number
+  let answer: number
   if (sign === '+') {
-    const a = rng.int(1, band.most)
-    const b = rng.int(1, band.most)
-    return { a, b, sign, claim: a + b }
+    a = rng.int(2, band.most)
+    b = rng.int(2, band.most)
+    answer = a + b
+  } else if (sign === '-') {
+    // Built backwards, so it never asks for a number below nought.
+    a = rng.int(3, band.most)
+    b = rng.int(1, a - 1)
+    answer = a - b
+  } else if (sign === '×') {
+    a = rng.int(2, Math.min(12, Math.max(3, Math.round(band.most / 8))))
+    b = rng.int(2, 12)
+    answer = a * b
+  } else {
+    // Also backwards: no remainders.
+    b = rng.int(2, 9)
+    answer = rng.int(2, Math.min(12, Math.max(3, Math.floor(band.most / b))))
+    a = b * answer
   }
-  if (sign === '-') {
-    const a = rng.int(2, band.most)
-    const b = rng.int(1, a - 1)
-    return { a, b, sign, claim: a - b }
-  }
-  if (sign === '×') {
-    const a = rng.int(2, band.table)
-    const b = rng.int(2, band.table)
-    return { a, b, sign, claim: a * b }
-  }
-  const b = rng.int(2, Math.min(9, band.table))
-  const answer = rng.int(2, band.table)
-  return { a: b * answer, b, sign, claim: answer }
+
+  if (!twoStep) return [num(a), op(sign), num(b), EQ, num(answer)]
+
+  /*
+   * A second operator, on the answer's side.
+   *
+   * On the right rather than mixed into the left, which keeps the two-step
+   * ones honest without making them a lesson in precedence before he has met
+   * one: `56 = 7 × 8` with something added is still read the same way round.
+   */
+  const extra = rng.int(2, 20)
+  return [num(a), op(sign), num(b), EQ, num(answer + extra), op('-'), num(extra)]
 }
 
-/**
- * How far wrong a wrong one is.
- *
- * This is the whole difficulty of the game and it is not the size of the
- * numbers. A block reading `7×8=91` is spotted without doing the sum, by
- * anybody who knows that seven eights is somewhere near fifty — so a wall of
- * those is a wall of glancing, not of arithmetic. A block reading `7×8=54` has
- * to be worked out.
- *
- * So a wrong one is wrong the way a person is wrong: out by one, out by ten,
- * off by the other number, or the digits the wrong way round.
- */
-export const SLIPS = ['near', 'ten', 'other', 'swap'] as const
-export type Slip = (typeof SLIPS)[number]
+/** The tokens of one planted find, or null if that kind will not fit here. */
+export function writeFind(
+  kind: FindKind | 'sum', band: Band, want: number, rng: Rng,
+): Token[] | null {
+  if (kind === 'sum' || kind === 'power') {
+    return anEquation(band, rng, band.twoStep && rng.next() < 0.3)
+  }
+  if (kind === 'square') return fromList(SQUARES, want, band.most, rng)
+  if (kind === 'triangle') return fromList(TRIANGLES, want, band.most, rng)
+  if (kind === 'cube') return fromList(CUBES, want, band.most, rng)
+  if (kind === 'prime') return fromList(PRIMES, want, band.most, rng)
 
-export function wrongSum(band: Band, rng: Rng): Sum {
-  const right = trueSum(band, rng)
-  const truth = right.claim
-  for (let tries = 0; tries < 8; tries++) {
-    const slip = rng.pick(SLIPS)
-    let claim = truth
-    if (slip === 'near') claim = truth + rng.pick([-2, -1, 1, 2])
-    else if (slip === 'ten') claim = truth + rng.pick([-20, -10, 10, 20])
-    else if (slip === 'other') claim = right.sign === '÷' ? right.a : right.b
-    else {
-      const digits = String(truth)
-      claim = digits.length > 1
-        ? Number([...digits].reverse().join(''))
-        : truth + rng.pick([-1, 1])
+  if (kind === 'step') {
+    const by = rng.pick([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+    const down = rng.next() < 0.35
+    const top = band.most
+    if (down) {
+      const start = rng.int(by * want, Math.max(by * want, top))
+      return Array.from({ length: want }, (_, i) => num(start - by * i))
     }
-    // Never negative, never the right answer by accident, and never so far out
-    // that it is answered by glancing at it.
-    if (claim < 0 || claim === truth) continue
-    if (Math.abs(claim - truth) > Math.max(25, truth)) continue
-    return { ...right, claim }
+    const start = rng.int(1, Math.max(1, top - by * (want - 1)))
+    return Array.from({ length: want }, (_, i) => num(start + by * i))
   }
-  return { ...right, claim: truth + 1 }
+
+  if (kind === 'times') {
+    const by = rng.pick([2, 2, 2, 3])
+    const most = Math.floor(band.most / by ** (want - 1))
+    if (most < 1) return null
+    const start = rng.int(1, most)
+    const up = Array.from({ length: want }, (_, i) => start * by ** i)
+    // Half of them written backwards, which is halving and reads quite
+    // differently even though it is the same run of numbers.
+    return (rng.next() < 0.4 ? up.reverse() : up).map(num)
+  }
+
+  if (kind === 'fib') {
+    const a = rng.int(1, 4)
+    const b = rng.int(a, a + 4)
+    const ns = [a, b]
+    while (ns.length < want) ns.push(ns[ns.length - 1] + ns[ns.length - 2])
+    return ns[ns.length - 1] > band.most ? null : ns.map(num)
+  }
+
+  if (kind === 'doubleAdd') {
+    const plus = rng.pick([-2, -1, 1, 2, 3])
+    const start = rng.int(2, 8)
+    /*
+     * Doubling and taking two, starting at two, gives two every time. The rule
+     * holds and the run is a row of the same number, which is not a pattern
+     * anybody found — so it is refused here as well as by the reader.
+     */
+    if (start === -plus) return null
+    const ns = [start]
+    while (ns.length < want) ns.push(ns[ns.length - 1] * 2 + plus)
+    return ns[ns.length - 1] > band.most || ns.some((n) => n < 1) ? null : ns.map(num)
+  }
+
+  return null
 }
 
-/** How much of a fresh board is true. */
-export const TRUE_SHARE = 0.42
+// --- filling the rest in -----------------------------------------------------
 
 /**
- * The fewest true ones the board is ever allowed to hold.
+ * A block for the parts of the board nobody planted anything in.
  *
- * The one promise this game makes, and the same shape as the promise the road
- * and the space game make: if it is ever broken the player is sitting in front
- * of a board with no legal move on it, watching the water come up, and there
- * is nothing they could have done. Enforced after every refill.
+ * Mostly numbers, because a board that is a third operators looks like soup
+ * and has nothing in it to spot. The numbers are drawn from the same range the
+ * finds use, so a planted find does not stand out by the size of its digits —
+ * which it did, in the first cut, and made the whole board readable at a
+ * glance without doing any arithmetic.
  */
-export const LEAST_TRUE = 4
-
-export function newSum(band: Band, rng: Rng, mustBeTrue?: boolean): Sum {
-  const wantTrue = mustBeTrue ?? rng.next() < TRUE_SHARE
-  return wantTrue ? trueSum(band, rng) : wrongSum(band, rng)
+export function filler(band: Band, rng: Rng): Token {
+  const roll = rng.next()
+  if (roll < 0.17) return op(rng.pick(band.ops))
+  if (roll < 0.24) return EQ
+  return num(rng.int(1, band.most))
 }
 
-// --- the water --------------------------------------------------------------
+/** How many finds are written into a fresh board. */
+export const PLANTED = 4
+
+/** The promise: there is always at least this many findable things. */
+export const LEAST_FINDS = 2
+
+// --- the water ---------------------------------------------------------------
 
 /**
  * How fast the water comes up, as a share of the chamber a second.
  *
- * These three numbers are the whole difficulty, and they are set from the one
- * thing that matters: how long a person gets per answer. With a chamber that
- * holds `1 / RISE` seconds of slack and a drain of `DRAIN` an answer, the
- * slowest pace that still gets somebody out is
+ * Far slower than the tapping version this replaced, and it has to be: finding
+ * a line is not tapping a block. Somebody scanning a board of sixty-three
+ * blocks for a run of square numbers is working for twenty seconds, not two,
+ * and the old numbers gave him about four.
  *
- *     (1 + TO_CLEAR * DRAIN) / (TO_CLEAR * rise)
- *
- * seconds per answer — about 3.7 on the first level, 2.4 by the tenth, and
- * never under 1.8 however deep it gets, because the point of the water is to
- * make him hurry and not to make him guess. The first draft grew by 0.006 a
- * level, which demanded an answer every 1.3 seconds by the tenth chamber and
- * was arithmetically impossible by the thirtieth.
+ * The figure that matters is seconds per find, and it is measured rather than
+ * reasoned about — about twenty-five on the first chamber, down to eleven by
+ * the tenth, and never under ten however deep it goes.
  */
-export const RISE = 0.034
-/** And how much faster each level after that. */
-export const RISE_PER_LEVEL = 0.002
-/** As fast as it ever comes up, so a deep chamber is hard and not hopeless. */
-export const RISE_MOST = 0.07
+export const RISE = 0.009
+export const RISE_PER_LEVEL = 0.0012
+export const RISE_MOST = 0.022
 
-/** What one right answer takes off, and what one wrong answer puts back. */
-export const DRAIN = 0.055
-export const SURGE = 0.045
+/** What one crushed block takes off the tank. */
+export const DRAIN_PER_BLOCK = 0.022
 
-/** How many right answers it takes to get somebody out and move on. */
-export const TO_CLEAR = 14
+/**
+ * What a selection that is not a find costs.
+ *
+ * Small, and deliberately smaller than the old one. Dragging along a line to
+ * see whether it works is how this game is *played* — it is the looking, not a
+ * mistake — so trying one and being wrong has to cost less than finding one
+ * is worth, or the right move is to sit still and never try anything.
+ */
+export const SURGE = 0.012
 
-/** Score, and how much a run of right answers is worth on top. */
-export const WORTH = 60
+/** How many blocks have to go before the chamber drains. */
+export const TO_CLEAR = 45
+
+/** Score. Longer finds are worth much more than their length suggests. */
+export const WORTH = 20
 export const MOST_COMBO = 5
-
 export const LIVES = 3
 
-/** The people in the chamber, so it is somebody rather than a shape. */
+/**
+ * Who is in the chamber.
+ *
+ * It was a rotating cast — Nan, the postman, the vicar — and then the game got
+ * its name: it is Papa in there, every time. Which is better. The joke of the
+ * whole app is that he built ten terrible machines; the tenth one has him
+ * standing in it with the water coming up, being got out by somebody who can
+ * do arithmetic faster than he can plumb.
+ *
+ * The variety moved to what he says about it on the way out.
+ */
 export interface Soul {
   name: string
   coat: string
@@ -215,42 +280,22 @@ export interface Soul {
   skin: string
 }
 
-export const SOULS: readonly Soul[] = [
-  { name: 'Nan', coat: '#d64fb7', trim: '#741f5f', skin: '#e8b08a' },
-  { name: 'The cat', coat: '#f0a04b', trim: '#8a5417', skin: '#f0a04b' },
-  { name: 'Postman', coat: '#4f7fe0', trim: '#1c3a7a', skin: '#8a5a3a' },
-  { name: 'The milkman', coat: '#8ad48a', trim: '#2f6b35', skin: '#f0c9a8' },
-  { name: 'Next door', coat: '#e8503a', trim: '#7d1f14', skin: '#6b4423' },
-  { name: 'The vicar', coat: '#2a2f3d', trim: '#14161f', skin: '#e8b08a' },
+export const PAPA: Soul = {
+  name: 'Papa',
+  coat: '#c0392b',
+  trim: '#7b241c',
+  skin: '#e8b08a',
+}
+
+export const soulFor = (_level: number): Soul => PAPA
+
+/** What he says when he is got out, so a chamber cleared is not one line. */
+export const GOT_OUT: readonly string[] = [
+  'Papa is out, and dripping.',
+  'Papa is out. He says he loosened it.',
+  'Papa is out. He would like a towel.',
+  'Papa is out. He is going to look at that pipe.',
+  'Papa is out. He says he was fine, actually.',
+  'Papa is out. He is not going back in.',
 ]
-
-export const soulFor = (level: number): Soul => SOULS[(level - 1) % SOULS.length]
-
-/** A board, as sums, with the promise kept. */
-export function newBoard(band: Band, seed: number): Sum[] {
-  const rng = makeRng(seed)
-  const board: Sum[] = []
-  for (let i = 0; i < CELLS; i++) board.push(newSum(band, rng))
-  return keepPromise(board, band, rng)
-}
-
-/**
- * Make sure there is something to break.
- *
- * Counted and topped up rather than hoped for: with four in ten true, a board
- * of forty has a vanishing chance of holding none — but vanishing is not never,
- * and the one time it happens is a player watching the water rise with no legal
- * move and no way of knowing it is not their fault.
- */
-export function keepPromise(board: Sum[], band: Band, rng: Rng): Sum[] {
-  const out = [...board]
-  let have = out.filter(isRight).length
-  // From the bottom up, because that is where the eye starts on a board that
-  // falls downwards.
-  for (let i = out.length - 1; i >= 0 && have < LEAST_TRUE; i--) {
-    if (isRight(out[i])) continue
-    out[i] = trueSum(band, rng)
-    have += 1
-  }
-  return out
-}
+export const gotOut = (level: number): string => GOT_OUT[(level - 1) % GOT_OUT.length]

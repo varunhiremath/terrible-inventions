@@ -26,15 +26,25 @@
   <body>
     <div id="all"></div>
     <script type="module">
-      import { newRun, step, tap } from '/src/sums/run.ts'
-      import { isRight, COLS } from '/src/sums/level.ts'
+      import { newRun, step, grab, reach, release, findsOn } from '/src/sums/run.ts'
       import { drawRun } from '/src/sums/draw.ts'
       const host = document.getElementById('all')
-      const levels = [0, 0.25, 0.55, 0.8, 0.97]
-      for (let i = 0; i < levels.length; i++) {
+      // A fresh board, one mid-drag, one just after a big find, and two
+      // deeper chambers where the sequences have arrived.
+      const shots = [
+        { level: 1, rating: 1000, water: 0.1, drag: 0 },
+        { level: 1, rating: 1000, water: 0.35, drag: 1 },
+        { level: 5, rating: 1150, water: 0.55, drag: 1 },
+        { level: 9, rating: 1250, water: 0.8, drag: 2 },
+        { level: 13, rating: 1400, water: 0.96, drag: 0 },
+      ]
+      for (let i = 0; i < shots.length; i++) {
+        const shot = shots[i]
         const cell = document.createElement('div')
         cell.className = 'cell'
-        cell.innerHTML = `<span class="tag">water ${Math.round(levels[i] * 100)}%</span>`
+        const tag = document.createElement('span')
+        tag.className = 'tag'
+        cell.appendChild(tag)
         const canvas = document.createElement('canvas')
         cell.appendChild(canvas)
         host.appendChild(cell)
@@ -42,13 +52,27 @@
         canvas.width = Math.round(box.width * 2)
         canvas.height = Math.round(box.height * 2)
         const ctx = canvas.getContext('2d')
-        // A board that has been played for a moment, so some of it is falling
-        // and there is a flash on it — the still picture of a game in use.
-        let run = newRun(1, 1000 + i * 80, 3, 0, i + 3)
-        const j = run.cells.findIndex((c) => isRight(c.sum))
-        run = tap(run, j % COLS, Math.floor(j / COLS))
-        run = step(run, 1 / 30)
-        drawRun(ctx, { ...run, water: levels[i] }, { w: canvas.width, h: canvas.height, clock: 1.2 })
+
+        let run = newRun(shot.level, shot.rating, 3, 0, i + 3)
+        // Crush a couple first, so some of it is falling.
+        for (let n = 0; n < shot.drag; n++) {
+          const found = findsOn(run.cells, 1)[0]
+          if (!found) break
+          run = grab(run, found.cells[0])
+          for (const c of found.cells.slice(1)) run = reach(run, c)
+          run = release(run)
+          for (let f = 0; f < 60; f++) run = step(run, 1 / 60)
+        }
+        // And leave one half-dragged, so the green shows.
+        const found = findsOn(run.cells, 1)[0]
+        let says = 'fresh'
+        if (found) {
+          run = grab(run, found.cells[0])
+          for (const c of found.cells.slice(1)) run = reach(run, c)
+          says = run.reading ? run.reading.says : 'dragging'
+        }
+        tag.textContent = `chamber ${shot.level} · ${run.band.name} · ${says}`
+        drawRun(ctx, { ...run, water: shot.water }, { w: canvas.width, h: canvas.height, clock: 1.2 })
       }
       window.__ready = true
     </script>

@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { COLS, LIVES, ROWS, TO_CLEAR } from '../sums/level'
+import { LIVES, TO_CLEAR, gotOut } from '../sums/level'
 import {
-  FIXED, LOUDEST, newRun, nextLevel, step, tap, tryAgain,
+  FIXED, LOUDEST, findsOn, grab, letGo, newRun, nextLevel, reach, release, step, tryAgain,
   type FloodEvent, type Run, type Status,
 } from '../sums/run'
-import { cellAt, drawRun, type Cursor, type View } from '../sums/draw'
+import { cellAt, drawRun, type View } from '../sums/draw'
 import { playCue, setHeat } from '../music/player'
 import type { CueName } from '../music/score'
 import { createPacer } from '../arcade/pacing'
@@ -16,23 +16,26 @@ import { Interlude } from './Interlude'
 /**
  * The flood.
  *
- * Forty blocks, each with a sum on it, and only the true ones can be broken.
- * Above them somebody is standing in a chamber the water is coming up in: every
- * right answer takes some of it away and every wrong one puts some back, so the
- * clock is a person and the way to stop it is to be right.
+ * A board of numbers and signs, and somebody in a tank above it with the water
+ * coming up. Drag along a line that reads as something true — `2 + 3 = 5`, or
+ * a run of square numbers — and it goes, taking that much water with it.
  *
- * One control: tap a block. There is nothing to hold down, nothing to aim, and
- * no way to lose by being slow with your fingers — which is the point, because
- * this is the one game in here where the thinking is the game.
+ * One control: put a finger on a block and drag along a row or down a column.
+ * The blocks under the finger light up green the moment the line reads as
+ * something, which turns a guess into a search you can feel your way through.
  */
 
 const MAX_CATCHUP = 0.25
 
 const NOISE: Record<FloodEvent, CueName> = {
+  grab: 'clack',
+  stretch: 'clack',
   crush: 'crunch',
+  big: 'haul',
   combo: 'chain',
-  wrong: 'clunk',
+  miss: 'clunk',
   drain: 'gurgle',
+  planted: 'fresh',
   saved: 'rescued',
   soaked: 'under',
   over: 'allOut',
@@ -47,6 +50,7 @@ interface Hud {
   water: number
   status: Status
   soul: string
+  band: string
 }
 
 export function Sums() {
@@ -54,9 +58,14 @@ export function Sums() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const runRef = useRef<Run | null>(null)
   const clock = useRef(0)
-  /** Taps waiting to be read inside the simulation, not at frame time. */
-  const taps = useRef<Cursor[]>([])
-  const cursor = useRef<Cursor | null>(null)
+  /**
+   * What the finger did, waiting to be read inside the simulation.
+   *
+   * Queued rather than applied at frame time, because this is the only place
+   * that runs exactly once per step — a touch read outside it is either
+   * dropped or counted twice, which this project has now learnt in four games.
+   */
+  const doing = useRef<{ what: 'down' | 'move' | 'up'; cell: number }[]>([])
   const spare = useRef(0)
   const best = useRef(0)
   const go = useStore((s) => s.go)
@@ -64,9 +73,13 @@ export function Sums() {
   const kit = useStore((s) => s.save.workshop)
 
   const [hud, setHud] = useState<Hud>({
-    level: 1, score: 0, lives: LIVES, left: TO_CLEAR, water: 0, status: 'playing', soul: '',
+    level: 1, score: 0, lives: LIVES, left: TO_CLEAR, water: 0,
+    status: 'playing', soul: '', band: '',
   })
   const [asking, setAsking] = useState(false)
+  const [stuck, setStuck] = useState<number[] | null>(null)
+  /** The blocks the hint is lighting up, read by the drawing every frame. */
+  const lit = useRef<number[] | null>(null)
 
   useEffect(() => { spare.current = spareLives({ workshop: kit }) }, [kit])
 
@@ -100,41 +113,32 @@ export function Sums() {
       clock.current += elapsed
 
       const run = runRef.current
-      const w = canvas.width
-      const h = canvas.height
-
       if (run) {
         const heard: FloodEvent[] = []
         const { next } = pacer.advance(run, elapsed, (s) => {
-          /*
-           * The taps are read in here rather than at frame time, because this
-           * is the only place that runs exactly once per step. Read outside,
-           * a tap at the wrong moment is either dropped or counted twice —
-           * which this project has now learnt in three separate games.
-           */
           let on = s
-          while (taps.current.length > 0 && on.status === 'playing') {
-            const where = taps.current.shift()
-            if (!where) break
-            on = tap(on, where.col, where.row)
+          while (doing.current.length > 0 && on.status === 'playing') {
+            const act = doing.current.shift()
+            if (!act) break
+            on =
+              act.what === 'down' ? grab(on, act.cell)
+              : act.what === 'move' ? reach(on, act.cell)
+              : release(on)
             if (on.events.length > 0) heard.push(...on.events)
           }
           const after = step(on, FIXED)
           if (after.events.length > 0) heard.push(...after.events)
           return after
         })
-        // Anything left over belongs to a finished run, and is not a queue to
-        // be played back into the next one.
-        if (next.status !== 'playing') taps.current.length = 0
+        if (next.status !== 'playing') doing.current.length = 0
         runRef.current = next
 
         if (heard.length > 0) {
           const loudest = LOUDEST.find((name) => heard.includes(name))
-          if (loudest) playCue(NOISE[loudest])
+          // The noise a finger makes while it is only looking is not a noise.
+          if (loudest && loudest !== 'stretch' && loudest !== 'grab') playCue(NOISE[loudest])
         }
 
-        // The tune's heat is simply how high the water is, which is the one
-        // number this whole game is about.
         setHeat(Math.min(1, next.water))
 
         best.current = Math.max(best.current, next.score)
@@ -144,18 +148,13 @@ export function Sums() {
           next.left !== hud.left || Math.round(next.water * 20) !== Math.round(hud.water * 20)
         ) {
           setHud({
-            level: next.level,
-            score: next.score,
-            lives: next.lives,
-            left: next.left,
-            water: next.water,
-            status: next.status,
-            soul: next.soul.name,
+            level: next.level, score: next.score, lives: next.lives, left: next.left,
+            water: next.water, status: next.status, soul: next.soul.name, band: next.band.name,
           })
         }
 
-        const view: View = { w, h, clock: clock.current }
-        drawRun(ctx, next, view, cursor.current)
+        const view: View = { w: canvas.width, h: canvas.height, clock: clock.current }
+        drawRun(ctx, next, view, lit.current)
       }
 
       frame = requestAnimationFrame(loop)
@@ -172,56 +171,79 @@ export function Sums() {
 
   // --- the finger ------------------------------------------------------------
 
-  /**
-   * A tap is taken on the way down, not the way up.
-   *
-   * Tapping on pointerup would be the careful choice — it lets somebody change
-   * their mind — but it also means every tap waits for a finger to leave the
-   * glass, and on a board you are hurrying across that reads as the game
-   * ignoring you. There is nothing to drag here, so down is right.
-   */
-  const down = (e: React.PointerEvent) => {
-    if (asking) return
-    const run = runRef.current
-    if (!run || run.status !== 'playing') return
+  const cellOfEvent = (e: React.PointerEvent): number | null => {
     const canvas = canvasRef.current
     const box = wrapRef.current?.getBoundingClientRect()
-    if (!canvas || !box) return
+    if (!canvas || !box) return null
     const dpr = canvas.width / Math.max(1, box.width)
-    const where = cellAt(
+    return cellAt(
       { w: canvas.width, h: canvas.height, clock: 0 },
       (e.clientX - box.left) * dpr,
       (e.clientY - box.top) * dpr,
     )
-    if (!where) return
-    cursor.current = where
-    taps.current.push(where)
+  }
+
+  const down = (e: React.PointerEvent) => {
+    if (asking) return
+    const run = runRef.current
+    if (!run || run.status !== 'playing') return
+    const cell = cellOfEvent(e)
+    if (cell === null) return
+    setStuck(null)
+    lit.current = null
+    doing.current.push({ what: 'down', cell })
+    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+  }
+
+  const move = (e: React.PointerEvent) => {
+    const run = runRef.current
+    if (!run || run.anchor === null) return
+    const cell = cellOfEvent(e)
+    if (cell === null) return
+    doing.current.push({ what: 'move', cell })
+  }
+
+  /*
+   * Pointer capture retargets the release to the element the drag began on, so
+   * the end of a drag has to be taken from the window as well — "works by
+   * keyboard, fails by finger" has cost this project three evenings, and this
+   * is the same lesson wearing a different hat.
+   */
+  const up = () => {
+    const run = runRef.current
+    if (!run || run.anchor === null) return
+    doing.current.push({ what: 'up', cell: -1 })
   }
 
   useEffect(() => {
-    const press = (e: KeyboardEvent) => {
-      const run = runRef.current
-      if (!run || run.status !== 'playing') return
-      const at = cursor.current ?? { col: Math.floor(COLS / 2), row: ROWS - 1 }
-      if (e.key === 'ArrowLeft') cursor.current = { ...at, col: Math.max(0, at.col - 1) }
-      else if (e.key === 'ArrowRight') cursor.current = { ...at, col: Math.min(COLS - 1, at.col + 1) }
-      else if (e.key === 'ArrowUp') cursor.current = { ...at, row: Math.max(0, at.row - 1) }
-      else if (e.key === 'ArrowDown') cursor.current = { ...at, row: Math.min(ROWS - 1, at.row + 1) }
-      else if (e.key === ' ' || e.key === 'Enter') taps.current.push(at)
-      else return
-      e.preventDefault()
+    const lift = () => up()
+    window.addEventListener('pointerup', lift)
+    window.addEventListener('pointercancel', lift)
+    return () => {
+      window.removeEventListener('pointerup', lift)
+      window.removeEventListener('pointercancel', lift)
     }
-    window.addEventListener('keydown', press)
-    return () => window.removeEventListener('keydown', press)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // --- between goes ----------------------------------------------------------
+
+  const showOne = () => {
+    const run = runRef.current
+    if (!run) return
+    runRef.current = letGo(run)
+    const found = findsOn(run.cells, 1)[0]
+    lit.current = found ? found.cells : null
+    setStuck(found ? found.cells : [])
+  }
 
   const carryOn = () => {
     const run = runRef.current
     if (!run) return
     runRef.current = tryAgain(run, rating)
     setAsking(false)
+    setStuck(null)
+    lit.current = null
     setHud((it) => ({ ...it, status: 'playing', water: 0, left: TO_CLEAR }))
   }
 
@@ -240,15 +262,19 @@ export function Sums() {
     const run = runRef.current
     if (!run) return
     runRef.current = nextLevel(run, rating)
+    setStuck(null)
+    lit.current = null
     setHud((it) => ({ ...it, status: 'playing', level: it.level + 1, water: 0, left: TO_CLEAR }))
   }
 
   const again = () => {
     runRef.current = newRun(1, rating, LIVES + spare.current)
     setAsking(false)
+    setStuck(null)
+    lit.current = null
     setHud({
       level: 1, score: 0, lives: LIVES + spare.current, left: TO_CLEAR,
-      water: 0, status: 'playing', soul: '',
+      water: 0, status: 'playing', soul: '', band: '',
     })
   }
 
@@ -273,8 +299,17 @@ export function Sums() {
         ref={wrapRef}
         className="relative min-h-0 flex-1"
         onPointerDown={down}
+        onPointerMove={move}
       >
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
+
+        {stuck !== null && (
+          <div className="pointer-events-none absolute inset-x-0 top-1 z-20 flex justify-center">
+            <p className="rounded-full bg-ink/80 px-3 py-1 font-mono text-[0.65rem] text-chalk">
+              {stuck.length > 0 ? 'there is one — it is lit up' : 'nothing left — one is on its way'}
+            </p>
+          </div>
+        )}
 
         {asking && (
           <Interlude
@@ -291,11 +326,11 @@ export function Sums() {
           >
             <div className="block-panel w-full max-w-sm p-5 text-center">
               <p className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-bolt">
-                {saved ? 'Out, and dry' : over ? 'That is the lot' : 'Up to the ceiling'}
+                {saved ? 'Out, and dry' : over ? 'That is the lot' : 'Over his head'}
               </p>
               <p className="mt-2 text-lg font-bold text-chalk">
                 {saved
-                  ? `${hud.soul} is out. The next chamber fills faster.`
+                  ? `${gotOut(hud.level)} The next chamber fills faster.`
                   : over
                     ? `You got to chamber ${hud.level}, and ${hud.score} points.`
                     : `${hud.lives} ${hud.lives === 1 ? 'go' : 'goes'} left.`}
@@ -314,8 +349,13 @@ export function Sums() {
 
       <div className="shrink-0 px-4 pb-3 pt-1">
         <p className="text-center font-mono text-[0.65rem] uppercase tracking-widest text-dim/60">
-          tap the ones that are right · a wrong one only costs you water
+          drag along a line that is true · longer takes more of the wall
         </p>
+        {hud.status === 'playing' && (
+          <div className="mt-2 flex justify-center">
+            <Btn onClick={showOne} tone="plain">Is there one?</Btn>
+          </div>
+        )}
       </div>
     </div>
   )

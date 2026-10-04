@@ -180,31 +180,21 @@ export const STORIES: Record<string, Story> = {
    */
   sums: {
     id: 'sums',
-    title: 'THE FLOOD',
+    title: 'PAPA DROWNING!',
     beats: [
-      { seconds: 4.8, scene: 'flood', voice: 'narrator', line: 'A room full of sums, and somebody in the tank above.' },
-      { seconds: 3.6, scene: 'flood', voice: 'papa', line: 'The pipe is stuck! I did check it!' },
-      { seconds: 4.2, scene: 'flood', voice: 'narrator', line: 'Some of these sums are right. Most are not.' },
-      { seconds: 4.6, scene: 'flood', voice: 'narrator', line: 'Tap a right one. It breaks, and the water drops.' },
-      { seconds: 4.0, scene: 'flood', voice: 'narrator', line: 'Tap a wrong one and nothing bad happens.' },
-      { seconds: 4.6, scene: 'flood', voice: 'narrator', line: 'It wobbles, a little water comes back, that is all.' },
-      { seconds: 4.4, scene: 'flood', voice: 'narrator', line: 'So have a go. Guessing beats staring at it.' },
-      { seconds: 4.4, scene: 'flood', voice: 'narrator', line: 'The colours tell you the sign, never the answer.' },
-      { seconds: 3.8, scene: 'flood', voice: 'narrator', line: 'Fourteen right ones and the tank drains.' },
-      { seconds: 3.9, scene: 'flood', voice: 'papa', line: 'Get my nan out. Please. She is cross.' },
+      { seconds: 4.4, scene: 'flood', voice: 'narrator', line: 'A wall of numbers, and Papa in the tank above it.' },
+      { seconds: 3.8, scene: 'flood', voice: 'papa', line: 'I was only fixing the pipe! It won!' },
+      { seconds: 5.0, scene: 'flood', voice: 'narrator', line: 'Drag along a line that is true. Across, or down.' },
+      { seconds: 4.4, scene: 'flood', voice: 'narrator', line: 'Two plus three equals five is five blocks.' },
+      { seconds: 4.8, scene: 'flood', voice: 'narrator', line: 'Runs of numbers count too. Doubling. Square numbers.' },
+      { seconds: 5.0, scene: 'flood', voice: 'narrator', line: 'They go green while you hold them, so you can feel about.' },
+      { seconds: 4.4, scene: 'flood', voice: 'narrator', line: 'Being wrong costs almost nothing. Looking is the game.' },
+      { seconds: 4.6, scene: 'flood', voice: 'narrator', line: 'A long one takes the whole row and column with it.' },
+      { seconds: 4.2, scene: 'flood', voice: 'narrator', line: 'Every block you break drains the tank a bit.' },
+      { seconds: 3.8, scene: 'flood', voice: 'papa', line: 'Get me out. Please. Fairly soon.' },
     ],
   },
 
-  /*
-   * The notebook.
-   *
-   * Three puzzles in one game, so the cutscene has to say what all three are
-   * without becoming a manual. The thing that gets said last, and in {papa}'s
-   * voice so it does not sound like an instruction, is the only one that is
-   * about the game as a whole: nothing here is chasing you. Every other game
-   * in the app has something coming at you, and somebody arriving from one of
-   * those will hurry this and then be cross with themselves.
-   */
   puzzles: {
     id: 'puzzles',
     title: 'THE NOTEBOOK',

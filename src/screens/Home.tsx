@@ -358,8 +358,8 @@ const TILES: Tile[] = [
   },
   {
     id: 'sums',
-    title: 'The Flood',
-    blurb: 'Only the right ones break. Somebody is waiting.',
+    title: 'Papa Drowning!',
+    blurb: 'Drag a line that is true. He is in the tank.',
     tint: '#070b14',
     emblem(ctx, w, h) {
       /*

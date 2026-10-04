@@ -2,24 +2,31 @@
  * Drawing the flood.
  *
  * Canvas primitives only. The screen is one tall field: a chamber at the top
- * with somebody in it and the water coming up, and the board of sums below.
+ * with somebody in it and the water coming up, and the board of blocks below.
  *
- * One rule governs every colour in here: **nothing on a block may hint at
- * whether it is true.** Colour by truth would turn the game straight back into
- * the matching game it is shaped like, and the whole point is that the only
- * way to know is to do the sum. So the colour says which operation it is —
- * useful, and it gives nothing away — and the blocks are otherwise identical
- * until they are tapped.
+ * One rule governs every colour on a block: **nothing may hint at whether a
+ * line is true.** The colour says what kind of block it is — a number, a plus,
+ * an equals — which helps the eye find the shape of a line and gives nothing
+ * away, because whether `2 + 3 = 5` is true is not a fact about its blocks.
  */
-import { COLS, ROWS, type Sign, type Soul } from './level'
-import { TO_CLEAR, type Pop, type Run } from './run'
+import { COLS, ROWS, colOf, rowOf, type Soul } from './level'
+import type { Token } from './find'
+import { blastOf, type Run } from './run'
 
 type Ctx = CanvasRenderingContext2D
 
-/** The field, in units: the board is one unit a cell, the chamber sits above. */
+/** The field, in units: the board is one unit a block, the chamber sits above. */
 export const WIDE = COLS
 export const CHAMBER = 3.4
-export const TALL = ROWS + CHAMBER
+/**
+ * A strip between the chamber and the board, for the word the game says.
+ *
+ * Its own space, not an overlay. The first cut drew "up in 12s · 12 24 36 48"
+ * across the middle of the tank, over the person, in green on blue — which is
+ * both unreadable and on top of the one thing the player is watching.
+ */
+export const BANNER = 0.62
+export const TALL = ROWS + CHAMBER + BANNER
 
 export interface View {
   w: number
@@ -42,17 +49,27 @@ export const INK = {
 } as const
 
 /**
- * A colour for each operation.
+ * A colour for each kind of block.
  *
- * Four strong, separable colours — he asked for colourful and these are the
- * four that stay telling apart on a phone in daylight.
+ * Four strong, separable colours for the operators, a quiet slate for the
+ * numbers, and cream for the equals — so the eye can pick out the skeleton of
+ * an equation across a board without reading a single digit, which is exactly
+ * the skill the game is for.
  */
-export const SIGN_INK: Record<Sign, { face: string; lit: string; edge: string }> = {
+export const TOKEN_INK: Record<string, { face: string; lit: string; edge: string }> = {
+  num: { face: '#39415c', lit: '#616b8c', edge: '#1c2133' },
   '+': { face: '#2f6ad6', lit: '#5f9bf5', edge: '#16367a' },
   '-': { face: '#d64f9b', lit: '#f58cc3', edge: '#7a1f55' },
   '×': { face: '#e0a52f', lit: '#f7cf6b', edge: '#7d5812' },
   '÷': { face: '#3fb57a', lit: '#78e3ab', edge: '#1b5f3c' },
+  '^': { face: '#9b5fe0', lit: '#c4a0f7', edge: '#4d2878' },
+  eq: { face: '#c9cfe0', lit: '#eef1f8', edge: '#7a8099' },
 }
+
+const inkOf = (token: Token) =>
+  token.kind === 'num' ? TOKEN_INK.num
+  : token.kind === 'eq' ? TOKEN_INK.eq
+  : TOKEN_INK[token.op] ?? TOKEN_INK.num
 
 export function fieldOf(view: View): { x: number; y: number; scale: number } {
   const scale = Math.min(view.w / WIDE, view.h / TALL)
@@ -124,6 +141,13 @@ function drawSoul(ctx: Ctx, soul: Soul, x: number, y: number, s: number, fear: n
   ctx.arc(0, -s * 0.76, s * 0.17, 0, Math.PI * 2)
   ctx.fill()
 
+  // Hair, and the moustache, which is the whole of what makes a circle with
+  // two dots in it read as somebody's dad.
+  ctx.fillStyle = '#2b1d14'
+  ctx.beginPath()
+  ctx.arc(0, -s * 0.79, s * 0.17, Math.PI * 1.08, Math.PI * 1.92)
+  ctx.fill()
+
   // The face: eyes wider and the mouth rounder the higher it gets.
   ctx.fillStyle = '#10131c'
   const eye = s * (0.022 + fear * 0.016)
@@ -133,8 +157,13 @@ function drawSoul(ctx: Ctx, soul: Soul, x: number, y: number, s: number, fear: n
     ctx.fill()
   }
   ctx.beginPath()
-  if (fear > 0.25) ctx.arc(0, -s * 0.7, s * (0.02 + fear * 0.045), 0, Math.PI * 2)
-  else { ctx.ellipse(0, -s * 0.71, s * 0.05, s * 0.018, 0, 0, Math.PI * 2) }
+  if (fear > 0.25) ctx.arc(0, -s * 0.69, s * (0.02 + fear * 0.045), 0, Math.PI * 2)
+  else { ctx.ellipse(0, -s * 0.7, s * 0.05, s * 0.018, 0, 0, Math.PI * 2) }
+  ctx.fill()
+
+  ctx.fillStyle = '#2b1d14'
+  ctx.beginPath()
+  ctx.ellipse(0, -s * 0.735, s * 0.075, s * 0.022, 0, 0, Math.PI * 2)
   ctx.fill()
 
   ctx.restore()
@@ -242,78 +271,78 @@ function drawChamber(ctx: Ctx, run: Run, x: number, y: number, s: number, clock:
   ctx.stroke()
   ctx.globalAlpha = 1
 
-  // And the drain, which gurgles when the level drops.
-  const drain = run.pops.some((p) => p.good && p.life > 0.1)
+  // And the drain, which runs while the banner from the last find is still up
+  // — so the water going somewhere is visibly the find's doing.
+  const drain = run.said !== null && run.said.life > 0.4
   ctx.fillStyle = drain ? INK.waterLit : INK.stoneLit
   ctx.fillRect(gx + gw * 0.1, floor - s * 0.08, s * 0.4, s * 0.1)
 }
 
 // --- the board ---------------------------------------------------------------
 
-export const wordsOf = (sum: { a: number; sign: Sign; b: number; claim: number }): string =>
-  `${sum.a}${sum.sign}${sum.b}=${sum.claim}`
-
 const FACE = 'ui-monospace, "SF Mono", Menlo, monospace'
 
+const sayOf = (t: Token): string => (t.kind === 'num' ? String(t.n) : t.kind === 'eq' ? '=' : t.op)
+
 /**
- * One size of type for the whole board, set by the longest sum on it.
+ * One size of type for the whole board, set by the widest block on it.
  *
- * Shrinking each block to fit its own sum was the obvious thing and it was
- * wrong: `7+8=15` came out half again as big as `68+73=141`, so the short sums
- * stood out as though the game were pointing at them. It is not a hint — size
- * follows how many digits there are, not whether it is true — but it looks
- * exactly like one, and a board you can read differently from block to block
- * is a board somebody will try to read that way.
+ * Sizing each block to its own contents was the obvious thing and it was
+ * wrong: a `7` came out twice the size of a `144`, so the small numbers stood
+ * out as though the board were pointing at them. It is not a hint — size would
+ * follow how many digits there are, not whether anything is true — but it
+ * looks exactly like one.
  */
-function sizeFor(ctx: Ctx, run: Run, w: number, h: number): number {
-  let widest = 0
-  for (const cell of run.cells) {
-    const words = wordsOf(cell.sum)
-    if (words.length > widest) widest = words.length
-  }
-  let size = h * 0.42
+function sizeFor(ctx: Ctx, run: Run, s: number): number {
+  let widest = 1
+  for (const cell of run.cells) widest = Math.max(widest, sayOf(cell.token).length)
+  let size = s * 0.46
   const sample = '8'.repeat(widest)
   for (let tries = 0; tries < 10; tries++) {
     ctx.font = `700 ${size}px ${FACE}`
-    if (ctx.measureText(sample).width <= w * 0.84) break
+    if (ctx.measureText(sample).width <= s * 0.76) break
     size *= 0.92
   }
   return size
 }
 
-/** The sum, written out. */
-function drawSum(
-  ctx: Ctx, run: Run, i: number, x: number, y: number, w: number, h: number, size: number,
-): void {
-  const words = wordsOf(run.cells[i].sum)
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.font = `700 ${size}px ${FACE}`
-  ctx.fillStyle = '#0a0d14'
-  ctx.globalAlpha = 0.35
-  ctx.fillText(words, x + w / 2, y + h / 2 + size * 0.07)
-  ctx.globalAlpha = 1
-  ctx.fillStyle = INK.chalk
-  ctx.fillText(words, x + w / 2, y + h / 2)
+/** The sockets the blocks sit in, so a gap is a recess and not a hole. */
+function drawSockets(ctx: Ctx, bx: number, by: number, s: number): void {
+  for (let col = 0; col < COLS; col++) {
+    for (let row = 0; row < ROWS; row++) {
+      const pad = s * 0.05
+      ctx.fillStyle = (col + row) % 2 === 0 ? '#11151f' : '#0e1119'
+      box(ctx, bx + col * s + pad, by + row * s + pad, s - pad * 2, s - pad * 2, s * 0.14)
+      ctx.fill()
+    }
+  }
 }
 
-/** One block. */
 function drawCell(
-  ctx: Ctx, run: Run, i: number, bx: number, by: number, s: number, clock: number, size: number,
+  ctx: Ctx, run: Run, i: number, bx: number, by: number, s: number, clock: number,
+  size: number, picked: Set<number>, lit: boolean,
 ): void {
   const cell = run.cells[i]
-  const col = i % COLS
-  const row = Math.floor(i / COLS)
-  const ink = SIGN_INK[cell.sum.sign]
+  const ink = inkOf(cell.token)
+  const chosen = picked.has(i)
 
   const shake = cell.shake > 0 ? Math.sin(clock * 60) * cell.shake * s * 0.1 : 0
-  const pad = s * 0.055
-  const x = bx + col * s + pad + shake
-  const y = by + (row - cell.lift) * s + pad
+  const pad = s * 0.05
+  const x = bx + colOf(i) * s + pad + shake
+  const y = by + (rowOf(i) - cell.lift) * s + pad
   const w = s - pad * 2
   const h = s - pad * 2
 
-  // Face, with the lit top edge that makes a flat rectangle look like a block.
+  /*
+   * Everything outside the selection steps back while a finger is down.
+   *
+   * The outline alone was not enough: a green line round a pink block is not
+   * visible on a phone, and the one thing the player has to be able to see is
+   * exactly which blocks they have got. Dimming the other sixty does more than
+   * any amount of brightening the seven.
+   */
+  ctx.globalAlpha = run.anchor !== null && !chosen ? 0.45 : 1
+
   const grad = ctx.createLinearGradient(0, y, 0, y + h)
   grad.addColorStop(0, ink.lit)
   grad.addColorStop(0.45, ink.face)
@@ -322,147 +351,199 @@ function drawCell(
   box(ctx, x, y, w, h, s * 0.14)
   ctx.fill()
 
-  ctx.strokeStyle = cell.shake > 0 ? INK.bad : ink.edge
-  ctx.lineWidth = Math.max(1, s * (cell.shake > 0 ? 0.05 : 0.02))
-  ctx.stroke()
+  /*
+   * A chosen block is lifted and outlined, and the outline turns green the
+   * moment the run reads as something true — before the finger comes up.
+   *
+   * That is the single most useful thing on the screen: it turns a guess into
+   * a search you can feel your way through, which is the difference between
+   * hunting and poking.
+   */
+  if (chosen) {
+    // Two rings: a dark one first so the bright one reads against a block of
+    // any colour underneath it.
+    ctx.strokeStyle = '#05060a'
+    ctx.lineWidth = Math.max(2.5, s * 0.1)
+    box(ctx, x, y, w, h, s * 0.14)
+    ctx.stroke()
+    ctx.strokeStyle = lit ? INK.good : INK.chalk
+    ctx.lineWidth = Math.max(1.5, s * 0.06)
+    box(ctx, x, y, w, h, s * 0.14)
+    ctx.stroke()
+    if (lit) {
+      ctx.globalAlpha = 0.18 + 0.1 * Math.sin(clock * 8)
+      ctx.fillStyle = INK.good
+      box(ctx, x, y, w, h, s * 0.14)
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+  } else {
+    ctx.strokeStyle = cell.shake > 0 ? INK.bad : ink.edge
+    ctx.lineWidth = Math.max(1, s * (cell.shake > 0 ? 0.05 : 0.02))
+    box(ctx, x, y, w, h, s * 0.14)
+    ctx.stroke()
+  }
 
-  // A highlight along the top, a shadow along the bottom.
-  ctx.globalAlpha = 0.35
+  ctx.globalAlpha = 0.3
   ctx.fillStyle = '#ffffff'
-  box(ctx, x + s * 0.08, y + s * 0.05, w - s * 0.16, h * 0.22, s * 0.08)
+  box(ctx, x + s * 0.08, y + s * 0.05, w - s * 0.16, h * 0.2, s * 0.07)
   ctx.fill()
   ctx.globalAlpha = 1
 
-  drawSum(ctx, run, i, x, y, w, h, size)
+  ctx.globalAlpha = run.anchor !== null && !chosen ? 0.45 : 1
+
+  const words = sayOf(cell.token)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  // An operator is drawn bigger than a number: it is one character doing the
+  // work of three, and at the same size it disappears.
+  ctx.font = `700 ${cell.token.kind === 'num' ? size : size * 1.3}px ${FACE}`
+  ctx.fillStyle = '#0a0d14'
+  ctx.globalAlpha = 0.35
+  ctx.fillText(words, x + w / 2, y + h / 2 + size * 0.07)
+  ctx.globalAlpha = 1
+  ctx.fillStyle = cell.token.kind === 'eq' ? '#141822' : INK.chalk
+  ctx.fillText(words, x + w / 2, y + h / 2)
+  ctx.globalAlpha = 1
 }
 
 /**
- * The sockets the blocks sit in.
+ * The outline of what a find would take with it.
  *
- * Behind everything, so the one slot a falling block has not reached yet reads
- * as an empty socket rather than a hole cut through to space. Cheap, and it is
- * the difference between a board and a floating pile of buttons.
+ * Drawn while the selection reads as true, so the prize for a long one is
+ * visible before it is claimed rather than explained in a menu somebody will
+ * not read.
  */
-function drawSockets(ctx: Ctx, bx: number, by: number, s: number): void {
+function drawBlast(ctx: Ctx, picked: number[], bx: number, by: number, s: number, clock: number): void {
+  if (picked.length < 5) return
+  const hit = new Set(blastOf(picked))
+  const mine = new Set(picked)
   ctx.save()
-  for (let col = 0; col < COLS; col++) {
-    for (let row = 0; row < ROWS; row++) {
-      const pad = s * 0.055
-      ctx.fillStyle = (col + row) % 2 === 0 ? '#11151f' : '#0e1119'
-      box(ctx, bx + col * s + pad, by + row * s + pad, s - pad * 2, s - pad * 2, s * 0.14)
-      ctx.fill()
-    }
+  ctx.globalAlpha = 0.14 + 0.07 * Math.sin(clock * 7)
+  ctx.fillStyle = INK.good
+  for (const i of hit) {
+    if (mine.has(i)) continue
+    box(ctx, bx + colOf(i) * s + s * 0.05, by + rowOf(i) * s + s * 0.05, s * 0.9, s * 0.9, s * 0.14)
+    ctx.fill()
   }
   ctx.restore()
 }
 
-/** The flashes left where a block was, and where a wrong one was tapped. */
-function drawPop(ctx: Ctx, pop: Pop, bx: number, by: number, s: number): void {
-  const x = bx + (pop.col + 0.5) * s
-  const y = by + (pop.row + 0.5) * s
-  const t = pop.good ? 1 - pop.life / 0.26 : 1 - pop.life / 0.3
-  ctx.save()
-  if (pop.good) {
-    ctx.globalAlpha = Math.max(0, 1 - t)
-    ctx.strokeStyle = INK.good
-    ctx.lineWidth = Math.max(1, s * 0.07 * (1 - t))
-    ctx.beginPath()
-    ctx.arc(x, y, s * (0.2 + t * 0.55), 0, Math.PI * 2)
-    ctx.stroke()
-    /*
-     * Four bits rather than seven, off the diagonals, and fading.
-     *
-     * Seven evenly round a ring drew a cog — a spiked wheel sitting in the gap
-     * the block left, which is not what bursting looks like and was the first
-     * thing anybody noticed in the photograph.
-     */
-    ctx.fillStyle = INK.foam
-    ctx.globalAlpha = Math.max(0, 0.8 - t)
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2 + Math.PI / 4
-      const r = s * (0.1 + t * 0.5)
-      ctx.beginPath()
-      ctx.arc(x + Math.cos(a) * r, y + Math.sin(a) * r, s * 0.07 * (1 - t), 0, Math.PI * 2)
-      ctx.fill()
-    }
-  } else {
-    ctx.globalAlpha = Math.max(0, 0.7 - t * 0.7)
-    ctx.strokeStyle = INK.bad
-    ctx.lineWidth = Math.max(1, s * 0.05)
-    ctx.beginPath()
-    ctx.arc(x, y, s * 0.42, 0, Math.PI * 2)
-    ctx.stroke()
-  }
-  ctx.restore()
-}
-
-/** How many are still wanted, drawn as the beads along the top of the board. */
+/** How many blocks the chamber still wants gone, as beads along the top. */
 function drawTally(ctx: Ctx, run: Run, x: number, y: number, s: number): void {
-  const done = TO_CLEAR - run.left
-  const gap = (WIDE * s) / TO_CLEAR
-  for (let i = 0; i < TO_CLEAR; i++) {
+  const beads = 15
+  const done = Math.round(((45 - run.left) / 45) * beads)
+  const gap = (WIDE * s) / beads
+  for (let i = 0; i < beads; i++) {
     ctx.fillStyle = i < done ? INK.good : '#2a3045'
     ctx.beginPath()
-    ctx.arc(x + gap * (i + 0.5), y, Math.max(1.5, s * 0.055), 0, Math.PI * 2)
+    ctx.arc(x + gap * (i + 0.5), y, Math.max(1.5, s * 0.05), 0, Math.PI * 2)
     ctx.fill()
   }
 }
 
-/** Where the keyboard is pointing, for anybody playing this on a laptop. */
-export interface Cursor {
-  col: number
-  row: number
+/**
+ * The strip that says what the game can see.
+ *
+ * Two jobs, and the first is the important one: while a finger is still down
+ * and the run under it reads as something, it says so — "square numbers",
+ * "each one is the two before it added up" — before anything is claimed. A
+ * game that names the pattern is teaching; a game that only says "correct"
+ * afterwards is marking.
+ *
+ * The second job is the receipt: what was found, written out, and what it was
+ * worth.
+ */
+function drawBanner(ctx: Ctx, run: Run, x: number, y: number, w: number, s: number): void {
+  const middle = x + w / 2
+  ctx.save()
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  if (run.reading) {
+    ctx.font = `700 ${s * 0.3}px ${FACE}`
+    ctx.fillStyle = INK.good
+    ctx.fillText(run.reading.says, middle, y + s * 0.3)
+    ctx.restore()
+    return
+  }
+
+  const said = run.said
+  if (!said) {
+    // Nothing found and nothing being dragged: say what to do, quietly.
+    ctx.font = `600 ${s * 0.2}px ${FACE}`
+    ctx.fillStyle = 'rgba(138,145,171,0.5)'
+    ctx.fillText('drag a line that is true', middle, y + s * 0.3)
+    ctx.restore()
+    return
+  }
+
+  ctx.globalAlpha = Math.min(1, said.life / 0.5)
+  ctx.font = `700 ${s * 0.26}px ${FACE}`
+  ctx.fillStyle = INK.good
+  ctx.fillText(said.says, middle, y + s * 0.18)
+  ctx.font = `600 ${s * 0.19}px ${FACE}`
+  ctx.fillStyle = INK.dim
+  ctx.fillText(`${said.line}   +${said.worth}`, middle, y + s * 0.45)
+  ctx.restore()
 }
 
-export function drawRun(ctx: Ctx, run: Run, view: View, cursor?: Cursor | null): void {
+/**
+ * Lighting up a find for somebody who is stuck.
+ *
+ * It shows the blocks rather than naming them, and it does not crush anything
+ * — being shown where one is still leaves the reading of it to him, which is
+ * the part that is worth doing.
+ */
+function drawHint(ctx: Ctx, hint: number[], bx: number, by: number, s: number, clock: number): void {
+  ctx.save()
+  ctx.globalAlpha = 0.35 + 0.25 * Math.sin(clock * 5)
+  ctx.strokeStyle = '#ffd27a'
+  ctx.lineWidth = Math.max(2, s * 0.07)
+  for (const i of hint) {
+    box(ctx, bx + colOf(i) * s + s * 0.05, by + rowOf(i) * s + s * 0.05, s * 0.9, s * 0.9, s * 0.14)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+export function drawRun(ctx: Ctx, run: Run, view: View, hint?: number[] | null): void {
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.fillStyle = INK.back
   ctx.fillRect(0, 0, view.w, view.h)
 
   const { x, y, scale } = fieldOf(view)
-
   drawChamber(ctx, run, x, y, scale, view.clock)
+  drawBanner(ctx, run, x, y + CHAMBER * scale, WIDE * scale, scale)
 
-  const by = y + CHAMBER * scale + scale * 0.16
-  drawTally(ctx, run, x, y + CHAMBER * scale + scale * 0.07, scale)
+  const by = y + (CHAMBER + BANNER) * scale
+  drawTally(ctx, run, x, by - scale * 0.1, scale)
 
   drawSockets(ctx, x, by, scale)
 
+  const picked = new Set(run.picked)
+  const lit = run.reading !== null
+  if (lit) drawBlast(ctx, run.picked, x, by, scale, view.clock)
+
   ctx.save()
-  // Clip the board so a block falling in from above arrives rather than
-  // appearing: it comes down out of the chamber's shadow.
   ctx.beginPath()
   ctx.rect(x, by, WIDE * scale, ROWS * scale)
   ctx.clip()
-  const size = sizeFor(ctx, run, scale, scale)
-  for (let i = 0; i < run.cells.length; i++) drawCell(ctx, run, i, x, by, scale, view.clock, size)
+  const size = sizeFor(ctx, run, scale)
+  for (let i = 0; i < run.cells.length; i++) {
+    drawCell(ctx, run, i, x, by, scale, view.clock, size, picked, lit)
+  }
   ctx.restore()
 
-  for (const pop of run.pops) drawPop(ctx, pop, x, by, scale)
-
-  if (cursor) {
-    ctx.strokeStyle = INK.chalk
-    ctx.lineWidth = Math.max(1.5, scale * 0.045)
-    ctx.globalAlpha = 0.55 + 0.25 * Math.sin(view.clock * 6)
-    box(
-      ctx,
-      x + cursor.col * scale + scale * 0.03,
-      by + cursor.row * scale + scale * 0.03,
-      scale * 0.94,
-      scale * 0.94,
-      scale * 0.16,
-    )
-    ctx.stroke()
-    ctx.globalAlpha = 1
-  }
+  if (hint && hint.length > 0) drawHint(ctx, hint, x, by, scale, view.clock)
 }
 
-/** Which cell a point lands on, or null. The screen's half of the tapping. */
-export function cellAt(view: View, px: number, py: number): { col: number; row: number } | null {
+/** Which block a point lands on, or null. The screen's half of the dragging. */
+export function cellAt(view: View, px: number, py: number): number | null {
   const { x, y, scale } = fieldOf(view)
-  const by = y + CHAMBER * scale + scale * 0.16
+  const by = y + (CHAMBER + BANNER) * scale
   const col = Math.floor((px - x) / scale)
   const row = Math.floor((py - by) / scale)
   if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return null
-  return { col, row }
+  return row * COLS + col
 }
