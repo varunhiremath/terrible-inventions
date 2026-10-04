@@ -1906,11 +1906,79 @@ export const FLOOD: Track = {
   ],
 }
 
+// --- the notebook ----------------------------------------------------------
+
+/**
+ * The notebook.
+ *
+ * F major, which is the last key not spoken for, and the only tune in here
+ * with no heat in it at all. Every other game has a voice that arrives when
+ * things get bad, because every other game can go badly — and a puzzle cannot.
+ * There is no clock, nothing coming at you, and no way to lose. A tune that
+ * got tense would be inventing a danger the game does not have, which is
+ * exactly the thing that makes somebody rush a puzzle and then give up on it.
+ *
+ * So: slow, warm, mostly bell and piano, with long gaps. Something to think
+ * over rather than something to keep up with.
+ */
+const NOTE_LEAD = [
+  'F4 .  .  A4 .  .  C5 . ',
+  'A4 .  .  .  -  -  -  - ',
+  'G4 .  .  Bb4 .  .  D5 .',
+  'C5 .  .  .  -  -  -  - ',
+  'A4 .  .  G4 .  .  F4 . ',
+  'E4 .  .  .  G4 .  .  . ',
+  'F4 .  .  C4 .  .  A3 . ',
+  'F4 .  .  .  .  .  .  . ',
+].join(' ')
+
+const NOTE_BASS = [
+  'F2 .  .  .  C3 .  .  . ',
+  'F2 .  .  .  A2 .  .  . ',
+  'G2 .  .  .  D3 .  .  . ',
+  'C3 .  .  .  C3 .  .  . ',
+  'F2 .  .  .  C3 .  .  . ',
+  'A2 .  .  .  E3 .  .  . ',
+  'Bb2 . .  .  F3 .  .  . ',
+  'F2 .  .  .  .  .  .  . ',
+].join(' ')
+
+/** One chord a bar, barely there, so the gaps are not empty. */
+const NOTE_BED = [
+  'F3 .  .  .  .  .  .  . ',
+  'F3 .  .  .  .  .  .  . ',
+  'G3 .  .  .  .  .  .  . ',
+  'C4 .  .  .  .  .  .  . ',
+  'F3 .  .  .  .  .  .  . ',
+  'A3 .  .  .  .  .  .  . ',
+  'Bb3 . .  .  .  .  .  . ',
+  'F3 .  .  .  .  .  .  . ',
+].join(' ')
+
+export const NOTEBOOK: Track = {
+  name: 'The Notebook',
+  beatsPerMinute: 84,
+  restEvery: 2,
+  swing: 0.08,
+  /*
+   * Twice the gains it was first written with. A calm tune is allowed to be
+   * quieter than the rest of the app; it is not allowed to be a third of it,
+   * which is what the first cut measured at and which reads as the music
+   * having stopped when you come here from another game.
+   */
+  parts: [
+    { wave: 'bell', gain: 0.1, sustain: 1, pattern: NOTE_LEAD },
+    { wave: 'pluck', gain: 0.11, sustain: 0.8, pattern: NOTE_BASS },
+    { wave: 'strings', gain: 0.06, sustain: 1, chord: [0, 7, 12], pattern: NOTE_BED },
+  ],
+}
+
 export const TRACKS = {
   chase: CHASE,
   garden: GARDEN,
   wall: WALL,
   flood: FLOOD,
+  notebook: NOTEBOOK,
   thinking: THINKING,
   pipes: PIPES,
   cavern: CAVERN,
@@ -2364,8 +2432,94 @@ export const FLOOD_CUES = {
   clack: CLACK,
 } as const
 
+// --- and the noises a pencil makes -------------------------------------------
+
+/**
+ * A line going down.
+ *
+ * The quietest thing in the whole app by a wide margin, and it has to be: this
+ * fires for every square a finger crosses, which on a long maze is three or
+ * four a second for two minutes. Anything with a shape to it becomes a drill.
+ */
+export const SCRATCH: Track = {
+  name: 'Scratch',
+  beatsPerMinute: 340,
+  parts: [{ wave: 'triangle', gain: 0.013, sustain: 0.12, pattern: 'F4 C4 ' }],
+}
+
+/** Rubbing out: the same, lower, and going down instead of up. */
+export const RUB: Track = {
+  name: 'Rub',
+  beatsPerMinute: 320,
+  parts: [{ wave: 'triangle', gain: 0.014, sustain: 0.15, pattern: 'C4 F3 ' }],
+}
+
+/** A pair joined up. */
+export const CLICK: Track = {
+  name: 'Click',
+  beatsPerMinute: 250,
+  parts: [
+    { wave: 'bell', gain: 0.05, sustain: 0.9, pattern: 'C5 F5 ' },
+    { wave: 'pluck', gain: 0.035, sustain: 0.5, pattern: 'F3 .  ' },
+  ],
+}
+
+/** Another colour cut in half, which is allowed and is still a thing lost. */
+export const SNIP: Track = {
+  name: 'Snip',
+  beatsPerMinute: 280,
+  parts: [{ wave: 'pulse', duty: 0.5, gain: 0.05, sustain: 0.2, pattern: 'A4 F4 ' }],
+}
+
+/**
+ * Finished one.
+ *
+ * Warm and short. He is sensitive about being praised too hard, and a fanfare
+ * for a puzzle you did in forty seconds reads as being talked down to.
+ */
+export const WELL_DONE: Track = {
+  name: 'Well done',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'piano', gain: 0.08, sustain: 0.9, chord: [0, 4, 7], pattern: 'F4 .  A4 .  C5 .  F5 .  .  .  ' },
+    { wave: 'bell', gain: 0.045, sustain: 1, pattern: '-  -  -  -  F4 .  C5 .  .  .  ' },
+  ],
+}
+
+/**
+ * The one move the one-line puzzle forbids.
+ *
+ * Soft, and not a buzzer. It means "not that one", which is information, and
+ * information does not need a klaxon on it.
+ */
+export const NOPE: Track = {
+  name: 'Nope',
+  beatsPerMinute: 260,
+  parts: [{ wave: 'triangle', gain: 0.04, sustain: 0.3, pattern: 'A3 F3 ' }],
+}
+
+/** Being shown how it goes, which is a kindness rather than a failure. */
+export const REVEAL: Track = {
+  name: 'Reveal',
+  beatsPerMinute: 160,
+  parts: [
+    { wave: 'bell', gain: 0.042, sustain: 1, pattern: 'C5 .  A4 .  F4 .  .  .  ' },
+    { wave: 'strings', gain: 0.03, sustain: 1, chord: [0, 7], pattern: 'F3 .  .  .  .  .  .  . ' },
+  ],
+}
+
+export const NOTEBOOK_CUES = {
+  scratch: SCRATCH,
+  rub: RUB,
+  click: CLICK,
+  snip: SNIP,
+  wellDone: WELL_DONE,
+  nope: NOPE,
+  reveal: REVEAL,
+} as const
+
 export const CUES = {
   ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES, ...SPACE_CUES,
-  ...GARDEN_CUES, ...BRICK_CUES, ...FLOOD_CUES, ...WIPE_CUES,
+  ...GARDEN_CUES, ...BRICK_CUES, ...FLOOD_CUES, ...NOTEBOOK_CUES, ...WIPE_CUES,
 } as const
 export type CueName = keyof typeof CUES

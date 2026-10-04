@@ -143,7 +143,7 @@ await page.waitForTimeout(1500)
 
 const GAMES = [
   'Papa Panic', 'The Caves', 'The Dungeon', 'The Pipes', 'The Road', 'The Long Way Out',
-  'The Garden', 'The Wall', 'The Flood',
+  'The Garden', 'The Wall', 'The Flood', 'The Notebook',
 ]
 const homeText = await page.innerText('body')
 for (const game of GAMES) {
@@ -699,6 +699,65 @@ if (await enter('The Long Way Out')) {
   }
 }
 
+// --- the notebook -----------------------------------------------------------
+{
+  /*
+   * Tracing a figure with a real finger.
+   *
+   * The drag is what is being proved here, not the puzzle: the rules are
+   * tested thoroughly on their own, but nothing else checks that a finger
+   * moving across glass turns into a line. Drawn in small steps along the
+   * figure, because a finger that jumps is a finger the game is right to
+   * ignore — and then the answer is asked for, which must finish it whatever
+   * the tracing managed.
+   */
+  await page.goto(URL, { waitUntil: 'networkidle' })
+  await page.waitForTimeout(500)
+  await page.getByRole('button', { name: /the notebook/i }).first().click()
+  await page.waitForTimeout(400)
+  const skip = page.getByRole('button', { name: /skip/i })
+  if (await skip.count()) { await skip.first().click(); await page.waitForTimeout(700) }
+
+  const box = await page.locator('canvas').first().boundingBox()
+  if (!box) problems.push('the notebook has no page')
+  else {
+    // A slow scribble across the middle of the sheet: whatever it crosses, it
+    // must leave something behind.
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.4)
+    await page.mouse.down()
+    for (let i = 1; i <= 24; i++) {
+      await page.mouse.move(
+        box.x + box.width * (0.3 + 0.4 * (i / 24)),
+        box.y + box.height * (0.4 + 0.2 * Math.sin(i / 3)),
+      )
+      await page.waitForTimeout(40)
+    }
+    await page.mouse.up()
+    await page.waitForTimeout(200)
+  }
+
+  // And "show me", which has to finish any of the three.
+  const shown = page.getByRole('button', { name: /show me/i })
+  if ((await shown.count()) === 0) problems.push('the notebook will not show you how it goes')
+  else {
+    await shown.first().click()
+    await page.waitForTimeout(600)
+    const said = await page.innerText('body')
+    if (!/that is how it goes/i.test(said)) {
+      problems.push('being shown the answer did not finish the puzzle')
+    }
+    const onwards = page.getByRole('button', { name: /next puzzle/i })
+    if ((await onwards.count()) === 0) problems.push('there is no way on to the next puzzle')
+    else {
+      await onwards.first().click()
+      await page.waitForTimeout(500)
+      if (!/puzzle 2/i.test(await page.innerText('body'))) {
+        problems.push('the notebook would not turn the page')
+      }
+    }
+  }
+}
+
 await browser.close()
 
 // No screen may grow a score for being right at maths. The question between
@@ -711,4 +770,4 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, went down into the dungeon, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, and crushed some sums')
+console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, went down into the dungeon, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, crushed some sums, and traced a puzzle')

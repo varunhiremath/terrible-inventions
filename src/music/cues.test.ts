@@ -9,6 +9,7 @@ import {
   BRICK_CUES,
   GARDEN_CUES,
   FLOOD_CUES,
+  NOTEBOOK_CUES,
   SPACE_CUES,
   WIPE_CUES,
   eighthSeconds,
@@ -96,6 +97,15 @@ const TICKS: CueName[] = [
   // little that somebody hurrying will make two in a second, which is exactly
   // what this rule is about.
   'crunch', 'clack', 'chain', 'clunk',
+  // And the pencil, which is the busiest of the lot: every square a finger
+  // crosses in a maze, three or four a second for two minutes at a stretch.
+  'scratch', 'rub', 'snip',
+  // And a pair joining, which on a board of seven colours happens seven times
+  // in the last few seconds of it.
+  'click',
+  // And being told "not that line", which somebody tracing a figure quickly
+  // will hear two or three times in a row.
+  'nope',
 ]
 
   it('are short enough to be cues rather than tunes', () => {
@@ -262,7 +272,7 @@ describe('every cue', () => {
      */
     const sets = [
       DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES, GARDEN_CUES,
-      BRICK_CUES, FLOOD_CUES, WIPE_CUES,
+      BRICK_CUES, FLOOD_CUES, NOTEBOOK_CUES, WIPE_CUES,
     ]
     const seen = new Set<string>()
     for (const set of sets) {
@@ -292,6 +302,23 @@ describe('the flood cues', () => {
         for (const note of readPart(part.pattern)) {
           const step = Math.round(12 * Math.log2(note.frequency / 440)) % 12
           expect(FLOOD_SCALE, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain((step + 12) % 12)
+        }
+      }
+    }
+  })
+})
+
+/** F major, which is the notebook's. */
+const NOTEBOOK_SCALE = [8, 10, 0, 1, 3, 5, 7]
+
+describe('the notebook cues', () => {
+  it('stay inside the scale the notebook loop is built from', () => {
+    for (const name of Object.keys(NOTEBOOK_CUES) as CueName[]) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          const step = Math.round(12 * Math.log2(note.frequency / 440)) % 12
+          expect(NOTEBOOK_SCALE, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
             .toContain((step + 12) % 12)
         }
       }

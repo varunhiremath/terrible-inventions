@@ -1,0 +1,70 @@
+<!doctype html>
+<!--
+  One of each puzzle, part solved, served by the dev server and left out of
+  the build.
+
+      npx vite --port 5199
+      node scripts/puzzles-shot.mjs
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>puzzles</title>
+    <style>
+      body { margin: 0; background: #05060a; color: #8a91ab;
+             font: 11px ui-monospace, monospace }
+      #all { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 6px }
+      .cell { position: relative; height: 700px }
+      canvas { display: block; width: 100%; height: 100% }
+      .tag { position: absolute; top: 2px; left: 4px; z-index: 2 }
+    </style>
+  </head>
+  <body>
+    <div id="all"></div>
+    <script type="module">
+      import { newRun, touch, drag, lift } from '/src/puzzles/run.ts'
+      import { drawRun } from '/src/puzzles/draw.ts'
+      const host = document.getElementById('all')
+      // Early and late of each kind: 1,2,3 are the first three, 10,11,12 the
+      // fourth time round.
+      const levels = [1, 2, 3, 10, 11, 12]
+      for (const level of levels) {
+        const cell = document.createElement('div')
+        cell.className = 'cell'
+        // The tag goes in before the canvas does: setting innerHTML afterwards
+        // rebuilds the children, which detaches the canvas the context points
+        // at, and everything is then drawn into a picture nobody can see.
+        const tag = document.createElement('span')
+        tag.className = 'tag'
+        cell.appendChild(tag)
+        const canvas = document.createElement('canvas')
+        cell.appendChild(canvas)
+        host.appendChild(cell)
+        const box = canvas.getBoundingClientRect()
+        canvas.width = Math.round(box.width * 2)
+        canvas.height = Math.round(box.height * 2)
+        const ctx = canvas.getContext('2d')
+
+        // Part solved, which is the only interesting state.
+        let run = newRun(level, 4)
+        const board = run.board
+        const paths =
+          board.kind === 'stroke' ? [board.figure.answer]
+          : board.kind === 'maze' ? [board.maze.answer]
+          : board.flow.answer
+        let budget = 0
+        for (const path of paths) {
+          const take = Math.max(2, Math.floor(path.length * 0.55))
+          run = touch(run, path[0])
+          for (let i = 1; i < take; i++) run = drag(run, path[i])
+          run = lift(run)
+          budget += 1
+          if (budget >= Math.ceil(paths.length * 0.6)) break
+        }
+        tag.textContent = `${board.kind} · puzzle ${level}`
+        drawRun(ctx, run, { w: canvas.width, h: canvas.height, clock: 1.1 })
+      }
+      window.__ready = true
+    </script>
+  </body>
+</html>

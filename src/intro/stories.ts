@@ -194,7 +194,33 @@ export const STORIES: Record<string, Story> = {
       { seconds: 3.9, scene: 'flood', voice: 'papa', line: 'Get my nan out. Please. She is cross.' },
     ],
   },
+
+  /*
+   * The notebook.
+   *
+   * Three puzzles in one game, so the cutscene has to say what all three are
+   * without becoming a manual. The thing that gets said last, and in {papa}'s
+   * voice so it does not sound like an instruction, is the only one that is
+   * about the game as a whole: nothing here is chasing you. Every other game
+   * in the app has something coming at you, and somebody arriving from one of
+   * those will hurry this and then be cross with themselves.
+   */
+  puzzles: {
+    id: 'puzzles',
+    title: 'THE NOTEBOOK',
+    beats: [
+      { seconds: 4.4, scene: 'oneline', voice: 'narrator', line: 'A notebook, and every page of it is a puzzle.' },
+      { seconds: 3.8, scene: 'oneline', voice: 'papa', line: 'I did them all! Some of them twice!' },
+      { seconds: 4.8, scene: 'oneline', voice: 'narrator', line: 'Put a finger on it and drag. Do not lift it off.' },
+      { seconds: 4.8, scene: 'oneline', voice: 'narrator', line: 'And never along a line you have already drawn.' },
+      { seconds: 4.4, scene: 'throughit', voice: 'narrator', line: 'The next page is a maze. Trace the way out.' },
+      { seconds: 4.8, scene: 'throughit', voice: 'narrator', line: 'Go back along your own line to rub it out.' },
+      { seconds: 4.6, scene: 'joined', voice: 'narrator', line: 'Then join each dot up with the one that matches.' },
+      { seconds: 4.8, scene: 'joined', voice: 'narrator', line: 'No crossing, and every square has to be filled.' },
+      { seconds: 4.4, scene: 'joined', voice: 'papa', line: 'Nothing is chasing you here. Take as long as you like.' },
+    ],
+  },
 }
 
 export const STORY_ORDER =
-  ['arcade', 'dave', 'prince', 'pipes', 'road', 'space', 'snake', 'bricks', 'sums'] as const
+  ['arcade', 'dave', 'prince', 'pipes', 'road', 'space', 'snake', 'bricks', 'sums', 'puzzles'] as const

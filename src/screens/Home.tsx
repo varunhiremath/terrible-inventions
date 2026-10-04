@@ -7,6 +7,10 @@ import { newRun as newGarden, newSnake } from '../snake/run'
 import { drawRun as drawGarden } from '../snake/draw'
 import { newRun as newFlood } from '../sums/run'
 import { drawRun as drawFlood } from '../sums/draw'
+import { drawRun as drawPencil } from '../puzzles/draw'
+import {
+  newRun as newPencil, touch as touchPencil, drag as dragPencil,
+} from '../puzzles/run'
 import { ROSTER } from '../road/level'
 import { drawRubble, drawShip, drawSky, drawWorld } from '../space/draw'
 import { newRubble } from '../space/run'
@@ -366,6 +370,30 @@ const TILES: Tile[] = [
       drawFlood(ctx, { ...base, water: 0.45 }, { w, h, clock: 0 })
     },
   },
+  {
+    id: 'puzzles',
+    title: 'The Notebook',
+    blurb: 'One line, no lifting. A maze. Dots to join.',
+    tint: '#14161f',
+    emblem(ctx, w, h) {
+      /*
+       * A figure half traced, drawn by the game's own code. The one-line
+       * puzzle rather than the other two because it is the one that explains
+       * itself from a still picture: a shape, and a heavy line part of the way
+       * round it.
+       */
+      let run = newPencil(1, 6)
+      const board = run.board
+      if (board.kind === 'stroke') {
+        const answer = board.figure.answer
+        run = touchPencil(run, answer[0])
+        for (let i = 1; i < Math.ceil(answer.length * 0.6); i++) {
+          run = dragPencil(run, answer[i])
+        }
+      }
+      drawPencil(ctx, run, { w, h, clock: 0 })
+    },
+  },
 ]
 
 function Emblem({ tile }: { tile: Tile }) {
@@ -413,7 +441,7 @@ export function Home() {
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <p className="text-sm text-dim">
-          {fill('{papa}')} built nine terrible machines. Pick one.
+          {fill('{papa}')} built ten terrible machines. Pick one.
         </p>
         {/* The front screen is the one place it is safe to reload, so this is
             the one place the update takes itself. */}

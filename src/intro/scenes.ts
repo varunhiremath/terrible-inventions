@@ -53,6 +53,11 @@ import {
   newRun as newFlood, step as stepFlood, tap as tapFlood, type Run as Flood,
 } from '../sums/run'
 import { COLS as FLOOD_COLS, isRight as isRightSum } from '../sums/level'
+import { drawRun as drawPencil } from '../puzzles/draw'
+import {
+  newRun as newPencil, touch as touchPencil, drag as dragPencil, lift as liftPencil,
+  type Run as Pencil,
+} from '../puzzles/run'
 import {
   headOf as crawlHead, newRun as newGarden, respawn as crawlAgain, step as crawlOn,
   type Run as Crawl,
@@ -612,6 +617,77 @@ function floodFilm(): Flood[] {
   return frames
 }
 
+/**
+ * The notebook: somebody solving one, slowly enough to follow.
+ *
+ * Three recordings rather than one, so a beat can be about the puzzle it is
+ * playing over. A single film cycling through all three would have worked and
+ * would have tied every beat's length to where the film had got to — which is
+ * the arrangement that has already made two cutscenes outrun their own
+ * footage.
+ *
+ * Drawn at about four places a second: fast enough not to be a slideshow,
+ * slow enough that you can see a finger making a decision.
+ */
+const PENCILS: Record<string, Pencil[] | null> = { stroke: null, maze: null, flow: null }
+
+function pencilFilm(kind: 'stroke' | 'maze' | 'flow'): Pencil[] {
+  const found = PENCILS[kind]
+  if (found) return found
+
+  const frames: Pencil[] = []
+  const first = kind === 'stroke' ? 1 : kind === 'maze' ? 2 : 3
+
+  /*
+   * Two of them, one after the other, rather than one and a long stare.
+   *
+   * One puzzle solved at a pace you can follow is five seconds of film, and
+   * the beats that play over it need twenty. The first way round that was to
+   * hold on the finished picture, which is a photograph with music over it.
+   * Several different puzzles of the same kind fill the same time and are
+   * actually about something — they show that the puzzles keep coming.
+   */
+  /*
+   * Enough film for the whole story, not just for the beats that name it.
+   *
+   * A scene's clock runs from the start of the cutscene rather than from when
+   * that scene comes up — so the third scene of a forty-second story is read
+   * at forty seconds however late it arrives. Twenty seconds of film each
+   * looked right and left the last scene holding one frozen frame for the last
+   * four seconds of the story.
+   */
+  for (let level = first; frames.length < 460; level += 3) {
+    let run = newPencil(level, 6 + level)
+    const board = run.board
+    const paths =
+      board.kind === 'stroke' ? [board.figure.answer]
+      : board.kind === 'maze' ? [board.maze.answer]
+      : board.flow.answer
+
+    // A moment on the blank puzzle, so it is clear what is being asked.
+    for (let i = 0; i < 10; i++) frames.push(run)
+    for (const path of paths) {
+      if (path.length === 0) continue
+      run = touchPencil(run, path[0])
+      frames.push(run, run)
+      for (let i = 1; i < path.length; i++) {
+        run = dragPencil(run, path[i])
+        // Three frames a place at ten a second: about three places a second,
+        // which is roughly the speed of somebody who knows where they are
+        // going but is not racing.
+        frames.push(run, run, run)
+      }
+      run = liftPencil(run)
+      frames.push(run, run)
+    }
+    // And a moment on the finished one.
+    for (let i = 0; i < 16; i++) frames.push(run)
+  }
+
+  PENCILS[kind] = frames
+  return frames
+}
+
 export const FOOTAGE_SECONDS: Record<string, number> = {
   get road() { return roadFootage().length / 10 },
   get space() { return FLIGHT().length / 10 },
@@ -624,6 +700,9 @@ export const FOOTAGE_SECONDS: Record<string, number> = {
   get garden() { return gardenFilm().length / 10 },
   get wall() { return wallFilm().length / 10 },
   get flood() { return floodFilm().length / 10 },
+  get oneline() { return pencilFilm('stroke').length / 10 },
+  get throughit() { return pencilFilm('maze').length / 10 },
+  get joined() { return pencilFilm('flow').length / 10 },
 }
 
 /** The deep-space recording, for the test that counts what is in it. */
@@ -919,6 +998,24 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     const film = floodFilm()
     const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
     drawFlood(ctx, frame, { w, h, clock })
+  },
+
+  /** The notebook: a figure being traced in one line. */
+  oneline({ ctx, w, h, clock }) {
+    const film = pencilFilm('stroke')
+    drawPencil(ctx, film[Math.min(film.length - 1, Math.floor(clock * 10))], { w, h, clock })
+  },
+
+  /** The notebook: a finger finding the way out. */
+  throughit({ ctx, w, h, clock }) {
+    const film = pencilFilm('maze')
+    drawPencil(ctx, film[Math.min(film.length - 1, Math.floor(clock * 10))], { w, h, clock })
+  },
+
+  /** The notebook: the dots being joined up. */
+  joined({ ctx, w, h, clock }) {
+    const film = pencilFilm('flow')
+    drawPencil(ctx, film[Math.min(film.length - 1, Math.floor(clock * 10))], { w, h, clock })
   },
 
   /**

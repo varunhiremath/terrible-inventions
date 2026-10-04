@@ -16,7 +16,7 @@ import type { Attempt, Problem } from './engine/types'
 
 export type Screen =
   | 'home' | 'arcade' | 'dave' | 'prince' | 'pipes' | 'road' | 'space' | 'snake' | 'bricks'
-  | 'sums'
+  | 'sums' | 'puzzles'
   | 'workshop' | 'coop' | 'note' | 'settings'
 
 /** How far above his solo level a two-player puzzle is pitched. */
@@ -33,6 +33,7 @@ const INTRO_FOR: Partial<Record<Screen, string>> = {
   snake: 'snake',
   bricks: 'bricks',
   sums: 'sums',
+  puzzles: 'puzzles',
 }
 
 
