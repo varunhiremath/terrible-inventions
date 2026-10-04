@@ -11,7 +11,7 @@
  */
 import { COLS, ROWS, colOf, rowOf, type Soul } from './level'
 import type { Token } from './find'
-import { blastOf, type Run } from './run'
+import { blastOf, type Nudge, type Run } from './run'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -489,25 +489,30 @@ function drawBanner(ctx: Ctx, run: Run, x: number, y: number, w: number, s: numb
 }
 
 /**
- * Lighting up a find for somebody who is stuck.
+ * The board offering a hand: a block that blinks.
  *
- * It shows the blocks rather than naming them, and it does not crush anything
- * — being shown where one is still leaves the reading of it to him, which is
- * the part that is worth doing.
+ * It shows where a find *starts* and nothing else, at first. That points the
+ * eye without doing the reading, which is the whole value of it — a hint that
+ * lights the answer up has not helped anybody think, it has just ended the
+ * thinking.
+ *
+ * The blink quickens as the offer gets bigger, so the help arriving is
+ * something you notice rather than something that was always there.
  */
-function drawHint(ctx: Ctx, hint: number[], bx: number, by: number, s: number, clock: number): void {
+function drawNudge(ctx: Ctx, nudge: Nudge, bx: number, by: number, s: number, clock: number): void {
+  const beat = 3.5 + nudge.stage * 1.2
   ctx.save()
-  ctx.globalAlpha = 0.35 + 0.25 * Math.sin(clock * 5)
+  ctx.globalAlpha = 0.3 + 0.4 * (0.5 + 0.5 * Math.sin(clock * beat))
   ctx.strokeStyle = '#ffd27a'
-  ctx.lineWidth = Math.max(2, s * 0.07)
-  for (const i of hint) {
-    box(ctx, bx + colOf(i) * s + s * 0.05, by + rowOf(i) * s + s * 0.05, s * 0.9, s * 0.9, s * 0.14)
+  ctx.lineWidth = Math.max(2, s * 0.08)
+  for (const i of nudge.cells) {
+    box(ctx, bx + colOf(i) * s + s * 0.04, by + rowOf(i) * s + s * 0.04, s * 0.92, s * 0.92, s * 0.15)
     ctx.stroke()
   }
   ctx.restore()
 }
 
-export function drawRun(ctx: Ctx, run: Run, view: View, hint?: number[] | null): void {
+export function drawRun(ctx: Ctx, run: Run, view: View): void {
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.fillStyle = INK.back
   ctx.fillRect(0, 0, view.w, view.h)
@@ -535,7 +540,8 @@ export function drawRun(ctx: Ctx, run: Run, view: View, hint?: number[] | null):
   }
   ctx.restore()
 
-  if (hint && hint.length > 0) drawHint(ctx, hint, x, by, scale, view.clock)
+  // Never while a finger is down: the selection is what matters then.
+  if (run.nudge && run.anchor === null) drawNudge(ctx, run.nudge, x, by, scale, view.clock)
 }
 
 /** Which block a point lands on, or null. The screen's half of the dragging. */

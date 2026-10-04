@@ -14,8 +14,8 @@
  */
 import {
   CELLS, COLS, DRAIN_PER_BLOCK, LEAST_FINDS, LIVES, MOST_COMBO, PLANTED, RISE, RISE_MOST,
-  RISE_PER_LEVEL, ROWS, SURGE, TO_CLEAR, WORTH, at, bandFor, colOf, filler, rowOf, soulFor,
-  writeFind, type Band, type Soul,
+  NUDGE_AT, RISE_PER_LEVEL, ROWS, SURGE, TO_CLEAR, WORTH, at, bandFor, colOf, filler, rowOf,
+  soulFor, writeFind, type Band, type Soul,
 } from './level'
 import { makeRng, type Rng } from '../engine/rng'
 import { LEAST_FIND, readLine, sayLine, type Find, type FindKind, type Token } from './find'
@@ -24,12 +24,12 @@ export const FIXED = 1 / 60
 
 export type FloodEvent =
   | 'grab' | 'stretch' | 'crush' | 'big' | 'combo' | 'miss' | 'drain' | 'saved' | 'soaked'
-  | 'over' | 'settle' | 'planted'
+  | 'over' | 'settle' | 'planted' | 'nudge'
 
 /** Loudest first, so a frame with several things in it makes one noise. */
 export const LOUDEST: readonly FloodEvent[] = [
-  'over', 'saved', 'soaked', 'big', 'combo', 'crush', 'miss', 'planted', 'drain', 'grab',
-  'stretch', 'settle',
+  'over', 'saved', 'soaked', 'big', 'combo', 'crush', 'miss', 'planted', 'drain', 'nudge',
+  'grab', 'stretch', 'settle',
 ]
 
 export interface Cell {
@@ -42,6 +42,16 @@ export interface Cell {
 }
 
 export type Status = 'playing' | 'soaked' | 'saved' | 'over'
+
+/**
+ * The board offering a hand: which blocks to blink, and how much it is giving
+ * away. Stage one is a single block, stage two adds the next, stage three is
+ * the whole line.
+ */
+export interface Nudge {
+  cells: number[]
+  stage: number
+}
 
 /** What the banner says after a find, and how long it has left to say it. */
 export interface Said {
@@ -65,6 +75,9 @@ export interface Run {
   /** Set while the picked run reads as something true, for the glow. */
   reading: Find | null
   said: Said | null
+  /** Seconds spent looking without finding anything. Paused while dragging. */
+  idle: number
+  nudge: Nudge | null
   water: number
   /** How many blocks this chamber still wants gone. */
   left: number
@@ -175,6 +188,8 @@ export function newRun(level = 1, rating = 1000, lives = LIVES, score = 0, seed 
     picked: [],
     reading: null,
     said: null,
+    idle: 0,
+    nudge: null,
     water: 0,
     left: TO_CLEAR,
     lives,
@@ -417,6 +432,9 @@ export function release(run: Run): Run {
 
   const rng = makeRng(next.seed)
   const gone = blastOf(picked)
+  // Found one: the clock goes back to nought and the offer goes away.
+  next.idle = 0
+  next.nudge = null
   next.streak = Math.min(MOST_COMBO, next.streak + 1)
   const worth = worthOf(find.length, next.streak)
   next.score += worth
@@ -450,6 +468,38 @@ export function release(run: Run): Run {
 export const letGo = (run: Run): Run =>
   run.anchor === null ? run : { ...run, anchor: null, head: null, picked: [], reading: null, events: [] }
 
+/**
+ * How much of a find a given stage gives away.
+ *
+ * One block, then two, then all of it. Two rather than "the first and the
+ * last" on purpose: the first two say which way to drag, and knowing the
+ * direction is most of what somebody stuck in front of a grid is missing.
+ */
+function showingAt(cells: number[], stage: number): number[] {
+  if (stage <= 1) return cells.slice(0, 1)
+  if (stage === 2) return cells.slice(0, 2)
+  return cells.slice()
+}
+
+/**
+ * Asking for a hand, rather than waiting to be offered one.
+ *
+ * The same ladder the clock climbs, one rung per press, so somebody who only
+ * wants a nudge can take only a nudge. Pressing it three times shows the line.
+ */
+export function askNudge(run: Run): Run {
+  if (run.status !== 'playing') return run
+  const found = findsOn(run.cells, 1)[0]
+  if (!found) return { ...run, nudge: null, events: ['nudge'] }
+  const stage = Math.min(NUDGE_AT.length, (run.nudge?.stage ?? 0) + 1)
+  return {
+    ...run,
+    idle: 0,
+    nudge: { cells: showingAt(found.cells, stage), stage },
+    events: ['nudge'],
+  }
+}
+
 export function step(run: Run, dt: number): Run {
   /*
    * A finished run is finished: no water, no falling, and above all no events,
@@ -465,6 +515,25 @@ export function step(run: Run, dt: number): Run {
     cells: run.cells.map((c) => ({ ...c })),
     said: run.said && run.said.life > dt ? { ...run.said, life: run.said.life - dt } : null,
     events: [],
+  }
+
+  /*
+   * The clock that decides when to offer a hand.
+   *
+   * It only runs while nothing is being dragged. A finger on the glass is
+   * somebody working their way along a line, and a board that starts blinking
+   * at them mid-drag is a board interrupting.
+   */
+  if (run.anchor === null) {
+    next.idle = run.idle + dt
+    const earned = NUDGE_AT.filter((when) => next.idle >= when).length
+    if (earned > (run.nudge?.stage ?? 0)) {
+      const found = findsOn(next.cells, 1)[0]
+      if (found) {
+        next.nudge = { cells: showingAt(found.cells, earned), stage: earned }
+        next.events.push('nudge')
+      }
+    }
   }
 
   let landed = false
