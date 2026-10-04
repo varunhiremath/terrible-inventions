@@ -86,7 +86,14 @@ describe('every scene', () => {
           expect(ctx.bad, `${name} at ${clock}s`).toEqual([])
           expect(ctx.drawn.length, `${name} at ${clock}s drew nothing`).toBeGreaterThan(0)
         }
-      })
+        /*
+         * Generous, because whichever of these asks for a recorded scene first
+         * is the one that grows the recording. They are built on demand rather
+         * than at module load — two and a half seconds of blank screen before
+         * the front door otherwise — so the cost has to land on somebody, and
+         * five seconds is not enough room for it on a slow build machine.
+         */
+      }, 30_000)
     }
   }
 })

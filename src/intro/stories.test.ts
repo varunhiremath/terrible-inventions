@@ -134,7 +134,14 @@ describe('the stories', () => {
           .toBeLessThanOrEqual(have)
       }
     }
-  })
+    /*
+     * A generous limit, because whichever test asks first is the one that
+     * grows the footage: the recordings are built on demand now, and the
+     * garden's is a second of simulation. Asking for the default five on a
+     * build machine slower than the one this was written on is how this turned
+     * red having passed locally.
+     */
+  }, 30_000)
 
   it('lands its title over the game rather than a black plate', () => {
     // The title is drawn over the last beat instead of having a scene of its

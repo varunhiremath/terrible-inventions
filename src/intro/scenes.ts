@@ -45,8 +45,8 @@ import { FIXED as SPACE_FIXED, newRun as newFlight, step as flyOn, type Input as
 import { ARENA as GARDEN_EDGE } from '../snake/level'
 import { drawRun as drawGarden } from '../snake/draw'
 import {
-  FIXED as GARDEN_FIXED, headOf as crawlHead, newRun as newGarden, respawn as crawlAgain,
-  step as crawlOn, type Run as Crawl,
+  headOf as crawlHead, newRun as newGarden, respawn as crawlAgain, step as crawlOn,
+  type Run as Crawl,
 } from '../snake/run'
 
 type Ctx = CanvasRenderingContext2D
@@ -454,12 +454,24 @@ let gardenFilmed: Crawl[] | null = null
 function gardenFilm(): Crawl[] {
   if (gardenFilmed) return gardenFilmed
   const frames: Crawl[] = []
-  let run = newGarden(31)
+  /*
+   * Three rivals, not five, and stepped twenty-four times a second rather than
+   * sixty.
+   *
+   * At the full count and the full rate this took four and a half seconds to
+   * grow — which is four and a half seconds of frozen screen before the
+   * cutscene starts, and on a slower machine it was over five and timed two
+   * tests out. Nothing is lost: the beat wants a garden with snakes in it, and
+   * at a step of a twenty-fourth a snake still moves less than one bead, so
+   * nothing passes through anything.
+   */
+  let run = newGarden(31, 3)
   // A head start on length, so the beats that talk about rings are played over
   // a snake that could actually close one.
   run = { ...run, snakes: run.snakes.map((s, i) => (i === 0 ? { ...s, length: 11 } : s)) }
 
-  for (let t = 0; t < 46; t += GARDEN_FIXED) {
+  const step = 1 / 24
+  for (let t = 0; t < 46; t += step) {
     const you = run.snakes[0]
     const head = crawlHead(you)
     let want = you.heading
@@ -487,7 +499,7 @@ function gardenFilm(): Crawl[] {
         if (gap < near) { near = gap; want = Math.atan2(p.y - head.y, p.x - head.x) }
       }
     }
-    run = crawlOn(run, { x: Math.cos(want), y: Math.sin(want), dash: false }, GARDEN_FIXED)
+    run = crawlOn(run, { x: Math.cos(want), y: Math.sin(want), dash: false }, step)
     if (run.status !== 'playing') run = crawlAgain(run)
     /*
      * Kept long, however the round goes.
@@ -502,7 +514,8 @@ function gardenFilm(): Crawl[] {
     if (run.snakes[0].length < 10) {
       run = { ...run, snakes: run.snakes.map((sn, i) => (i === 0 ? { ...sn, length: 11 } : sn)) }
     }
-    if (Math.round(t / GARDEN_FIXED) % 6 === 0) frames.push(run)
+    // Ten frames a second, which is what the scene reads it back at.
+    if (frames.length < Math.floor(t * 10) + 1) frames.push(run)
   }
   gardenFilmed = frames
   return frames
