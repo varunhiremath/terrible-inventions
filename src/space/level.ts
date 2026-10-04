@@ -270,7 +270,10 @@ export const WORLDS: readonly World[] = [
     look: 'ice',
     body: '#9fd8e8', band: '#4a7f96',
     moons: [{ name: 'Pluto', size: 0.22 }, { name: 'Charon', size: 0.14 }],
-    seconds: 80, traffic: 8, fall: 0.35, sends: ['rock', 'shard', 'mine', 'comet'],
+    // Nine where Neptune sends eight. They used to be level, which made the
+    // first world out past the planets no harder than the last one inside
+    // them — and once rocks came apart, measurably easier.
+    seconds: 80, traffic: 9, fall: 0.35, sends: ['rock', 'shard', 'mine', 'comet'],
     rate: 0.075,
   },
   {
@@ -279,7 +282,7 @@ export const WORLDS: readonly World[] = [
     look: 'ice',
     body: '#cfe6f2', band: '#5d7f93',
     moons: [],
-    seconds: 85, traffic: 8, fall: 0.36, sends: ['rock', 'shard', 'mine', 'comet', 'alien'],
+    seconds: 85, traffic: 9, fall: 0.36, sends: ['rock', 'shard', 'mine', 'comet', 'alien'],
     rate: 0.08,
   },
   {
@@ -426,27 +429,45 @@ export interface Kit {
   twin: boolean
   /** A bolt carries on through whatever it breaks. */
   pierce: boolean
-  /** Scrap leans towards you instead of falling straight past. */
-  magnet: boolean
+  /** How far off a cell has to be before it leans your way. Three steps. */
+  magnet: number
 }
 
-export const NEW_KIT: Kit = { rapid: 0, twin: false, pierce: false, magnet: false }
+export const NEW_KIT: Kit = { rapid: 0, twin: false, pierce: false, magnet: 0 }
 
 /** How many of each can be bought. A shield is bought again and again. */
 export const MOST_OF: Record<Upgrade, number> = {
-  shield: 99, rapid: 2, twin: 1, pierce: 1, magnet: 1,
+  shield: 99, rapid: 2, twin: 1, pierce: 1, magnet: 3,
 }
 
 /**
  * What each costs.
  *
- * A world drops somewhere between twenty and sixty cells depending on how much
- * you shoot, so the first stop buys one thing and the third stop buys the
- * expensive thing. Priced so that nothing can be bought on the way to Venus
- * and everything can be owned by Uranus if you have been greedy about it.
+ * These used to say they were priced so that "everything can be owned by
+ * Uranus if you have been greedy about it", and they were out by a factor of
+ * three. Measured rather than asserted this time, by totalling what every
+ * world sends: Mercury is worth 40 cells, Venus 102, Earth 115 — so by Earth
+ * there are 258 going spare against a kit that cost 320, and the whole thing
+ * was aboard before Mars. By Uranus the sky has handed over a thousand.
+ *
+ * So: priced against that total, assuming somebody collects about half of what
+ * passes. Nothing on the way to Venus, the first thing around Earth, and the
+ * last of it somewhere around Uranus — which is where it was always meant to
+ * land, and is now where it does.
  */
 export const COSTS: Record<Upgrade, number> = {
-  shield: 30, rapid: 45, twin: 70, pierce: 90, magnet: 40,
+  shield: 35, rapid: 70, twin: 120, pierce: 130, magnet: 75,
+}
+
+/**
+ * What the next one of a levelled thing costs.
+ *
+ * A second magnet is not a second copy of the same part, it is a bigger one,
+ * and it is also most of what there is to spend on once everything else is
+ * fitted. Half as much again each time.
+ */
+export function costOf(what: Upgrade, have: number): number {
+  return Math.round(COSTS[what] * Math.pow(1.5, Math.max(0, have)))
 }
 
 export const SHOP: Record<Upgrade, { name: string; says: string }> = {
@@ -454,11 +475,37 @@ export const SHOP: Record<Upgrade, { name: string; says: string }> = {
   rapid: { name: 'Quicker trigger', says: 'Less waiting between shots.' },
   twin: { name: 'Twin cannon', says: 'Two bolts, side by side.' },
   pierce: { name: 'Piercing bolts', says: 'A bolt carries on through.' },
-  magnet: { name: 'Scrap magnet', says: 'Cells lean your way as they fall.' },
+  magnet: { name: 'Scrap magnet', says: 'Cells near you lean your way as they fall.' },
 }
 
 /** The most shields the hull will hold, bought or not. */
 export const MOST_SHIELDS = 6
+
+/**
+ * The gun gets hot.
+ *
+ * This is the other half of the answer to "you can sit in one place and keep
+ * firing". A rock coming apart makes the screen busier, but it was measured
+ * doing nothing at all to somebody standing still: they simply shoot the
+ * pieces too. A gun that cannot be held down for ever is the thing that stops
+ * the trigger being a strategy.
+ *
+ * Heat is counted per *bolt*, not per pull, which means the twin cannon is a
+ * real decision rather than a free doubling — it covers twice the lane and
+ * empties the gun twice as fast.
+ *
+ * The numbers are chosen so that the gun you start with never troubles it: at
+ * one bolt every 0.26s it would take nine seconds of unbroken fire, and
+ * nobody fires unbroken for nine seconds with a single slow gun. Fit both
+ * quicker triggers and the twin and you are throwing nearly fourteen bolts a
+ * second, and it cuts out after two and a half. Which is the complaint, and
+ * the fix, in the same sentence.
+ */
+export const HEAT_PER_BOLT = 0.029
+/** How fast it cools once the trigger is let go. Full to cold in 1.25s. */
+export const COOL_RATE = 0.8
+/** It stays shut until it has come back down to here. */
+export const COOL_TO = 0.4
 
 /** How long between shots, given what has been fitted. */
 export function reloadFor(kit: Kit): number {
@@ -467,9 +514,83 @@ export function reloadFor(kit: Kit): number {
 
 /** What a broken-up thing leaves behind. A mine leaves nothing: it is his. */
 export const SCRAP_OF: Record<Hazard, number> = {
-  rock: 3, shard: 1, drone: 5, mine: 0, alien: 8, comet: 6,
+  // A rock is worth less than it was on its own, because it is not on its own
+  // any more: it comes apart into two shards worth a cell each, so breaking
+  // the whole thing up still pays three — it just takes three shots across
+  // three places instead of one shot in one.
+  rock: 1, shard: 1, drone: 5, mine: 0, alien: 8, comet: 6,
 }
+
+/**
+ * What comes apart, and into what.
+ *
+ * The answer to being able to park in the middle and hold the trigger down.
+ *
+ * Everything falls straight and every bolt goes straight up, so one column of
+ * fire keeps one column clear for ever, and the best thing to do was nothing.
+ * A rock that breaks into two pieces going sideways changes what shooting
+ * means: the thing directly above you is the worst thing to shoot, because
+ * what is left of it lands where you are standing. Shoot early, shoot wide,
+ * and move — which is the game this was always supposed to be.
+ */
+export const SPLITS_INTO: Partial<Record<Hazard, { kind: Hazard; count: number }>> = {
+  rock: { kind: 'shard', count: 2 },
+}
+
+/**
+ * How hard the pieces are thrown, and how quickly they settle.
+ *
+ * They do not drift for ever. The sideways speed dies away with a time
+ * constant of `SPLIT_EASE`, so the whole journey outwards is `SPLIT_PUSH *
+ * SPLIT_EASE` and no more — about a ship and a half, which is far enough to
+ * be outside the twin cannon's two barrels and near enough that the spawner
+ * can still find somewhere to put a rock.
+ *
+ * It being *bounded* is the point. Anything that moves after it is placed
+ * breaks the promise that there is a way through, unless the promise is made
+ * against everywhere it can ever get to. That lesson has now cost three goes
+ * at the road, the rubble, the aliens and the comets; this one is measured
+ * before it is written.
+ */
+/**
+ * What breaking a kind up is worth in the end, pieces and all, and what it
+ * costs in shots to get there.
+ *
+ * A rock on its own pays a cell for three hits, which looks mean beside a
+ * shard paying a cell for one. It is not: the rock leaves two shards behind,
+ * so the whole thing is three cells for five shots. Anything comparing a
+ * payout to an effort has to compare these rather than the raw numbers, or it
+ * is comparing a part to a whole.
+ */
+export function payoutOf(kind: Hazard): number {
+  const split = SPLITS_INTO[kind]
+  return SCRAP_OF[kind] + (split ? split.count * payoutOf(split.kind) : 0)
+}
+
+export function effortOf(kind: Hazard): number {
+  const split = SPLITS_INTO[kind]
+  return TOUGHNESS[kind] + (split ? split.count * effortOf(split.kind) : 0)
+}
+
+export const SPLIT_PUSH = 0.26
+export const SPLIT_EASE = 0.22
+export const SPLIT_REACH = SPLIT_PUSH * SPLIT_EASE
 
 /** How wide a cell of scrap is, and how fast it leans when a magnet is fitted. */
 export const SCRAP_WIDE = 0.05
 export const MAGNET_PULL = 0.5
+
+/**
+ * How near a cell has to be before a magnet leans it your way.
+ *
+ * It used to be the whole screen, which quietly deleted the one decision the
+ * scrap exists to pose. Going after a cell means going back into the traffic
+ * for it; a magnet that reaches everywhere means never going anywhere, and
+ * with one fitted the game became: park, fire, collect. A reach gives the
+ * upgrade back its job — it helps you keep what you earned near you — without
+ * doing the earning.
+ *
+ * Three of them, which is also what there is left to buy once the rest of the
+ * kit is aboard and deep space is still taking shields off you.
+ */
+export const MAGNET_REACH = [0, 0.17, 0.3, 0.52] as const

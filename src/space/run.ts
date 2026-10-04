@@ -11,7 +11,9 @@
 import { makeRng, type Rng } from '../engine/rng'
 import {
   ALIEN_PACE, ALIEN_RELOAD, ALIEN_SWEEP,
-  BOLT_SPEED, COSTS, FLYABLE, MAGNET_PULL, MERCY, MOST_OF, MOST_SHIELDS, NEW_KIT,
+  BOLT_SPEED, COOL_RATE, COOL_TO, costOf, FLYABLE, HEAT_PER_BOLT, MAGNET_PULL, MAGNET_REACH,
+  MERCY, MOST_OF, MOST_SHIELDS, NEW_KIT,
+  SPLIT_EASE, SPLIT_PUSH, SPLIT_REACH, SPLITS_INTO,
   RUSH_OF, SCRAP_OF, SCRAP_WIDE, SEND_RATE, SHIP_SPEED, SHIP_TALL, SHIP_WIDE, SHOT_SPEED, SHOT_WIDE,
   SIZE_OF, STARTING_SHIELDS, TOUGHNESS, WORTH, reloadFor, worldFor,
   type Hazard, type Kit, type Upgrade, type World,
@@ -20,7 +22,7 @@ import {
 export const FIXED = 1 / 60
 
 export type SpaceEvent =
-  | 'shot' | 'hit' | 'broke' | 'knock' | 'arrive' | 'warn' | 'scrap' | 'incoming'
+  | 'shot' | 'hit' | 'broke' | 'knock' | 'arrive' | 'warn' | 'scrap' | 'incoming' | 'jam'
 
 /**
  * Loudest first, for the screen to pick one noise a frame from.
@@ -35,7 +37,9 @@ export type SpaceEvent =
 export const LOUDEST: readonly SpaceEvent[] = [
   // Something fired at you comes above your own gun and below everything that
   // has already happened: it is the only one of these that is a warning.
-  'arrive', 'knock', 'warn', 'broke', 'scrap', 'incoming', 'hit', 'shot',
+  // The gun shutting is a thing that happened *to* you, so it sits with the
+  // other warnings rather than with your own gun.
+  'arrive', 'knock', 'warn', 'jam', 'broke', 'scrap', 'incoming', 'hit', 'shot',
 ]
 
 export interface Input {
@@ -55,6 +59,20 @@ export interface Rubble {
   y: number
   /** Sideways drift, in screens a second. */
   drift: number
+  /**
+   * How far it has already been thrown sideways, which is also its leash.
+   *
+   * The drift dies away, and the sum of a dying drift is a number you can
+   * work out on paper — but only in the continuous case. Stepping it sixty
+   * times a second overshoots that sum by about four per cent, and the sum is
+   * what the spawner measured its gaps against. Four per cent is small and
+   * the promise is not the kind of thing that is kept to within four per cent.
+   *
+   * So the distance is counted and stopped at `SPLIT_REACH`, which makes the
+   * bound exact whatever the frame rate and whatever anybody later does to
+   * the arithmetic.
+   */
+  thrown: number
   health: number
   /** Counts down after a hit, so a knock reads. */
   flash: number
@@ -134,6 +152,16 @@ export interface Run {
   /** Shield time left after a knock: you cannot be hit twice in a moment. */
   mercy: number
   reload: number
+  /**
+   * How hot the gun is, 0 to 1, and whether it has shut itself.
+   *
+   * It stays shut until the heat is back down to `COOL_TO`, rather than
+   * reopening the instant it drops below one — otherwise it stutters on and
+   * off a frame at a time at the top, which reads as a fault rather than as a
+   * gun that needs a moment.
+   */
+  heat: number
+  jammed: boolean
   events: SpaceEvent[]
   seed: number
   nextId: number
@@ -165,6 +193,8 @@ export function newRun(
     status: 'flying',
     mercy: 0,
     reload: 0,
+    heat: 0,
+    jammed: false,
     events: [],
     seed,
     nextId: 1,
@@ -205,6 +235,7 @@ export function newRubble(kind: Hazard, x: number, y: number, sweep = 0): Rubble
     x,
     y,
     drift: 0,
+    thrown: 0,
     health: TOUGHNESS[kind],
     flash: 0,
     home: x,
@@ -233,9 +264,22 @@ const spread = (r: Rubble): [number, number] => {
  * a gap measured against where it can *get to* is true for ever. The same
  * answer the road reached after breaking it three times.
  */
-const claim = (r: Rubble): [number, number] => {
+export const claim = (r: Rubble): [number, number] => {
   const half = SIZE_OF[r.kind] / 2
-  return [r.home - r.sweep - half, r.home + r.sweep + half]
+  /*
+   * And everywhere its pieces will ever be.
+   *
+   * A rock that comes apart is not one thing that stays put, it is three
+   * things that end up spread across a band wider than the rock. The gap
+   * measured against the rock alone would be true right up until somebody
+   * shot it, which is to say true until it mattered.
+   *
+   * The shards are thrown a bounded distance on purpose (see SPLIT_PUSH), so
+   * this is a real number and not an argument for giving up.
+   */
+  const split = SPLITS_INTO[r.kind]
+  const burst = split ? SPLIT_REACH + SIZE_OF[split.kind] / 2 : 0
+  return [r.home - r.sweep - half - burst, r.home + r.sweep + half + burst]
 }
 
 const overlaps = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[0] < a[1]
@@ -246,6 +290,32 @@ const overlaps = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[
  * This is the measure the whole fairness promise is made in: if it ever drops
  * below what a ship can fly through, the screen has become a wall.
  */
+/**
+ * The widest clear run across the screen, among everything *where it actually
+ * is* right now.
+ *
+ * The difference between this and `widestGap` is the difference between the
+ * promise and the fact. `widestGap` measures against `claim`, so a test built
+ * on it cannot catch `claim` being wrong — if the claim under-reports, the gap
+ * over-reports, and the check passes while the sky quietly closes. This one
+ * reads positions, and a run watched with it the whole way down is the only
+ * thing that can tell you the promise was kept.
+ */
+export function gapNow(rubble: readonly Rubble[], from: number, to: number): number {
+  const shut = rubble
+    .filter((r) => r.y + SIZE_OF[r.kind] / 2 >= from && r.y - SIZE_OF[r.kind] / 2 <= to)
+    .map(spread)
+    .sort((a, b) => a[0] - b[0])
+
+  let widest = 0
+  let edge = 0
+  for (const [left, right] of shut) {
+    widest = Math.max(widest, left - edge)
+    edge = Math.max(edge, right)
+  }
+  return Math.max(widest, 1 - edge)
+}
+
 export function widestGap(rubble: readonly Rubble[], from: number, to: number): number {
   const shut = rubble
     .filter((r) => r.y + SIZE_OF[r.kind] / 2 >= from && r.y - SIZE_OF[r.kind] / 2 <= to)
@@ -337,24 +407,35 @@ function send(run: Run, rng: Rng): void {
  * Kept next to `buy` and used by the shop to grey a row out, so the reason a
  * button does nothing is the same reason it looks like it will do nothing.
  */
+/** How many of a thing is already aboard, which is what sets the next price. */
+export function owned(run: Run, what: Upgrade): number {
+  if (what === 'shield') return 0
+  if (what === 'rapid') return run.kit.rapid
+  if (what === 'twin') return run.kit.twin ? 1 : 0
+  if (what === 'pierce') return run.kit.pierce ? 1 : 0
+  return run.kit.magnet
+}
+
+/** What the next one would cost, which the shop also prints. */
+export function priceOf(run: Run, what: Upgrade): number {
+  return costOf(what, owned(run, what))
+}
+
 export function canBuy(run: Run, what: Upgrade): boolean {
-  if (run.purse < COSTS[what]) return false
+  if (run.purse < priceOf(run, what)) return false
   if (what === 'shield') return run.shields < MOST_SHIELDS
-  if (what === 'rapid') return run.kit.rapid < MOST_OF.rapid
-  if (what === 'twin') return !run.kit.twin
-  if (what === 'pierce') return !run.kit.pierce
-  return !run.kit.magnet
+  return owned(run, what) < MOST_OF[what]
 }
 
 /** Spends the scrap. Does nothing at all if it cannot be afforded. */
 export function buy(run: Run, what: Upgrade): Run {
   if (!canBuy(run, what)) return run
-  const paid = { ...run, purse: run.purse - COSTS[what] }
+  const paid = { ...run, purse: run.purse - priceOf(run, what) }
   if (what === 'shield') return { ...paid, shields: paid.shields + 1 }
   if (what === 'rapid') return { ...paid, kit: { ...paid.kit, rapid: paid.kit.rapid + 1 } }
   if (what === 'twin') return { ...paid, kit: { ...paid.kit, twin: true } }
   if (what === 'pierce') return { ...paid, kit: { ...paid.kit, pierce: true } }
-  return { ...paid, kit: { ...paid.kit, magnet: true } }
+  return { ...paid, kit: { ...paid.kit, magnet: paid.kit.magnet + 1 } }
 }
 
 export function step(run: Run, input: Input, dt: number): Run {
@@ -427,7 +508,16 @@ export function step(run: Run, input: Input, dt: number): Run {
   next.progress = Math.min(1, next.progress + dt / next.world.seconds)
 
   // --- shooting -------------------------------------------------------------
-  if (input.fire && next.reload === 0) {
+  /*
+   * Cooling first, so that letting go for a frame is worth something and the
+   * heat added below is this frame's firing rather than last frame's.
+   */
+  if (!input.fire || next.jammed) {
+    next.heat = Math.max(0, next.heat - COOL_RATE * dt)
+    if (next.jammed && next.heat <= COOL_TO) next.jammed = false
+  }
+
+  if (input.fire && !next.jammed && next.reload === 0) {
     // A twin cannon puts one either side of the nose rather than two down the
     // middle, which is the point of it: it covers a wider lane, it does not
     // hit the same thing twice.
@@ -442,6 +532,12 @@ export function step(run: Run, input: Input, dt: number): Run {
     }
     next.reload = reloadFor(next.kit)
     next.events.push('shot')
+    next.heat += HEAT_PER_BOLT * barrels.length
+    if (next.heat >= 1) {
+      next.heat = 1
+      next.jammed = true
+      next.events.push('jam')
+    }
   }
   for (const bolt of next.bolts) bolt.y -= BOLT_SPEED * dt
   next.bolts = next.bolts.filter((b) => b.y > -0.05)
@@ -450,6 +546,24 @@ export function step(run: Run, input: Input, dt: number): Run {
   for (const rock of next.rubble) {
     rock.y += next.world.fall * RUSH_OF[rock.kind] * dt
     if (rock.flash > 0) rock.flash = Math.max(0, rock.flash - dt)
+
+    /*
+     * A piece thrown clear of something still carries the throw.
+     *
+     * It dies away rather than stopping, so the burst opens out and settles
+     * instead of turning a corner, and the whole distance it covers is
+     * SPLIT_PUSH * SPLIT_EASE — which is what the claim above is told to
+     * expect and is the only reason this is allowed to move at all.
+     */
+    if (rock.drift !== 0) {
+      const want = rock.drift * dt
+      const room = Math.max(0, SPLIT_REACH - rock.thrown)
+      const move = Math.sign(want) * Math.min(Math.abs(want), room)
+      rock.x = Math.min(1, Math.max(0, rock.x + move))
+      rock.thrown += Math.abs(move)
+      rock.drift *= Math.exp(-dt / SPLIT_EASE)
+      if (room === 0 || Math.abs(rock.drift) < 0.001) rock.drift = 0
+    }
 
     if (rock.kind !== 'alien') continue
     /*
@@ -501,6 +615,28 @@ export function step(run: Run, input: Input, dt: number): Run {
         if (worth > 0) {
           next.scrap.push({ id: next.nextId++, x: rock.x, y: rock.y, worth })
         }
+        /*
+         * And what it came apart into, thrown clear.
+         *
+         * Born where their parent died, which means the pieces of the thing
+         * directly above you arrive directly above you. That is the point of
+         * them: the gun stops being an answer to everything and becomes a
+         * question about where you are standing.
+         */
+        const split = SPLITS_INTO[rock.kind]
+        if (split) {
+          for (let i = 0; i < split.count; i++) {
+            const away = split.count === 1 ? 0 : (i / (split.count - 1)) * 2 - 1
+            next.rubble.push({
+              ...newRubble(split.kind, rock.x, rock.y),
+              id: next.nextId++,
+              drift: away * SPLIT_PUSH,
+              // Its claim was its parent's claim, and the parent's covered
+              // this. Keeping the parent's home keeps the sum honest.
+              home: rock.home,
+            })
+          }
+        }
       } else {
         next.events.push('hit')
       }
@@ -546,7 +682,8 @@ export function step(run: Run, input: Input, dt: number): Run {
      * the reason nothing else is allowed to: scrap is not a hazard, so no
      * promise about there being a way through is measured against where it is.
      */
-    if (next.kit.magnet) {
+    const reach = MAGNET_REACH[Math.min(MAGNET_REACH.length - 1, next.kit.magnet)]
+    if (reach > 0 && Math.abs(next.x - cell.x) <= reach) {
       const towards = Math.sign(next.x - cell.x)
       cell.x = Math.min(1, Math.max(0, cell.x + towards * MAGNET_PULL * dt))
     }

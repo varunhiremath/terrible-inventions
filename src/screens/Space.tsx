@@ -42,6 +42,7 @@ const NOISE: Record<SpaceEvent, CueName> = {
   arrive: 'orbit',
   warn: 'closing',
   scrap: 'cell',
+  jam: 'cooling',
 }
 
 /** Loudest first: one sound a frame, and never the laser if anything else fired. */

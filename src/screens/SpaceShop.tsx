@@ -1,5 +1,5 @@
-import { COSTS, MOST_OF, MOST_SHIELDS, SHOP, type Upgrade } from '../space/level'
-import { canBuy, type Run } from '../space/run'
+import { MOST_OF, MOST_SHIELDS, SHOP, type Upgrade } from '../space/level'
+import { canBuy, owned as aboard, priceOf, type Run } from '../space/run'
 import { Btn } from '../ui/bits'
 import type { Fact } from '../space/facts'
 
@@ -73,16 +73,27 @@ export function FactCard({ fact, shields, onDone }: {
  * and the shop is what you do while you are there.
  *
  * A row you cannot afford is dimmed rather than hidden: knowing that a
- * piercing bolt exists and costs ninety is the reason to go back out and shoot
- * more than you strictly have to.
+ * piercing bolt exists and what it costs is the reason to go back out and
+ * shoot more than you strictly have to.
+ *
+ * The price shown is the price of the *next* one, which for a thing that comes
+ * in sizes is not the price of the first.
  */
 export function Shop({ run, onBuy }: { run: Run; onBuy: (what: Upgrade) => void }) {
+  /*
+   * What is already aboard, in the words that suit it.
+   *
+   * The things that come in sizes say which one you have out of how many; the
+   * things you either own or do not just say so. A magnet has three sizes now,
+   * because a reach is a thing that can be bigger — and because once the rest
+   * of the kit is fitted and deep space is still taking shields off you, it is
+   * most of what the scrap is for.
+   */
   const owned = (what: Upgrade): string | null => {
     if (what === 'shield') return `${run.shields}/${MOST_SHIELDS}`
-    if (what === 'rapid') return run.kit.rapid > 0 ? `${run.kit.rapid}/${MOST_OF.rapid}` : null
-    if (what === 'twin') return run.kit.twin ? 'fitted' : null
-    if (what === 'pierce') return run.kit.pierce ? 'fitted' : null
-    return run.kit.magnet ? 'fitted' : null
+    const have = aboard(run, what)
+    if (MOST_OF[what] > 1) return have > 0 ? `${have}/${MOST_OF[what]}` : null
+    return have > 0 ? 'fitted' : null
   }
 
   return (
@@ -99,9 +110,9 @@ export function Shop({ run, onBuy }: { run: Run; onBuy: (what: Upgrade) => void 
           const can = canBuy(run, what)
           const have = owned(what)
           const maxed =
-            (what === 'shield' && run.shields >= MOST_SHIELDS) ||
-            (what === 'rapid' && run.kit.rapid >= MOST_OF.rapid) ||
-            (what !== 'shield' && what !== 'rapid' && have === 'fitted')
+            what === 'shield'
+              ? run.shields >= MOST_SHIELDS
+              : aboard(run, what) >= MOST_OF[what]
 
           return (
             <button
@@ -126,7 +137,7 @@ export function Shop({ run, onBuy }: { run: Run; onBuy: (what: Upgrade) => void 
                   maxed ? 'text-dim' : can ? 'text-moss' : 'text-rust'
                 }`}
               >
-                {maxed ? '—' : COSTS[what]}
+                {maxed ? '—' : priceOf(run, what)}
               </span>
             </button>
           )

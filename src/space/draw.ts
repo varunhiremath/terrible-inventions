@@ -854,7 +854,56 @@ export function drawRun(ctx: Ctx, run: Run, view: View, travelled: number): void
   // the thing hidden behind something else.
   for (const shot of run.shots) drawShot(ctx, shot, play)
   drawShip(ctx, run.x, play, run.mercy, view.clock)
+  drawHeat(ctx, run, play, view.clock)
   ctx.restore()
+}
+
+/**
+ * How hot the gun is, drawn under the ship.
+ *
+ * A gun that stops firing without saying why is a gun the player decides is
+ * broken, so this has to be legible at a glance and from the corner of an eye.
+ *
+ * Just above the nose, not below the ship. Below was the obvious place and is
+ * off the bottom of the screen: the ship's line is the last thing in the play
+ * area, so a bar under it lands on the progress strip, which a photograph
+ * showed and no test could. Above it is also where you are already looking,
+ * because it is where the shooting happens.
+ *
+ * Nothing at all while the gun is cold, because a bar at zero on every frame
+ * of every game is one more thing to look past.
+ */
+function drawHeat(ctx: Ctx, run: Run, view: View, clock: number): void {
+  if (run.heat <= 0.02 && !run.jammed) return
+
+  const wide = SHIP_WIDE * view.w * 1.3
+  const tall = Math.max(3, view.h * 0.007)
+  // Kept on the screen when the ship is against either wall, which is exactly
+  // where somebody who has just been forced out of the middle will be.
+  const middle = Math.min(view.w - wide / 2, Math.max(wide / 2, px(view, run.x)))
+  const x = middle - wide / 2
+  const y = view.h * (1 - SHIP_TALL * 1.75)
+
+  ctx.fillStyle = 'rgba(8,10,16,0.75)'
+  ctx.fillRect(x, y, wide, tall)
+
+  // Amber through to red, so the last third reads as the last third without
+  // anybody having to be told what the colours mean.
+  const hot = Math.min(1, run.heat)
+  ctx.fillStyle = run.jammed
+    ? (Math.floor(clock * 8) % 2 === 0 ? '#ff6b53' : '#7d1f14')
+    : hot > 0.7 ? '#ff9a3c' : '#ffc84a'
+  ctx.fillRect(x, y, wide * hot, tall)
+
+  if (run.jammed) {
+    ctx.font = `bold ${Math.max(9, view.h * 0.019)}px ui-monospace, monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'bottom'
+    ctx.fillStyle = '#ff6b53'
+    const word = 'COOLING'
+    const room = ctx.measureText(word).width / 2
+    ctx.fillText(word, Math.min(view.w - room, Math.max(room, middle)), y - tall * 1.4)
+  }
 }
 
 /** The pad, in the same style as everywhere else. */

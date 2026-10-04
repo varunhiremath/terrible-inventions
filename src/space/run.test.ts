@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  COSTS, FLYABLE, MOST_OF, MOST_SHIELDS, NEW_KIT, SCRAP_OF, SHIP_SPEED, SHIP_WIDE,
-  SIZE_OF, SOLAR_SYSTEM, WORLDS, reloadFor, worldFor, type Hazard,
+  COSTS, FLYABLE, MAGNET_REACH, MOST_OF, MOST_SHIELDS, NEW_KIT, SCRAP_OF, SHIP_SPEED,
+  SHIP_WIDE, SIZE_OF, SOLAR_SYSTEM, WORLDS, effortOf, payoutOf, reloadFor, worldFor,
+  type Hazard,
 } from './level'
 import {
   FIXED, NO_INPUT, buy, canBuy, newRubble, newRun, resume, step, widestGap,
@@ -285,8 +286,13 @@ describe('the scrap', () => {
   })
 
   it('pays more for the things that are harder to break', () => {
-    expect(SCRAP_OF.drone).toBeGreaterThan(SCRAP_OF.rock)
-    expect(SCRAP_OF.rock).toBeGreaterThan(SCRAP_OF.shard)
+    // Pieces and all. A rock pays one cell for three hits on its own, which
+    // reads as mean next to a shard paying one for a single hit — until the
+    // two shards it leaves behind are counted, which is the whole of what
+    // breaking a rock up means now.
+    expect(payoutOf('drone')).toBeGreaterThan(payoutOf('rock'))
+    expect(payoutOf('rock')).toBeGreaterThan(payoutOf('shard'))
+    expect(effortOf('rock')).toBeGreaterThan(effortOf('shard'))
   })
 
   it('goes in the pocket when the ship flies into it', () => {
@@ -306,18 +312,38 @@ describe('the scrap', () => {
   })
 
   it('leans towards you once a magnet is fitted, and not before', () => {
-    const drop = (magnet: boolean) => {
-      let run: Run = { ...newRun(1), x: 0.1, kit: { ...NEW_KIT, magnet } }
-      run.scrap.push({ id: 1, x: 0.9, y: 0.1, worth: 3 })
+    const drop = (magnet: number, at: number) => {
+      let run: Run = { ...newRun(1), x: 0.5, kit: { ...NEW_KIT, magnet } }
+      run.scrap.push({ id: 1, x: at, y: 0.1, worth: 3 })
       run = fly(run, NO_INPUT, 1)
       return run.scrap[0]?.x ?? 0
     }
-    expect(drop(false)).toBeCloseTo(0.9, 5)
-    expect(drop(true)).toBeLessThan(0.9)
+    expect(drop(0, 0.6)).toBeCloseTo(0.6, 5)
+    expect(drop(1, 0.6)).toBeLessThan(0.6)
+  })
+
+  it('only reaches as far as the magnet that is fitted', () => {
+    /*
+     * It used to reach the whole screen, which deleted the one decision the
+     * scrap exists to pose — going after a cell means going back into the
+     * traffic for it. With one fitted the game became park, fire, collect.
+     */
+    const pull = (magnet: number, away: number) => {
+      let run: Run = { ...newRun(1), x: 0.5, kit: { ...NEW_KIT, magnet } }
+      run.scrap.push({ id: 1, x: 0.5 + away, y: 0.1, worth: 3 })
+      run = fly(run, NO_INPUT, 0.5)
+      return (run.scrap[0]?.x ?? 0) < 0.5 + away
+    }
+    // Just inside and just outside each reach, so this says where the edge is
+    // rather than only that there is one.
+    expect(pull(1, MAGNET_REACH[1] - 0.02)).toBe(true)
+    expect(pull(1, MAGNET_REACH[1] + 0.02)).toBe(false)
+    expect(pull(3, MAGNET_REACH[1] + 0.02)).toBe(true)
+    expect(pull(3, MAGNET_REACH[3] + 0.02)).toBe(false)
   })
 
   it('never lets a magnet drag a cell off the screen', () => {
-    let run: Run = { ...newRun(1), x: 0.5, kit: { ...NEW_KIT, magnet: true } }
+    let run: Run = { ...newRun(1), x: 0.5, kit: { ...NEW_KIT, magnet: 3 } }
     run.scrap.push({ id: 1, x: 0.02, y: 0, worth: 1 })
     run = fly(run, NO_INPUT, 2)
     for (const cell of run.scrap) {

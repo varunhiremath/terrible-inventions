@@ -50,7 +50,7 @@ describe('the order things are heard in', () => {
 
   it('covers every event the space run can raise, exactly once', () => {
     const all: SpaceEvent[] =
-      ['shot', 'hit', 'broke', 'knock', 'arrive', 'warn', 'scrap', 'incoming']
+      ['shot', 'hit', 'broke', 'knock', 'arrive', 'warn', 'scrap', 'incoming', 'jam']
     sameSet(SPACE, all)
   })
 })

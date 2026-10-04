@@ -26,7 +26,7 @@ import { makePilot } from './run.test'
  */
 
 /** Everything bought, which is where the complaint came from. */
-const LOADED: Kit = { rapid: MOST_OF.rapid, twin: true, pierce: true, magnet: true }
+const LOADED: Kit = { rapid: MOST_OF.rapid, twin: true, pierce: true, magnet: MOST_OF.magnet }
 
 /**
  * How many shields somebody loses getting there, averaged over ten goes.

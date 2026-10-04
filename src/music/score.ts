@@ -1630,6 +1630,23 @@ export const INCOMING: Track = {
   parts: [{ wave: 'sawtooth', gain: 0.045, sustain: 0.35, pattern: 'A4 E4' }],
 }
 
+/**
+ * The gun shutting itself.
+ *
+ * Two notes falling away, and quiet — it is not a disaster, it is the thing
+ * telling you to let go for a moment. Loud enough to be noticed over a full
+ * screen, because the one thing worse than the gun cutting out is the gun
+ * cutting out without saying so and the player deciding the game is broken.
+ */
+export const COOLING: Track = {
+  name: 'Cooling',
+  beatsPerMinute: 230,
+  parts: [
+    { wave: 'pulse', duty: 0.125, gain: 0.1, sustain: 0.5, pattern: 'B4 .  E4 .  .  . ' },
+    { wave: 'triangle', gain: 0.12, sustain: 0.9, pattern: 'E3 .  .  .  .  . ' },
+  ],
+}
+
 export const SPACE_CUES = {
   laser: LASER,
   incoming: INCOMING,
@@ -1639,6 +1656,7 @@ export const SPACE_CUES = {
   struck: STRUCK,
   orbit: ORBIT,
   closing: CLOSING,
+  cooling: COOLING,
 } as const
 
 export const TRACKS = {
