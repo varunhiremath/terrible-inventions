@@ -71,9 +71,34 @@ describe('the shop against the sky', () => {
     return sum * CAUGHT
   }
 
-  it('cannot be opened with anything on the way to Venus', () => {
-    // The first world is a tour, not a shopping trip.
-    expect(upTo(1)).toBeLessThan(Math.min(...KIT.map((w) => costOf(w, 0))))
+  it('cannot sell a single gun part out of the whole of the first world', () => {
+    /*
+     * The report, in its sharpest form: "he gets all the upgrades before
+     * Venus". Which sounded impossible against a kit priced at 320 — until
+     * the first world was added up.
+     *
+     * Mercury holds 40 cells. The magnet cost 40. One Mercury, exactly, bought
+     * the upgrade he named as the one that makes the game trivial, and he had
+     * it before the second world. Three on screen at a time, five seconds each
+     * to cross, forty-five seconds of it: about twenty-seven things, mostly
+     * rocks, which is the number — and nobody had ever worked it out.
+     *
+     * So this is measured against the *whole* of the first world rather than
+     * against a share of it. Not "unlikely to afford": cannot, even having
+     * caught every cell Mercury has in it.
+     */
+    const everything = worthOf(1)
+    const cheapest = Math.min(...KIT.map((w) => costOf(w, 0)))
+    expect(
+      everything,
+      `the whole of ${worldFor(1).name} is ${everything} cells and the cheapest gun part is ${cheapest}`,
+    ).toBeLessThan(cheapest)
+  })
+
+  it('does sell a shield that early, so the first world is still worth something', () => {
+    // The other way round is its own fault: a shop that can sell you nothing
+    // at all for two worlds is a shop nobody opens a third time.
+    expect(worthOf(1)).toBeGreaterThan(COSTS.shield)
   })
 
   it('hands over the first thing somewhere around Earth', () => {
