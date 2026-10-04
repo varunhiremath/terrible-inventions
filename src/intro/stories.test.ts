@@ -13,7 +13,7 @@ import lengths from '../../public/spoken/index.json'
  * like a loading bug rather than a missing picture.
  */
 /** The scenes that are a real level being played. */
-const LEVELS = ['maze', 'cave', 'dungeon', 'pipes', 'road', 'space', 'deep', 'garden', 'wall']
+const LEVELS = ['maze', 'cave', 'dungeon', 'pipes', 'road', 'space', 'deep', 'garden', 'wall', 'flood']
 
 /**
  * How `scripts/render-voice.py` names a clip: the line as written, unfilled.

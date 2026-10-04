@@ -87,7 +87,7 @@ const HOT_DRUMS = 0.55
  * is about the whole thing being quieter.
  */
 let volume = 0.27
-let noise: AudioBuffer | null = null
+const noise = new WeakMap<BaseAudioContext, AudioBuffer>()
 
 function audio(): AudioContext | null {
   if (context) return context
@@ -145,10 +145,26 @@ export function unlockAudio(): void {
  * A pulse of width d has harmonics of size (2/n·pi)·sin(n·pi·d), so the wave
  * can be built straight from that and handed to the oscillator.
  */
-const pulses = new Map<number, PeriodicWave>()
+/*
+ * Cached per context, and that is not a detail: a PeriodicWave belongs to the
+ * context that made it, and handing one to an oscillator in a different
+ * context does not throw — it just plays nothing.
+ *
+ * Keyed by duty alone, this went unnoticed for as long as there was only ever
+ * one context. The listening page and every offline render make several, and
+ * in all but the first of them every pulse voice in the app was silent. It
+ * surfaced as "the new tune's dripping part measures as silence", which is a
+ * sentence about the new tune and was nothing to do with it.
+ */
+const pulses = new WeakMap<BaseAudioContext, Map<number, PeriodicWave>>()
 
 function pulseWave(ctx: BaseAudioContext, duty: number): PeriodicWave {
-  const found = pulses.get(duty)
+  let mine = pulses.get(ctx)
+  if (!mine) {
+    mine = new Map()
+    pulses.set(ctx, mine)
+  }
+  const found = mine.get(duty)
   if (found) return found
 
   const harmonics = 32
@@ -158,17 +174,19 @@ function pulseWave(ctx: BaseAudioContext, duty: number): PeriodicWave {
     imag[n] = (2 / (n * Math.PI)) * Math.sin(n * Math.PI * duty)
   }
   const wave = ctx.createPeriodicWave(real, imag, { disableNormalization: false })
-  pulses.set(duty, wave)
+  mine.set(duty, wave)
   return wave
 }
 
+/* Same again: a buffer is only safe to reuse in a context of the same rate. */
 function hiss(ctx: BaseAudioContext): AudioBuffer {
-  if (noise) return noise
+  const found = noise.get(ctx)
+  if (found) return found
   const frames = Math.floor(ctx.sampleRate * 0.12)
   const buffer = ctx.createBuffer(1, frames, ctx.sampleRate)
   const data = buffer.getChannelData(0)
   for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1
-  noise = buffer
+  noise.set(ctx, buffer)
   return buffer
 }
 

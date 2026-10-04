@@ -143,7 +143,7 @@ await page.waitForTimeout(1500)
 
 const GAMES = [
   'Papa Panic', 'The Caves', 'The Dungeon', 'The Pipes', 'The Road', 'The Long Way Out',
-  'The Garden', 'The Wall',
+  'The Garden', 'The Wall', 'The Flood',
 ]
 const homeText = await page.innerText('body')
 for (const game of GAMES) {
@@ -646,6 +646,59 @@ if (await enter('The Long Way Out')) {
   }
 }
 
+// --- the flood --------------------------------------------------------------
+{
+  /*
+   * Finding a true sum on the board and tapping it, with a real pointer.
+   *
+   * The thing worth proving is that the water goes *down* when somebody is
+   * right, because that is the only reason to do any of it and it is the one
+   * link in the chain that nothing else checks: the simulation is tested, the
+   * drawing is photographed, and neither of them knows whether the screen is
+   * passing taps to the game at all.
+   */
+  await page.goto(URL, { waitUntil: 'networkidle' })
+  await page.waitForTimeout(500)
+  await page.getByRole('button', { name: /the flood/i }).first().click()
+  await page.waitForTimeout(400)
+  const skip = page.getByRole('button', { name: /skip/i })
+  if (await skip.count()) { await skip.first().click(); await page.waitForTimeout(700) }
+
+  const grab = async () => (await page.locator('p.font-mono').allTextContents()).join(' ')
+  const toGo = (text) => Number((text.match(/(\d+) to go/)?.[1] ?? '0'))
+  const before = await grab()
+  if (toGo(before) === 0) problems.push('the flood has nothing to clear')
+
+  const box = await page.locator('canvas').first().boundingBox()
+  if (!box) problems.push('the flood has no board')
+  else {
+    /*
+     * Tapped blind, across the board, rather than by asking the page which
+     * blocks are true.
+     *
+     * The alternative was hanging the board off `window` for this one check,
+     * and a hook that only exists for a test is a hook that goes stale and
+     * then quietly makes the test pass for the wrong reason. About four blocks
+     * in ten are true, so fourteen taps miss every one of them roughly once in
+     * two thousand runs, and the wrong ones cost nothing but a little water.
+     */
+    for (let i = 0; i < 14; i++) {
+      const col = (i % 5) + 0.5
+      const row = (Math.floor(i / 5) * 3 + 1) + 0.5
+      await page.mouse.click(
+        box.x + box.width * (col / 5),
+        box.y + box.height * (0.32 + (row / 8) * 0.62),
+      )
+      await page.waitForTimeout(160)
+    }
+  }
+
+  const after = await grab()
+  if (toGo(after) >= toGo(before)) {
+    problems.push(`the flood counted nothing off: ${toGo(before)} before, ${toGo(after)} after`)
+  }
+}
+
 await browser.close()
 
 // No screen may grow a score for being right at maths. The question between
@@ -658,4 +711,4 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, went down into the dungeon, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, and knocked a wall down')
+console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, went down into the dungeon, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, and crushed some sums')

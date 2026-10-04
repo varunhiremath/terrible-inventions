@@ -167,7 +167,34 @@ export const STORIES: Record<string, Story> = {
       { seconds: 3.4, scene: 'wall', voice: 'papa', line: 'The walls get worse. Obviously. Off you go.' },
     ],
   },
+
+  /*
+   * The flood.
+   *
+   * The one thing that has to land is that a wrong tap is not a punishment.
+   * Everything about the shape of this game says "match three, and do not get
+   * it wrong" — and a player who believes a mistake costs a life will stare at
+   * one block for ten seconds while the water comes up, which is the exact
+   * opposite of what it is for. So it is said plainly, early, and in the
+   * gentlest words that are still true.
+   */
+  sums: {
+    id: 'sums',
+    title: 'THE FLOOD',
+    beats: [
+      { seconds: 4.8, scene: 'flood', voice: 'narrator', line: 'A room full of sums, and somebody in the tank above.' },
+      { seconds: 3.6, scene: 'flood', voice: 'papa', line: 'The pipe is stuck! I did check it!' },
+      { seconds: 4.2, scene: 'flood', voice: 'narrator', line: 'Some of these sums are right. Most are not.' },
+      { seconds: 4.6, scene: 'flood', voice: 'narrator', line: 'Tap a right one. It breaks, and the water drops.' },
+      { seconds: 4.0, scene: 'flood', voice: 'narrator', line: 'Tap a wrong one and nothing bad happens.' },
+      { seconds: 4.6, scene: 'flood', voice: 'narrator', line: 'It wobbles, a little water comes back, that is all.' },
+      { seconds: 4.4, scene: 'flood', voice: 'narrator', line: 'So have a go. Guessing beats staring at it.' },
+      { seconds: 4.4, scene: 'flood', voice: 'narrator', line: 'The colours tell you the sign, never the answer.' },
+      { seconds: 3.8, scene: 'flood', voice: 'narrator', line: 'Fourteen right ones and the tank drains.' },
+      { seconds: 3.9, scene: 'flood', voice: 'papa', line: 'Get my nan out. Please. She is cross.' },
+    ],
+  },
 }
 
 export const STORY_ORDER =
-  ['arcade', 'dave', 'prince', 'pipes', 'road', 'space', 'snake', 'bricks'] as const
+  ['arcade', 'dave', 'prince', 'pipes', 'road', 'space', 'snake', 'bricks', 'sums'] as const

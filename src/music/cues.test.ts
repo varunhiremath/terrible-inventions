@@ -8,6 +8,7 @@ import {
   ROAD_CUES,
   BRICK_CUES,
   GARDEN_CUES,
+  FLOOD_CUES,
   SPACE_CUES,
   WIPE_CUES,
   eighthSeconds,
@@ -90,6 +91,11 @@ const TICKS: CueName[] = [
   // And the ball hitting a brick that will not break, which in a maze level
   // happens as often as anything else in the game.
   'tink', 'chip', 'pew', 'clank',
+  // And the flood's four. A block breaking is the whole game; a block landing
+  // happens eight at a time every time one does; and a wrong tap costs so
+  // little that somebody hurrying will make two in a second, which is exactly
+  // what this rule is about.
+  'crunch', 'clack', 'chain', 'clunk',
 ]
 
   it('are short enough to be cues rather than tunes', () => {
@@ -256,7 +262,7 @@ describe('every cue', () => {
      */
     const sets = [
       DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES, GARDEN_CUES,
-      BRICK_CUES, WIPE_CUES,
+      BRICK_CUES, FLOOD_CUES, WIPE_CUES,
     ]
     const seen = new Set<string>()
     for (const set of sets) {
@@ -270,6 +276,29 @@ describe('every cue', () => {
 })
 
 /** E natural minor — E F# G A B C D — which is where the driving loop lives. */
+/**
+ * A natural minor, which is the flood's.
+ *
+ * The one note in its cues that is not in here is the major third inside the
+ * rescue chord, and that is deliberate — chords are not read by this check,
+ * and a Picardy third is the point of that cue.
+ */
+const FLOOD_SCALE = [0, 2, 3, 5, 7, 8, 10]
+
+describe('the flood cues', () => {
+  it('stay inside the scale the flood loop is built from', () => {
+    for (const name of Object.keys(FLOOD_CUES) as CueName[]) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          const step = Math.round(12 * Math.log2(note.frequency / 440)) % 12
+          expect(FLOOD_SCALE, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain((step + 12) % 12)
+        }
+      }
+    }
+  })
+})
+
 const ROAD_SCALE = [4, 6, 7, 9, 11, 0, 2]
 
 describe('the road cues', () => {

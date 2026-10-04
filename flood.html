@@ -1,0 +1,56 @@
+<!doctype html>
+<!--
+  The flood at five water levels, served by the dev server and left out of the
+  build.
+
+  The only question worth asking about this screen is whether you can tell at a
+  glance how much trouble somebody is in, and that cannot be answered from one
+  picture of an empty tank.
+
+      npx vite --port 5199
+      node scripts/flood-shot.mjs
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>flood</title>
+    <style>
+      body { margin: 0; background: #05060a; color: #8a91ab;
+             font: 11px ui-monospace, monospace }
+      #all { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 6px }
+      .cell { position: relative; height: 780px }
+      canvas { display: block; width: 100%; height: 100% }
+      .tag { position: absolute; top: 2px; left: 4px; z-index: 2 }
+    </style>
+  </head>
+  <body>
+    <div id="all"></div>
+    <script type="module">
+      import { newRun, step, tap } from '/src/sums/run.ts'
+      import { isRight, COLS } from '/src/sums/level.ts'
+      import { drawRun } from '/src/sums/draw.ts'
+      const host = document.getElementById('all')
+      const levels = [0, 0.25, 0.55, 0.8, 0.97]
+      for (let i = 0; i < levels.length; i++) {
+        const cell = document.createElement('div')
+        cell.className = 'cell'
+        cell.innerHTML = `<span class="tag">water ${Math.round(levels[i] * 100)}%</span>`
+        const canvas = document.createElement('canvas')
+        cell.appendChild(canvas)
+        host.appendChild(cell)
+        const box = canvas.getBoundingClientRect()
+        canvas.width = Math.round(box.width * 2)
+        canvas.height = Math.round(box.height * 2)
+        const ctx = canvas.getContext('2d')
+        // A board that has been played for a moment, so some of it is falling
+        // and there is a flash on it — the still picture of a game in use.
+        let run = newRun(1, 1000 + i * 80, 3, 0, i + 3)
+        const j = run.cells.findIndex((c) => isRight(c.sum))
+        run = tap(run, j % COLS, Math.floor(j / COLS))
+        run = step(run, 1 / 30)
+        drawRun(ctx, { ...run, water: levels[i] }, { w: canvas.width, h: canvas.height, clock: 1.2 })
+      }
+      window.__ready = true
+    </script>
+  </body>
+</html>

@@ -229,12 +229,35 @@ def main():
     for voice, line in lines_from_openers(os.path.join(HERE, 'src/lines.ts')):
         wanted[key_of(voice, line)] = (voice, line)
 
-    print(f'{len(wanted)} lines to render')
+    """
+    A line that already has a clip is left alone.
+
+    Piper is not deterministic: re-running it over a hundred unchanged lines
+    rewrote every one of them, with durations moving by up to two seconds in
+    both directions. Nothing was wrong with the new readings, but every clip in
+    the repository was a changed binary and the narration of eight games had
+    quietly been re-read because one new game needed ten lines.
+
+    So the only thing a run does is fill in what is missing and throw away what
+    is no longer wanted. To deliberately re-record everything, delete the
+    folder first — which is then an obvious thing somebody did on purpose.
+    """
+    have = {
+        os.path.basename(path)[: -len('.opus')]
+        for path in glob.glob(os.path.join(OUT, '*.opus'))
+    }
+    kept = {}
+    if os.path.exists(os.path.join(OUT, 'index.json')):
+        with open(os.path.join(OUT, 'index.json')) as f:
+            kept = json.load(f)
+    todo = {k: v for k, v in wanted.items() if k not in have or k not in kept}
+
+    print(f'{len(wanted)} lines, {len(todo)} to render')
 
     loaded = {}
-    index = {}
+    index = {k: v for k, v in kept.items() if k in wanted and k in have}
     total = 0
-    for key, (voice, line) in sorted(wanted.items()):
+    for key, (voice, line) in sorted(todo.items()):
         model = SPEAKERS.get(voice, SPEAKERS['narrator'])
         if model not in loaded:
             path = os.path.join(MODELS, f'{model}.onnx')
@@ -324,6 +347,9 @@ def main():
         if os.path.basename(path)[:-len('.opus')] not in index:
             os.remove(path)
             dropped += 1
+    total = sum(
+        os.path.getsize(os.path.join(OUT, f'{key}.opus')) for key in index
+    )
 
     with open(os.path.join(OUT, 'index.json'), 'w') as f:
         json.dump(index, f, separators=(',', ':'), sort_keys=True)

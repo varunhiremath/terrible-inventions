@@ -1805,10 +1805,112 @@ export const WALL: Track = {
   ],
 }
 
+// --- the flood --------------------------------------------------------------
+
+/**
+ * The flood.
+ *
+ * A minor, which is the one key left — the dungeon has D Phrygian dominant,
+ * the pipes C major, space E Phrygian, the garden G major and the wall D
+ * major, and a game sounding like the one next door is the quickest way to
+ * make nine games feel like three.
+ *
+ * The brief here is unusual: this is the only game in the lot where somebody
+ * has to *read* while the music plays, so the tune has to hold the room
+ * without asking for attention. Hence a piano saying very little, a bass that
+ * walks, and the two voices that actually say "hurry up" — the dripping pulse
+ * and the bell — held back behind the heat, which the screen drives off the
+ * water. At an empty chamber it is almost a lullaby; at an inch from the top
+ * there are four voices going and the whole thing has sped up by twelve beats
+ * a minute, and nobody has to be told.
+ */
+const FLOOD_LEAD = [
+  'A4 .  C5 .  E5 .  C5 . ',
+  'B4 .  .  .  E4 .  .  . ',
+  'C5 .  E5 .  A5 .  G5 . ',
+  'E5 .  .  .  .  .  .  . ',
+  'F5 .  E5 .  D5 .  C5 . ',
+  'G5 .  .  E5 .  .  D5 . ',
+  'A4 .  C5 .  D5 .  E5 . ',
+  'A4 .  .  .  .  .  .  . ',
+].join(' ')
+
+const FLOOD_BASS = [
+  'A2 .  A2 .  E2 .  E2 . ',
+  'F2 .  F2 .  C3 .  C3 . ',
+  'G2 .  G2 .  D3 .  D3 . ',
+  'E2 .  E2 .  E2 .  G2 . ',
+  'A2 .  A2 .  E2 .  E2 . ',
+  'F2 .  F2 .  D2 .  D2 . ',
+  'G2 .  G2 .  E2 .  E2 . ',
+  'A2 .  E2 .  A2 A2 E2 . ',
+].join(' ')
+
+/** One chord a bar, held, so there is a floor under the piano. */
+const FLOOD_BED = [
+  'A3 .  .  .  .  .  .  . ',
+  'F3 .  .  .  .  .  .  . ',
+  'G3 .  .  .  .  .  .  . ',
+  'E3 .  .  .  .  .  .  . ',
+  'A3 .  .  .  .  .  .  . ',
+  'F3 .  .  .  .  .  .  . ',
+  'G3 .  .  .  .  .  .  . ',
+  'A3 .  .  .  .  .  .  . ',
+].join(' ')
+
+/** The dripping, on the off-beats, which only starts once it is worrying. */
+const FLOOD_DRIP = [
+  '-  A5 -  E5 -  A5 -  E5 ',
+  '-  A5 -  F5 -  A5 -  F5 ',
+  '-  B5 -  G5 -  B5 -  G5 ',
+  '-  B5 -  E5 -  B5 -  E5 ',
+  '-  C6 -  A5 -  C6 -  A5 ',
+  '-  C6 -  F5 -  C6 -  F5 ',
+  '-  D6 -  G5 -  D6 -  G5 ',
+  '-  E6 -  A5 -  E6 -  E6 ',
+].join(' ')
+
+/** And a bell counting, for the last stretch only. */
+const FLOOD_BELL = [
+  'A5 .  .  .  -  -  -  - ',
+  '-  -  -  -  E5 .  .  . ',
+  'C6 .  .  .  -  -  -  - ',
+  '-  -  -  -  B5 .  .  . ',
+  'A5 .  .  .  -  -  -  - ',
+  '-  -  -  -  F5 .  .  . ',
+  'G5 .  .  .  D6 .  .  . ',
+  'A5 .  .  .  .  .  .  . ',
+].join(' ')
+
+const FLOOD_DRUMS = 'x - - x - - x - '.repeat(7) + 'x - x - x - x x'
+
+export const FLOOD: Track = {
+  name: 'The Flood',
+  beatsPerMinute: 116,
+  hotter: 12,
+  drums: FLOOD_DRUMS,
+  restEvery: 3,
+  swing: 0.12,
+  parts: [
+    { wave: 'piano', gain: 0.125, sustain: 0.85, pattern: FLOOD_LEAD },
+    { wave: 'pluck', gain: 0.09, sustain: 0.65, pattern: FLOOD_BASS },
+    { wave: 'strings', gain: 0.045, sustain: 1, chord: [0, 7, 12], pattern: FLOOD_BED },
+    /*
+     * The drip was written as a duty-0.125 pulse with an 0.18 sustain, which
+     * measured as silence: a tenth of a cycle high, cut off after a fifth of
+     * an eighth, under a six-kilohertz lowpass, is a click with nothing left
+     * in it. Nothing about the figure on the page said so.
+     */
+    { wave: 'pulse', duty: 0.25, gain: 0.115, sustain: 0.45, pattern: FLOOD_DRIP, from: 0.35 },
+    { wave: 'bell', gain: 0.055, sustain: 1, pattern: FLOOD_BELL, from: 0.7 },
+  ],
+}
+
 export const TRACKS = {
   chase: CHASE,
   garden: GARDEN,
   wall: WALL,
+  flood: FLOOD,
   thinking: THINKING,
   pipes: PIPES,
   cavern: CAVERN,
@@ -2158,8 +2260,112 @@ export const BRICK_CUES = {
   nasty: NASTY,
 } as const
 
+// --- and the noises it makes -------------------------------------------------
+
+/** A block giving way. Up, short, and over before the next one is tapped. */
+export const CRUNCH: Track = {
+  name: 'Crunch',
+  beatsPerMinute: 260,
+  parts: [
+    { wave: 'pluck', gain: 0.055, sustain: 0.5, pattern: 'A4 E5 ' },
+    { wave: 'pulse', duty: 0.25, gain: 0.03, sustain: 0.2, pattern: 'A3 .  ' },
+  ],
+}
+
+/**
+ * Two in a row, three in a row.
+ *
+ * One cue rather than five, deliberately: a noise that climbs with the streak
+ * means the fifth one in a row arrives shrill, and shrill is the one thing
+ * this project has had to go back and fix twice.
+ *
+ * Written an octave up from this and measured at 30% of its energy above three
+ * kilohertz — the brightest thing in the game that is not a laser, on the cue
+ * that plays most often in it. The same two notes down an octave say the same
+ * thing and sit where the rest of the app sits.
+ */
+export const CHAIN: Track = {
+  name: 'Chain',
+  beatsPerMinute: 250,
+  parts: [
+    { wave: 'bell', gain: 0.05, sustain: 0.8, pattern: 'E5 A5 ' },
+    { wave: 'pluck', gain: 0.04, sustain: 0.5, pattern: 'A4 .  ' },
+  ],
+}
+
+/**
+ * A wrong one.
+ *
+ * Deliberately not a buzzer. It is two soft notes going down — the sound of a
+ * block refusing to move, not the sound of being told off. The water coming up
+ * is the whole of the cost and it does not need underlining.
+ */
+export const CLUNK: Track = {
+  name: 'Clunk',
+  beatsPerMinute: 230,
+  parts: [{ wave: 'triangle', gain: 0.055, sustain: 0.45, pattern: 'E4 C4 ' }],
+}
+
+/** The level dropping: water going somewhere else for once. */
+export const GURGLE: Track = {
+  name: 'Gurgle',
+  beatsPerMinute: 200,
+  parts: [
+    { wave: 'triangle', gain: 0.05, sustain: 0.6, pattern: 'A3 E3 C3 A2 ' },
+  ],
+}
+
+/** Out, dry, and on to the next one. */
+export const RESCUED: Track = {
+  name: 'Rescued',
+  beatsPerMinute: 170,
+  parts: [
+    // Major, in a tune that is otherwise minor throughout. It is the oldest
+    // trick there is for "and then it was all right".
+    { wave: 'piano', gain: 0.08, sustain: 0.9, chord: [0, 4, 7], pattern: 'A4 .  C5 .  E5 .  A5 .  .  .  ' },
+    { wave: 'pluck', gain: 0.06, sustain: 0.7, pattern: 'A2 .  E3 .  A3 .  .  .  .  .  ' },
+  ],
+}
+
+/** Over his head. Down, and not for long. */
+export const UNDER: Track = {
+  name: 'Under',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'triangle', gain: 0.07, sustain: 0.8, pattern: 'E4 .  C4 .  A3 .  ' },
+  ],
+}
+
+/** The last go gone. */
+export const ALL_OUT: Track = {
+  name: 'All out',
+  beatsPerMinute: 120,
+  parts: [
+    { wave: 'strings', gain: 0.05, sustain: 1, chord: [0, 3, 7], pattern: 'A3 .  .  .  F3 .  .  .  E3 .  .  .  .  .  .  . ' },
+    { wave: 'piano', gain: 0.055, sustain: 0.9, pattern: 'A4 .  .  .  F4 .  .  .  E4 .  .  .  .  .  .  . ' },
+  ],
+}
+
+/** A block landing. Almost nothing, forty times a minute. */
+export const CLACK: Track = {
+  name: 'Clack',
+  beatsPerMinute: 320,
+  parts: [{ wave: 'triangle', gain: 0.018, sustain: 0.15, pattern: 'A4 E4 ' }],
+}
+
+export const FLOOD_CUES = {
+  crunch: CRUNCH,
+  chain: CHAIN,
+  clunk: CLUNK,
+  gurgle: GURGLE,
+  rescued: RESCUED,
+  under: UNDER,
+  allOut: ALL_OUT,
+  clack: CLACK,
+} as const
+
 export const CUES = {
   ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES, ...SPACE_CUES,
-  ...GARDEN_CUES, ...BRICK_CUES, ...WIPE_CUES,
+  ...GARDEN_CUES, ...BRICK_CUES, ...FLOOD_CUES, ...WIPE_CUES,
 } as const
 export type CueName = keyof typeof CUES

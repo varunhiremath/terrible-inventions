@@ -5,6 +5,8 @@ import { newRun as newWall, readWall } from '../bricks/run'
 import { drawRun as drawWall } from '../bricks/draw'
 import { newRun as newGarden, newSnake } from '../snake/run'
 import { drawRun as drawGarden } from '../snake/draw'
+import { newRun as newFlood } from '../sums/run'
+import { drawRun as drawFlood } from '../sums/draw'
 import { ROSTER } from '../road/level'
 import { drawRubble, drawShip, drawSky, drawWorld } from '../space/draw'
 import { newRubble } from '../space/run'
@@ -350,6 +352,20 @@ const TILES: Tile[] = [
       }, { w, h, clock: 0 })
     },
   },
+  {
+    id: 'sums',
+    title: 'The Flood',
+    blurb: 'Only the right ones break. Somebody is waiting.',
+    tint: '#070b14',
+    emblem(ctx, w, h) {
+      /*
+       * The real game again, with the water halfway up — which is the whole
+       * picture: a board of sums, and a reason to get on with them.
+       */
+      const base = newFlood(1, 1050, 3, 0, 4)
+      drawFlood(ctx, { ...base, water: 0.45 }, { w, h, clock: 0 })
+    },
+  },
 ]
 
 function Emblem({ tile }: { tile: Tile }) {
@@ -397,7 +413,7 @@ export function Home() {
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <p className="text-sm text-dim">
-          {fill('{papa}')} built seven terrible machines. Pick one.
+          {fill('{papa}')} built nine terrible machines. Pick one.
         </p>
         {/* The front screen is the one place it is safe to reload, so this is
             the one place the update takes itself. */}

@@ -48,6 +48,11 @@ import {
   newRun as newWall, serve as newBall, step as knockOn, type Run as Wall,
 } from '../bricks/run'
 import { drawRun as drawGarden } from '../snake/draw'
+import { drawRun as drawFlood } from '../sums/draw'
+import {
+  newRun as newFlood, step as stepFlood, tap as tapFlood, type Run as Flood,
+} from '../sums/run'
+import { COLS as FLOOD_COLS, isRight as isRightSum } from '../sums/level'
 import {
   headOf as crawlHead, newRun as newGarden, respawn as crawlAgain, step as crawlOn,
   type Run as Crawl,
@@ -567,6 +572,46 @@ function wallFilm(): Wall[] {
  * photograph where there should be a game, held for four seconds, and both the
  * road and the space story had one at the end.
  */
+/**
+ * The flood, played by somebody who is good at it but not instant.
+ *
+ * A bot that waits a beat before each tap rather than clearing the board at
+ * sixty taps a second, because the thing the footage has to show is the water
+ * going down when a block breaks — and a board solved instantly shows an empty
+ * chamber and nothing else.
+ *
+ * It also deliberately gets one wrong, twice, about eight seconds apart: the
+ * surge is the only way to see what a wrong answer costs, and a cutscene that
+ * only ever shows the good case is an advertisement rather than an
+ * explanation.
+ */
+let floodFilmed: Flood[] | null = null
+
+function floodFilm(): Flood[] {
+  if (floodFilmed) return floodFilmed
+  const frames: Flood[] = []
+  let run = newFlood(2, 1100, 99, 0, 12)
+  const step = 1 / 60
+  let waited = 0
+  for (let t = 0; t < 46; t += step) {
+    waited += step
+    if (waited > 1.35 && run.status === 'playing') {
+      waited = 0
+      // Two deliberate misses, far enough apart to read as two mistakes.
+      const slip = (t > 11 && t < 12.5) || (t > 19.5 && t < 21)
+      const i = run.cells.findIndex((c) => isRightSum(c.sum) !== slip)
+      if (i >= 0) run = tapFlood(run, i % FLOOD_COLS, Math.floor(i / FLOOD_COLS))
+    }
+    run = stepFlood(run, step)
+    // Never finishes: the footage is a chamber being worked at, and a run that
+    // ends halfway through leaves the beats talking over a still picture.
+    if (run.status !== 'playing') run = { ...newFlood(run.level + 1, 1100, 99, run.score, 12), water: 0.3 }
+    if (frames.length < Math.floor(t * 10) + 1) frames.push(run)
+  }
+  floodFilmed = frames
+  return frames
+}
+
 export const FOOTAGE_SECONDS: Record<string, number> = {
   get road() { return roadFootage().length / 10 },
   get space() { return FLIGHT().length / 10 },
@@ -578,6 +623,7 @@ export const FOOTAGE_SECONDS: Record<string, number> = {
    */
   get garden() { return gardenFilm().length / 10 },
   get wall() { return wallFilm().length / 10 },
+  get flood() { return floodFilm().length / 10 },
 }
 
 /** The deep-space recording, for the test that counts what is in it. */
@@ -864,6 +910,15 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     const film = gardenFilm()
     const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
     drawGarden(ctx, frame, { w, h, clock })
+  },
+
+  /**
+   * The flood: a board of sums, and the water in the chamber above it.
+   */
+  flood({ ctx, w, h, clock }) {
+    const film = floodFilm()
+    const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
+    drawFlood(ctx, frame, { w, h, clock })
   },
 
   /**
