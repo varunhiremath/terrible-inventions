@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  BALL_R, BALL_FASTEST, COLS, LIVES, PADDLE_Y, POWERS, POWER_LASTS, ROWS, STEEPEST,
-  TALL, WALLS, WIDE, wallFor,
+  BALL_R, BALL_FASTEST, COLS, LIVES, PADDLE_Y, POWERS, POWER_INK, POWER_LASTS, POWER_ODDS,
+  POWER_SAYS, ROWS, STEEPEST, TALL, WALLS, WIDE, isNasty, wallFor, type Power,
 } from './level'
 import {
   FIXED, LOUDEST, NO_INPUT, batBox, boxOf, newRun, readWall, serve, speedFor, standing, step,
@@ -375,7 +375,7 @@ describe('how a go ends', () => {
   it('has a place in the order for everything that can happen', () => {
     const all = [
       'tap', 'crack', 'break', 'solid', 'bat', 'wall', 'drop', 'power',
-      'shoot', 'lost', 'cleared', 'launch',
+      'shoot', 'lost', 'cleared', 'launch', 'blast', 'saved', 'nasty',
     ]
     expect([...LOUDEST].sort()).toEqual([...all].sort())
   })
@@ -497,4 +497,179 @@ describe('a wall can be got through', () => {
     }
     expect(standing(run), `broke ${was - standing(run)} of ${was}`).toBeLessThan(was * 0.7)
   }, 60_000)
+})
+
+describe('the dozen things that drop', () => {
+  /**
+   * A run with one brick to break and one spare, and whatever is held.
+   *
+   * Every one of these is a power that does nothing visible until the right
+   * thing happens, which means every one of them can be wired up wrong and
+   * stay silent — the sort of fault that gets found a fortnight later by
+   * somebody saying "I don't think the bomb does anything".
+   */
+  const holding = (held: Partial<Record<Power, number>>, picture: string[]): Run => {
+    const bricks = readWall(picture)
+    return { ...newRun(1), bricks: [...bricks, ...SPARE], held: { ...held } }
+  }
+
+  /**
+   * How many breakable bricks are left, not counting the spare in the corner.
+   *
+   * The spare is there so a level does not finish on the first frame, and
+   * forgetting it is in the list is how the first two of these came out one
+   * short and blamed the game.
+   */
+  const left = (run: Run) => run.bricks.filter((b) => !b.solid).length - 1
+
+  /** A ball placed just under a brick, pointing up at it. */
+  const upAt = (run: Run, brick: ReturnType<typeof readWall>[0], speed = 6): Run => {
+    const [left, , right, bottom] = boxOf(brick)
+    return {
+      ...run,
+      balls: [{
+        id: 1, x: (left + right) / 2, y: bottom + 0.3, dx: 0, dy: -1,
+        speed, stuck: false, along: 0,
+      }],
+    }
+  }
+
+  it('has a name, a colour and a shape for every one of them', () => {
+    // A power with no entry anywhere is a power that falls as a blank box and
+    // does something nobody can name.
+    for (const kind of POWERS) {
+      expect(POWER_SAYS[kind]?.name, kind).toBeTruthy()
+      expect(POWER_INK[kind], kind).toMatch(/^#[0-9a-f]{6}$/i)
+      expect(POWER_ODDS[kind], kind).toBeGreaterThan(0)
+    }
+  })
+
+  it('keeps the bad ones rare enough to be bad luck rather than the game', () => {
+    const total = POWERS.reduce((n, p) => n + POWER_ODDS[p], 0)
+    const bad = POWERS.filter(isNasty).reduce((n, p) => n + POWER_ODDS[p], 0)
+    expect(bad / total, 'too much of what falls is unwelcome').toBeLessThan(0.3)
+    expect(bad / total, 'nothing unwelcome ever falls').toBeGreaterThan(0.05)
+  })
+
+  it('takes the neighbours too, with a bomb aboard', () => {
+    /*
+     * One ring out, once. A blast that set off the bricks it broke would run
+     * through a whole wall from a single hit.
+     */
+    const picture = ['.aaa.', '.aaa.', '.aaa.']
+    const plain = readWall(picture)
+    const middle = plain.find((b) => b.col === 2 && b.row === 2)!
+    const without = play(upAt(holding({}, picture), middle), NO_INPUT, 0.4)
+    const with_ = play(upAt(holding({ bomb: 9 }, picture), middle), NO_INPUT, 0.4)
+    expect(left(without), 'the plain ball took more than the one brick').toBe(8)
+    // The one it hit, plus the ring around it: five of the nine.
+    expect(left(with_), 'the bomb took no neighbours').toBeLessThanOrEqual(4)
+    expect(with_.score).toBeGreaterThan(without.score)
+  })
+
+  it('ploughs on through, instead of bouncing', () => {
+    const picture = ['..a..', '..a..', '..a..']
+    const column = readWall(picture)
+    const bottom = column.find((b) => b.row === 2)!
+    const bounced = play(upAt(holding({}, picture), bottom, 8), NO_INPUT, 0.5)
+    const ploughed = play(upAt(holding({ through: 9 }, picture), bottom, 8), NO_INPUT, 0.5)
+    expect(left(bounced), 'a plain ball went through more than one').toBe(2)
+    expect(left(ploughed), 'the ball bounced off the first one instead of ploughing on')
+      .toBeLessThan(2)
+  })
+
+  it('does not plough through a solid one, however hard it tries', () => {
+    const picture = ['..#..', '..a..']
+    const bricks = readWall(picture)
+    const under = bricks.find((b) => b.row === 1)!
+    const after = play(upAt(holding({ through: 9 }, picture), under, 9), NO_INPUT, 1.5)
+    expect(after.bricks.filter((b) => b.solid)).toHaveLength(1)
+  })
+
+  it('catches one that was gone, with a net under the bat', () => {
+    const going = (held: Partial<Record<Power, number>>) => {
+      const run: Run = {
+        ...holding(held, ['..a..']),
+        bat: 0.5,
+        balls: [{ id: 1, x: WIDE - 0.5, y: TALL - 1, dx: 0, dy: 1, speed: 8, stuck: false, along: 0 }],
+      }
+      return play(run, NO_INPUT, 0.6)
+    }
+    expect(going({}).status).toBe('lost')
+    const saved = going({ floor: 1 })
+    expect(saved.status, 'the net did not catch it').toBe('playing')
+    // And it is spent: a net is one ball, not a floor for the rest of the go.
+    expect(saved.held.floor).toBeUndefined()
+  })
+
+  it('makes five balls out of one, with a swarm', () => {
+    const picture = ['..A..']
+    const bricks = readWall(picture)
+    let run = upAt(holding({}, picture), bricks[0])
+    run = { ...run, bat: run.balls[0].x }
+    run = play(run, { ...NO_INPUT, to: run.balls[0].x }, 0.4)
+    // The drop is whatever the dice said, so it is swapped for the one under
+    // test — this is about what catching a swarm does, not about the dice.
+    run = { ...run, drops: run.drops.map((d) => ({ ...d, kind: 'swarm' as const })) }
+    const was = run.balls.length
+    run = { ...run, balls: run.balls.map((b) => ({ ...b, stuck: true })) }
+    run = play(run, { ...NO_INPUT, to: run.bat }, 9)
+    expect(run.balls.length, 'a swarm did not make more balls').toBe(was + 4)
+  })
+
+  it('shortens the bat for a narrow one, and wide cancels it', () => {
+    const plain = batBox(newRun(1))
+    const narrow = batBox({ ...newRun(1), held: { narrow: 9 } })
+    expect(narrow[2] - narrow[0]).toBeLessThan(plain[2] - plain[0])
+    // Holding both at once would be two rules arguing, so one clears the other
+    // as it is caught.
+    const both = { ...newRun(1), held: { narrow: 9 } }
+    const after = step({ ...both, drops: [{ id: 1, x: both.bat, y: PADDLE_Y - 0.1, kind: 'wide' }] }, NO_INPUT, FIXED)
+    expect(after.held.narrow).toBeUndefined()
+    expect(after.held.wide).toBeDefined()
+  })
+
+  it('speeds the ball up for a fast one, and slow cancels it', () => {
+    const run = { ...holding({ fast: 9 }, ['..a..']) }
+    const after = step({ ...run, balls: run.balls.map((b) => ({ ...b, stuck: false })) }, NO_INPUT, FIXED)
+    expect(after.balls[0].speed).toBeGreaterThan(speedFor(1))
+    const swapped = step(
+      { ...run, drops: [{ id: 1, x: run.bat, y: PADDLE_Y - 0.1, kind: 'slow' }] },
+      NO_INPUT,
+      FIXED,
+    )
+    expect(swapped.held.fast).toBeUndefined()
+    expect(swapped.held.slow).toBeDefined()
+  })
+
+  it('leans the gun the way the bat is sliding', () => {
+    // "Aim and shoot" with the one control there is.
+    const fire = (to: number) => {
+      let run: Run = { ...holding({ gun: 9 }, ['..a..']), bat: WIDE / 2 }
+      run = { ...run, balls: run.balls.map((b) => ({ ...b, stuck: true })) }
+      // Slide for a moment, then pull the trigger on the move.
+      for (let t = 0; t < 0.5; t += FIXED) run = step(run, { ...NO_INPUT, to, act: t > 0.3 }, FIXED)
+      return run.shots[0]?.dx ?? 0
+    }
+    expect(fire(WIDE - 1), 'sliding right did not aim right').toBeGreaterThan(0.05)
+    expect(fire(1), 'sliding left did not aim left').toBeLessThan(-0.05)
+  })
+
+  it('throws chips off a brick it breaks', () => {
+    // Not a mechanic — nothing collides with one. They are the difference
+    // between a brick coming apart and a brick being switched off.
+    const picture = ['..a..']
+    const bricks = readWall(picture)
+    const after = play(upAt(holding({}, picture), bricks[0]), NO_INPUT, 0.3)
+    expect(after.sparks.length).toBeGreaterThan(4)
+  })
+
+  it('clears the chips up after itself', () => {
+    const picture = ['..a..']
+    const bricks = readWall(picture)
+    let run = play(upAt(holding({}, picture), bricks[0]), NO_INPUT, 0.3)
+    expect(run.sparks.length).toBeGreaterThan(0)
+    run = play(run, NO_INPUT, 2)
+    expect(run.sparks, 'chips are piling up with nothing to remove them').toHaveLength(0)
+  })
 })

@@ -39,6 +39,9 @@ const NOISE: Record<BrickEvent, CueName> = {
   lost: 'missed',
   cleared: 'wallDown',
   launch: 'serve',
+  blast: 'blast',
+  saved: 'saved',
+  nasty: 'nasty',
 }
 
 interface Hud {

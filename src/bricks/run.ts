@@ -17,9 +17,10 @@
  * flips, hit the top and only y does, clip the corner and both do.
  */
 import {
-  BALL_FASTEST, BALL_R, BALL_SLOWEST, BALL_SPEED, BRICK_H, BRICK_W, COLS, DROP_H, DROP_SPEED,
-  DROP_W, LIVES, PADDLE_H, PADDLE_SPEED, PADDLE_W, PADDLE_Y, POWERS, POWER_LASTS, POWER_ODDS,
-  ROWS, SHOT_EVERY, SHOT_H, SHOT_SPEED, SPEED_PER_LEVEL, STEEPEST, TALL, WALL_TOP,
+  inkFor,
+  BALL_FASTEST, BALL_R, BALL_SLOWEST, BALL_SPEED, BLAST, BRICK_H, BRICK_W, COLS, DROP_H,
+  DROP_SPEED, DROP_W, LIVES, PADDLE_H, PADDLE_SPEED, PADDLE_W, PADDLE_Y, POWERS, POWER_LASTS,
+  POWER_ODDS, ROWS, isNasty, SHOT_EVERY, SHOT_H, SHOT_SPEED, SPEED_PER_LEVEL, STEEPEST, TALL, WALL_TOP,
   WIDE, WORTH, wallFor, type Power,
 } from './level'
 
@@ -27,7 +28,7 @@ export const FIXED = 1 / 120
 
 export type BrickEvent =
   | 'tap' | 'crack' | 'break' | 'solid' | 'bat' | 'wall' | 'drop' | 'power'
-  | 'shoot' | 'lost' | 'cleared' | 'launch'
+  | 'shoot' | 'lost' | 'cleared' | 'launch' | 'blast' | 'saved' | 'nasty'
 
 /**
  * Loudest first, for the screen to pick one noise a frame from.
@@ -37,8 +38,8 @@ export type BrickEvent =
  * in an afternoon.
  */
 export const LOUDEST: readonly BrickEvent[] = [
-  'cleared', 'lost', 'power', 'break', 'crack', 'drop', 'launch', 'bat', 'shoot', 'solid',
-  'wall', 'tap',
+  'cleared', 'lost', 'saved', 'blast', 'nasty', 'power', 'break', 'crack', 'drop', 'launch',
+  'bat', 'shoot', 'solid', 'wall', 'tap',
 ]
 
 export interface Brick {
@@ -78,6 +79,26 @@ export interface Shot {
   id: number
   x: number
   y: number
+  /** Sideways, because the gun leans the way the bat is sliding. */
+  dx: number
+}
+
+/**
+ * A chip of a broken brick, flying off.
+ *
+ * Nothing to do with the game — no brick is hit by one and no ball bounces off
+ * one. They are here because a brick that simply disappears reads as a brick
+ * being switched off, and a brick that comes apart reads as a brick being
+ * broken, and that is most of the difference between the two.
+ */
+export interface Spark {
+  id: number
+  x: number
+  y: number
+  dx: number
+  dy: number
+  life: number
+  ink: string
 }
 
 export interface Input {
@@ -100,8 +121,17 @@ export interface Run {
   balls: Ball[]
   drops: Drop[]
   shots: Shot[]
+  sparks: Spark[]
   /** The middle of the bat. */
   bat: number
+  /**
+   * Which way the bat is leaning, eased, 0 is still.
+   *
+   * It is what the gun aims along — "aim and shoot" with the one control there
+   * is. Eased rather than taken frame by frame, because a raw bat velocity
+   * jitters and a gun that jitters cannot be aimed at anything.
+   */
+  lean: number
   lives: number
   score: number
   status: Status
@@ -142,7 +172,7 @@ export function boxOf(b: Brick): [number, number, number, number] {
 }
 
 export const batWidth = (run: Run): number =>
-  PADDLE_W * (run.held.wide !== undefined ? 1.6 : 1)
+  PADDLE_W * (run.held.wide !== undefined ? 1.6 : run.held.narrow !== undefined ? 0.62 : 1)
 
 /** The bat's box. */
 export function batBox(run: Run): [number, number, number, number] {
@@ -203,7 +233,9 @@ export function newRun(level = 1, lives = LIVES, score = 0, seed = 1): Run {
     balls: [restingBall(1, WIDE / 2, speedFor(level))],
     drops: [],
     shots: [],
+    sparks: [],
     bat: WIDE / 2,
+    lean: 0,
     lives,
     score,
     status: 'playing',
@@ -229,6 +261,7 @@ export function serve(run: Run): Run {
     nextId: run.nextId + 1,
     drops: [],
     shots: [],
+    sparks: [],
     held: {},
     status: 'playing',
     events: [],
@@ -283,7 +316,7 @@ function brickAt(byCell: Map<number, Brick>, x: number, y: number): Brick | null
  * Returns whether the thing should bounce. A solid brick bounces and nothing
  * else happens to it; that is the whole of what makes it a wall.
  */
-function strike(run: Run, brick: Brick, rng: Rng): boolean {
+function strike(run: Run, brick: Brick, rng: Rng, blast = true): boolean {
   brick.flash = 0.09
   if (brick.solid) {
     run.events.push('solid')
@@ -293,10 +326,12 @@ function strike(run: Run, brick: Brick, rng: Rng): boolean {
   brick.life -= 1
   if (brick.life > 0) {
     run.events.push('crack')
+    scatter(run, brick, rng, 4)
     return true
   }
   run.score += WORTH[Math.min(WORTH.length - 1, was)]
   run.events.push('break')
+  scatter(run, brick, rng, 10)
   if (brick.carries) {
     const [left, top, right] = boxOf(brick)
     run.drops.push({
@@ -307,7 +342,41 @@ function strike(run: Run, brick: Brick, rng: Rng): boolean {
     })
     run.events.push('drop')
   }
+  /*
+   * And its neighbours, if a bomb is aboard.
+   *
+   * One ring out, once: a blast that sets off the bricks it breaks would run
+   * through a whole wall from one hit, which is a firework rather than a game.
+   * `blast: false` on the ones it takes is what stops it.
+   */
+  if (blast && run.held.bomb !== undefined) {
+    let went = false
+    for (const other of run.bricks) {
+      if (other === brick || other.solid || other.life <= 0) continue
+      if (Math.abs(other.col - brick.col) > BLAST || Math.abs(other.row - brick.row) > BLAST) continue
+      strike(run, other, rng, false)
+      went = true
+    }
+    if (went) run.events.push('blast')
+  }
   return true
+}
+
+/** Chips of a broken brick, thrown out. */
+function scatter(run: Run, brick: Brick, rng: Rng, many: number): void {
+  const [left, top, right, bottom] = boxOf(brick)
+  const ink = inkFor(brick.life + 1, brick.row, brick.solid)
+  for (let i = 0; i < many; i++) {
+    run.sparks.push({
+      id: run.nextId++,
+      x: left + rng.next() * (right - left),
+      y: top + rng.next() * (bottom - top),
+      dx: (rng.next() - 0.5) * 7,
+      dy: (rng.next() - 0.5) * 7,
+      life: 0.3 + rng.next() * 0.3,
+      ink: rng.next() < 0.3 ? ink.shine : ink.face,
+    })
+  }
 }
 
 /** Which power a brick was carrying, weighted by how often each should turn up. */
@@ -371,9 +440,14 @@ function walk(run: Run, ball: Ball, byCell: Map<number, Brick>, dt: number, move
       const edge = ball.x + Math.sign(ball.dx) * BALL_R
       const hit = brickAt(byCell, edge, ball.y)
       if (hit) {
-        strike(run, hit, rng)
-        ball.x = wasX
-        ball.dx = -ball.dx
+        const bounced = strike(run, hit, rng)
+        // A ball ploughing through carries on, unless what it met was solid —
+        // nothing goes through those, which is the whole of what they are.
+        if (bounced && (run.held.through === undefined || hit.solid)) {
+          ball.x = wasX
+          ball.dx = -ball.dx
+        }
+        if (hit.life <= 0 && !hit.solid) byCell.delete(cellKey(hit.col, hit.row))
       }
     }
 
@@ -385,9 +459,12 @@ function walk(run: Run, ball: Ball, byCell: Map<number, Brick>, dt: number, move
       const edge = ball.y + Math.sign(ball.dy) * BALL_R
       const hit = brickAt(byCell, ball.x, edge)
       if (hit) {
-        strike(run, hit, rng)
-        ball.y = wasY
-        ball.dy = -ball.dy
+        const bounced = strike(run, hit, rng)
+        if (bounced && (run.held.through === undefined || hit.solid)) {
+          ball.y = wasY
+          ball.dy = -ball.dy
+        }
+        if (hit.life <= 0 && !hit.solid) byCell.delete(cellKey(hit.col, hit.row))
       }
     }
 
@@ -466,12 +543,24 @@ export function step(run: Run, input: Input, dt: number): Run {
   next.bat = Math.max(half, Math.min(WIDE - half, next.bat))
   // In bat-widths a second, so the spin does not depend on the frame rate.
   const moved = dt > 0 ? (next.bat - wasBat) / dt / PADDLE_SPEED : 0
+  // And the eased version of it, which is what the gun aims along.
+  next.lean += (moved - next.lean) * Math.min(1, dt * 9)
 
   // --- the gun ---------------------------------------------------------------
   next.reload = Math.max(0, next.reload - dt)
   if (input.act && next.held.gun !== undefined && next.reload === 0) {
+    /*
+     * Aimed, after a fashion.
+     *
+     * "Gun. Aim and shoot" — with one finger on the bat there is no second
+     * control to aim with, so the gun leans the way you are sliding. Slide
+     * left and the shots go up and left; hold still and they go straight up.
+     * It is the only aiming this game can honestly offer and it turns the gun
+     * from a thing you hold down into a thing you point.
+     */
+    const aim = Math.max(-0.75, Math.min(0.75, next.lean))
     for (const side of [-0.7, 0.7]) {
-      next.shots.push({ id: next.nextId++, x: next.bat + side * half, y: PADDLE_Y })
+      next.shots.push({ id: next.nextId++, x: next.bat + side * half, y: PADDLE_Y, dx: aim })
     }
     next.reload = SHOT_EVERY
     next.events.push('shoot')
@@ -497,24 +586,50 @@ export function step(run: Run, input: Input, dt: number): Run {
       }
       continue
     }
-    ball.speed = next.held.slow !== undefined
-      ? Math.max(BALL_SLOWEST, speedFor(next.level) * 0.62)
-      : speedFor(next.level)
+    const pace = speedFor(next.level)
+    ball.speed =
+      next.held.slow !== undefined ? Math.max(BALL_SLOWEST, pace * 0.62)
+      : next.held.fast !== undefined ? Math.min(BALL_FASTEST, pace * 1.35)
+      : pace
     walk(next, ball, byCell, dt, moved, rng)
   }
-  // Anything past the bottom is gone.
-  next.balls = next.balls.filter((b) => b.y - BALL_R <= TALL)
+  /*
+   * Anything past the bottom is gone — unless there is a net under the bat, in
+   * which case the first one to reach it bounces and the net goes.
+   */
+  next.balls = next.balls.filter((ball) => {
+    if (ball.y - BALL_R <= TALL) return true
+    if (next.held.floor === undefined) return false
+    delete next.held.floor
+    ball.y = TALL - BALL_R
+    ball.dy = -Math.abs(ball.dy)
+    next.events.push('saved')
+    return true
+  })
 
   // --- the shots -------------------------------------------------------------
-  for (const shot of next.shots) shot.y -= SHOT_SPEED * dt
+  for (const shot of next.shots) {
+    shot.y -= SHOT_SPEED * dt
+    shot.x += shot.dx * SHOT_SPEED * dt
+  }
   next.shots = next.shots.filter((shot) => {
-    if (shot.y + SHOT_H < 0) return false
+    if (shot.y + SHOT_H < 0 || shot.x < 0 || shot.x > WIDE) return false
     const hit = brickAt(byCell, shot.x, shot.y)
     if (!hit) return true
     strike(next, hit, rng)
     if (hit.life <= 0 && !hit.solid) byCell.delete(cellKey(hit.col, hit.row))
     return false
   })
+
+  // --- the chips -------------------------------------------------------------
+  for (const spark of next.sparks) {
+    spark.x += spark.dx * dt
+    spark.y += spark.dy * dt
+    // They fall, which is most of what makes them read as bits of something.
+    spark.dy += 11 * dt
+    spark.life -= dt
+  }
+  next.sparks = next.sparks.filter((s) => s.life > 0 && s.y < TALL)
 
   // --- the drops -------------------------------------------------------------
   for (const drop of next.drops) drop.y += DROP_SPEED * dt
@@ -526,9 +641,10 @@ export function step(run: Run, input: Input, dt: number): Run {
       drop.x + DROP_W / 2 >= bl && drop.x - DROP_W / 2 <= br
     if (!caught) return true
     next.events.push('power')
+    if (isNasty(drop.kind)) next.events.push('nasty')
     if (drop.kind === 'life') {
       next.lives += 1
-    } else if (drop.kind === 'split') {
+    } else if (drop.kind === 'split' || drop.kind === 'swarm') {
       /*
        * Three where there was one, fanned out.
        *
@@ -538,7 +654,8 @@ export function step(run: Run, input: Input, dt: number): Run {
        */
       const from = next.balls.find((b) => !b.stuck) ?? next.balls[0]
       if (from) {
-        for (const turn of [-0.5, 0.5]) {
+        const turns = drop.kind === 'swarm' ? [-0.9, -0.45, 0.45, 0.9] : [-0.5, 0.5]
+        for (const turn of turns) {
           const angle = Math.atan2(from.dx, -from.dy) + turn
           next.balls.push({
             id: next.nextId++,
@@ -552,10 +669,19 @@ export function step(run: Run, input: Input, dt: number): Run {
           })
         }
       }
+    } else if (drop.kind === 'floor') {
+      // A net, which is a count rather than a clock: it saves one ball and is
+      // gone. Carried as a time so it shows up in the row of charms like the
+      // rest; what spends it is the ball reaching the bottom.
+      next.held.floor = 1
     } else {
       next.held[drop.kind] = POWER_LASTS[drop.kind]
-      // A sticky bat catches whatever is already in the air next time round,
-      // and a wide one is wider from this moment, so nothing else to do.
+      // Wide and narrow are the same bat seen from two sides, so one cancels
+      // the other rather than both being held at once and arguing.
+      if (drop.kind === 'wide') delete next.held.narrow
+      if (drop.kind === 'narrow') delete next.held.wide
+      if (drop.kind === 'slow') delete next.held.fast
+      if (drop.kind === 'fast') delete next.held.slow
     }
     return false
   })

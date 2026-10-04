@@ -2113,6 +2113,35 @@ export const SERVE: Track = {
   parts: [{ wave: 'pulse', duty: 0.25, gain: 0.055, sustain: 0.35, pattern: 'D4 A4 D5 ' }],
 }
 
+/** A bomb going off: several bricks at once. */
+export const BLAST: Track = {
+  name: 'Blast',
+  beatsPerMinute: 220,
+  parts: [
+    { wave: 'pulse', duty: 0.5, gain: 0.08, sustain: 0.4, pattern: 'D6 A5 F#5 D5 ' },
+    { wave: 'triangle', gain: 0.07, sustain: 0.6, pattern: 'D3 .  .  .  ' },
+  ],
+}
+
+/** The net catching one that was gone. */
+export const SAVED: Track = {
+  name: 'Saved',
+  beatsPerMinute: 200,
+  parts: [{ wave: 'bell', gain: 0.075, sustain: 1, pattern: 'A4 .  E5 .  ' }],
+}
+
+/**
+ * Something you would rather not have caught.
+ *
+ * Down rather than up, which is the whole convention this project uses for
+ * good news and bad, and the only thing anybody actually hears in a cue.
+ */
+export const NASTY: Track = {
+  name: 'Nasty',
+  beatsPerMinute: 200,
+  parts: [{ wave: 'pulse', duty: 0.5, gain: 0.07, sustain: 0.45, pattern: 'E4 .  B3 .  ' }],
+}
+
 export const BRICK_CUES = {
   tink: TINK,
   chip: CHIP,
@@ -2124,6 +2153,9 @@ export const BRICK_CUES = {
   missed: MISSED,
   wallDown: WALL_DOWN,
   serve: SERVE,
+  blast: BLAST,
+  saved: SAVED,
+  nasty: NASTY,
 } as const
 
 export const CUES = {
