@@ -24,13 +24,13 @@ export const STORIES: Record<string, Story> = {
     id: 'arcade',
     title: 'PAPA PANIC',
     beats: [
-      { seconds: 4.4, scene: 'maze', voice: 'narrator', line: 'The maze under the workshop. {papa} has been busy again.' },
-      { seconds: 5.9, scene: 'maze', voice: 'papa', line: 'Four of them! Four little machines, and every one of them wants YOU.' },
-      { seconds: 5.2, scene: 'maze', voice: 'narrator', line: 'They are loose in the maze now, and they do not get tired.' },
-      { seconds: 5.9, scene: 'maze', voice: 'narrator', line: 'Clear every dot. Grab the fruit and they will run from you instead.' },
+      { seconds: 4.3, scene: 'maze', voice: 'narrator', line: 'The maze under the workshop. {papa} has been busy again.' },
+      { seconds: 5.3, scene: 'maze', voice: 'papa', line: 'Four of them! Four little machines, and every one of them wants YOU.' },
+      { seconds: 5.3, scene: 'maze', voice: 'narrator', line: 'They are loose in the maze now, and they do not get tired.' },
+      { seconds: 5.3, scene: 'maze', voice: 'narrator', line: 'Clear every dot. Grab the fruit and they will run from you instead.' },
       { seconds: 5.4, scene: 'maze', voice: 'narrator', line: 'Touch anywhere to send yourself that way. No buttons. Just point.' },
-      { seconds: 5.9, scene: 'question', voice: 'narrator', line: 'Caught? The maths door opens. Two minutes of sums buys you another go.' },
-      { seconds: 3.4, scene: 'maze', voice: 'papa', line: 'Off you go. I will be watching.' },
+      { seconds: 5.3, scene: 'question', voice: 'narrator', line: 'Caught? The maths door opens. Two minutes of sums buys you another go.' },
+      { seconds: 3.0, scene: 'maze', voice: 'papa', line: 'Off you go. I will be watching.' },
     ],
   },
 
@@ -38,12 +38,12 @@ export const STORIES: Record<string, Story> = {
     id: 'dave',
     title: 'THE CAVES',
     beats: [
-      { seconds: 5.9, scene: 'cave', voice: 'narrator', line: 'Ten caves under the house. {papa} has hidden a trophy in every one.' },
-      { seconds: 4.4, scene: 'cave', voice: 'papa', line: 'Fire! Water! A jetpack I have NOT tested! Enjoy!' },
+      { seconds: 5.3, scene: 'cave', voice: 'narrator', line: 'Ten caves under the house. {papa} has hidden a trophy in every one.' },
+      { seconds: 4.8, scene: 'cave', voice: 'papa', line: 'Fire! Water! A jetpack I have NOT tested! Enjoy!' },
       { seconds: 5, scene: 'cave', voice: 'narrator', line: 'Take the trophy, then find the door. Not the other way round.' },
-      { seconds: 7.8, scene: 'cave', voice: 'narrator', line: 'Left and right by your left thumb. Jump on the right. Both at once for the long ones.' },
-      { seconds: 6.3, scene: 'question', voice: 'narrator', line: 'Every cave can be finished. A machine checked them all before you got here.' },
-      { seconds: 4.4, scene: 'cave', voice: 'papa', line: 'Mind the spikes. Or do not. Up to you.' },
+      { seconds: 7.3, scene: 'cave', voice: 'narrator', line: 'Left and right by your left thumb. Jump on the right. Both at once for the long ones.' },
+      { seconds: 5.7, scene: 'question', voice: 'narrator', line: 'Every cave can be finished. A machine checked them all before you got here.' },
+      { seconds: 3.8, scene: 'cave', voice: 'papa', line: 'Mind the spikes. Or do not. Up to you.' },
     ],
   },
 
@@ -51,12 +51,12 @@ export const STORIES: Record<string, Story> = {
     id: 'prince',
     title: 'THE DUNGEON',
     beats: [
-      { seconds: 4.6, scene: 'dungeon', voice: 'narrator', line: 'Thirteen floors down, and one hour on the clock.' },
-      { seconds: 5.5, scene: 'dungeon', voice: 'papa', line: 'One hour! For all thirteen! Even I could not do that.' },
+      { seconds: 3.9, scene: 'dungeon', voice: 'narrator', line: 'Thirteen floors down, and one hour on the clock.' },
+      { seconds: 4.6, scene: 'dungeon', voice: 'papa', line: 'One hour! For all thirteen! Even I could not do that.' },
       { seconds: 5.4, scene: 'dungeon', voice: 'narrator', line: 'The clock never stops. Not when you slip, not between floors. Never.' },
-      { seconds: 7.1, scene: 'dungeon', voice: 'narrator', line: 'Every move is a commitment. Start a running jump and you are going wherever it lands.' },
-      { seconds: 6.3, scene: 'dungeon', voice: 'narrator', line: 'Walk, jump, and a careful step for the edges. Guards want the pointy end.' },
-      { seconds: 3.4, scene: 'dungeon', voice: 'papa', line: 'Fifty-nine minutes. Fifty-eight. Oh dear.' },
+      { seconds: 6.5, scene: 'dungeon', voice: 'narrator', line: 'Every move is a commitment. Start a running jump and you are going wherever it lands.' },
+      { seconds: 5.8, scene: 'dungeon', voice: 'narrator', line: 'Walk, jump, and a careful step for the edges. Guards want the pointy end.' },
+      { seconds: 3.5, scene: 'dungeon', voice: 'papa', line: 'Fifty-nine minutes. Fifty-eight. Oh dear.' },
     ],
   },
 
@@ -65,12 +65,12 @@ export const STORIES: Record<string, Story> = {
     title: 'THE PIPES',
     beats: [
       { seconds: 4.9, scene: 'pipes', voice: 'narrator', line: 'The pipes under the garden. {papa} filled them with wind-up machines.' },
-      { seconds: 6.3, scene: 'pipes', voice: 'papa', line: 'They only walk forwards! That is the beauty of it! No brains at all!' },
-      { seconds: 5.9, scene: 'pipes', voice: 'narrator', line: 'Land on one and it is finished. Walk into one and you are.' },
-      { seconds: 5.4, scene: 'pipes', voice: 'narrator', line: 'Hold jump for longer and you go higher. That is the whole game, really.' },
-      { seconds: 7.1, scene: 'pipes', voice: 'narrator', line: 'Hold RUN to get up to speed. A fast jump goes further than a slow one.' },
-      { seconds: 5.9, scene: 'pipes', voice: 'narrator', line: 'Knock the question blocks. A mushroom makes you big enough to break brick.' },
-      { seconds: 5.1, scene: 'pipes', voice: 'papa', line: 'The flag is at the far end. Good luck getting there.' },
+      { seconds: 5.7, scene: 'pipes', voice: 'papa', line: 'They only walk forwards! That is the beauty of it! No brains at all!' },
+      { seconds: 5.3, scene: 'pipes', voice: 'narrator', line: 'Land on one and it is finished. Walk into one and you are.' },
+      { seconds: 5.7, scene: 'pipes', voice: 'narrator', line: 'Hold jump for longer and you go higher. That is the whole game, really.' },
+      { seconds: 6.5, scene: 'pipes', voice: 'narrator', line: 'Hold RUN to get up to speed. A fast jump goes further than a slow one.' },
+      { seconds: 5.3, scene: 'pipes', voice: 'narrator', line: 'Knock the question blocks. A mushroom makes you big enough to break brick.' },
+      { seconds: 4.6, scene: 'pipes', voice: 'papa', line: 'The flag is at the far end. Good luck getting there.' },
     ],
   },
 
@@ -78,13 +78,13 @@ export const STORIES: Record<string, Story> = {
     id: 'road',
     title: 'THE ROAD',
     beats: [
-      { seconds: 6.6, scene: 'road', voice: 'narrator', line: 'Four lanes out of town, and {papa} has filled every one of them.' },
-      { seconds: 6.6, scene: 'road', voice: 'papa', line: 'And four of mine in the race with you! They never tire! They never blink!' },
-      { seconds: 6.0, scene: 'road', voice: 'narrator', line: 'Hold GO to move. Steer with your left thumb. That is all.' },
-      { seconds: 6.4, scene: 'road', voice: 'narrator', line: 'Getting to the end is not the job. Getting there first is the job.' },
-      { seconds: 6.2, scene: 'road', voice: 'narrator', line: 'Watch the tank. Run it dry and it costs a car, same as a prang.' },
-      { seconds: 5.8, scene: 'question', voice: 'narrator', line: 'Pranged? The maths door opens. Sums buy you another go.' },
-      { seconds: 4.2, scene: 'road', voice: 'papa', line: 'Level after level. Off you go.' },
+      { seconds: 5.3, scene: 'road', voice: 'narrator', line: 'Four lanes out of town, and {papa} has filled every one of them.' },
+      { seconds: 6.1, scene: 'road', voice: 'papa', line: 'And four of mine in the race with you! They never tire! They never blink!' },
+      { seconds: 5.0, scene: 'road', voice: 'narrator', line: 'Hold GO to move. Steer with your left thumb. That is all.' },
+      { seconds: 5.7, scene: 'road', voice: 'narrator', line: 'Getting to the end is not the job. Getting there first is the job.' },
+      { seconds: 6.1, scene: 'road', voice: 'narrator', line: 'Watch the tank. Run it dry and it costs a car, same as a prang.' },
+      { seconds: 4.8, scene: 'question', voice: 'narrator', line: 'Pranged? The maths door opens. Sums buy you another go.' },
+      { seconds: 2.7, scene: 'road', voice: 'papa', line: 'Level after level. Off you go.' },
     ],
   },
   /*
@@ -106,16 +106,16 @@ export const STORIES: Record<string, Story> = {
     id: 'space',
     title: 'THE LONG WAY OUT',
     beats: [
-      { seconds: 4.3, scene: 'space', voice: 'narrator', line: 'Eight worlds, in the order you meet them leaving the Sun.' },
-      { seconds: 4.3, scene: 'space', voice: 'papa', line: 'I filled the gaps! Rock, scrap, and a few of mine!' },
-      { seconds: 3.7, scene: 'space', voice: 'narrator', line: 'Hold FIRE to fire. Steer with your left thumb.' },
-      { seconds: 4.7, scene: 'space', voice: 'narrator', line: 'There is always a way through. The purple mines are not it.' },
-      { seconds: 4.7, scene: 'space', voice: 'narrator', line: 'Break anything and it drops a cell. Spend them when you land.' },
-      { seconds: 4.4, scene: 'deep', voice: 'narrator', line: 'Out past Neptune, the Sun is just another star.' },
-      { seconds: 4.7, scene: 'deep', voice: 'papa', line: 'Something lives out here. It shoots back. Not my doing!' },
-      { seconds: 4.2, scene: 'deep', voice: 'narrator', line: 'Shoot their shots out of the sky, then shoot them.' },
-      { seconds: 4.6, scene: 'deep', voice: 'narrator', line: 'A black hole drags the whole sky sideways. Fly across it.' },
-      { seconds: 4.3, scene: 'deep', voice: 'papa', line: 'Stars, nebulae, galaxies. It does not stop. Off you go.' },
+      { seconds: 4.6, scene: 'space', voice: 'narrator', line: 'Eight worlds, in the order you meet them leaving the Sun.' },
+      { seconds: 4.6, scene: 'space', voice: 'papa', line: 'I filled the gaps! Rock, scrap, and a few of mine!' },
+      { seconds: 3.8, scene: 'space', voice: 'narrator', line: 'Hold FIRE to fire. Steer with your left thumb.' },
+      { seconds: 5.0, scene: 'space', voice: 'narrator', line: 'There is always a way through. The purple mines are not it.' },
+      { seconds: 4.6, scene: 'space', voice: 'narrator', line: 'Everything you break drops a cell. Spend it when you land.' },
+      { seconds: 4.0, scene: 'deep', voice: 'narrator', line: 'Out past Neptune, the Sun is just another star.' },
+      { seconds: 4.2, scene: 'deep', voice: 'papa', line: 'Something lives out here. It shoots back. Not my doing!' },
+      { seconds: 3.0, scene: 'deep', voice: 'narrator', line: 'Shoot their shots down, then shoot them.' },
+      { seconds: 4.8, scene: 'deep', voice: 'narrator', line: 'A black hole drags the whole sky sideways. Fly across it.' },
+      { seconds: 5.1, scene: 'deep', voice: 'papa', line: 'Stars, nebulae, galaxies. It does not stop. Off you go.' },
     ],
   },
 
@@ -132,18 +132,41 @@ export const STORIES: Record<string, Story> = {
     id: 'snake',
     title: 'THE GARDEN',
     beats: [
-      { seconds: 4.3, scene: 'garden', voice: 'narrator', line: 'A garden, five others in it, and all of you hungry.' },
-      { seconds: 4.3, scene: 'garden', voice: 'papa', line: 'I grew them! They grow! Everything grows!' },
+      { seconds: 4.6, scene: 'garden', voice: 'narrator', line: 'A garden, five others in it, and all of you hungry.' },
+      { seconds: 3.4, scene: 'garden', voice: 'papa', line: 'I grew them! They grow! Everything grows!' },
       { seconds: 4.1, scene: 'garden', voice: 'narrator', line: 'Hold anywhere and drag. That is the whole control.' },
-      { seconds: 4.6, scene: 'garden', voice: 'narrator', line: 'Eat, and you get longer. Longer is the whole idea.' },
-      { seconds: 4.8, scene: 'garden', voice: 'narrator', line: 'Touch somebody else and you are finished. Nothing else is.' },
-      { seconds: 5.2, scene: 'garden', voice: 'narrator', line: 'Loop round onto your own tail and the loop shuts. That is allowed.' },
-      { seconds: 5.0, scene: 'garden', voice: 'narrator', line: 'Whatever is caught inside is yours. It costs you the tail.' },
-      { seconds: 4.9, scene: 'garden', voice: 'narrator', line: 'The charms on the ground are worth a detour. All four help.' },
-      { seconds: 4.2, scene: 'garden', voice: 'papa', line: 'Go on then. Mind Rust. Off you go.' },
+      { seconds: 4.2, scene: 'garden', voice: 'narrator', line: 'Eat, and you get longer. Longer is the whole idea.' },
+      { seconds: 4.4, scene: 'garden', voice: 'narrator', line: 'Touch somebody else and you are finished. Nothing else is.' },
+      { seconds: 5.3, scene: 'garden', voice: 'narrator', line: 'Loop round onto your own tail and the loop shuts. That is allowed.' },
+      { seconds: 4.6, scene: 'garden', voice: 'narrator', line: 'Whatever is caught inside is yours. It costs you the tail.' },
+      { seconds: 5.0, scene: 'garden', voice: 'narrator', line: 'The charms on the ground are worth a detour. All four help.' },
+      { seconds: 3.4, scene: 'garden', voice: 'papa', line: 'Go on then. Mind Rust. Off you go.' },
+    ],
+  },
+
+  /*
+   * The wall.
+   *
+   * The one thing worth saying twice is the charms: a brick that drops
+   * something is the difference between this and every other bat-and-ball
+   * game, and a player who does not know to go and catch them will watch them
+   * fall past and never find out what they were.
+   */
+  bricks: {
+    id: 'bricks',
+    title: 'THE WALL',
+    beats: [
+      { seconds: 4.2, scene: 'wall', voice: 'narrator', line: 'A bat, a ball, and a wall in the way.' },
+      { seconds: 3.8, scene: 'wall', voice: 'papa', line: 'I built it! Some of it twice! Good luck!' },
+      { seconds: 4.6, scene: 'wall', voice: 'narrator', line: 'Slide to move the bat. Tap to let the ball go.' },
+      { seconds: 6.1, scene: 'wall', voice: 'narrator', line: 'Where it lands on the bat is where it goes. The ends send it wide.' },
+      { seconds: 5.2, scene: 'wall', voice: 'narrator', line: 'Some take two goes. Some take three. The grey ones never break.' },
+      { seconds: 5.3, scene: 'wall', voice: 'narrator', line: 'A few bricks drop something as they go. Catch it with the bat.' },
+      { seconds: 5.3, scene: 'wall', voice: 'narrator', line: 'A gun, a sticky bat, a slower ball, a wider one, three balls.' },
+      { seconds: 3.5, scene: 'wall', voice: 'papa', line: 'The walls get worse. Obviously. Off you go.' },
     ],
   },
 }
 
 export const STORY_ORDER =
-  ['arcade', 'dave', 'prince', 'pipes', 'road', 'space', 'snake'] as const
+  ['arcade', 'dave', 'prince', 'pipes', 'road', 'space', 'snake', 'bricks'] as const

@@ -1734,9 +1734,81 @@ export const GARDEN: Track = {
   ],
 }
 
+
+/*
+ * The wall.
+ *
+ * D major, steady, and the most mechanical thing in here on purpose: this is a
+ * game about taking something apart brick by brick, and the tune is a machine
+ * doing it. A bass that walks in even quarters, a lead that answers itself,
+ * and nothing that swings at all — the only tune in the project with no lean
+ * on it, because the ball does not lean either.
+ */
+
+const WALL_LEAD = [
+  'D5 .  A4 .  D5 .  F#5 . ',
+  'E5 .  .  .  A4 .  .  . ',
+  'F#5 . D5 .  A5 .  F#5 . ',
+  'E5 .  .  .  .  .  .  . ',
+  'G5 .  F#5 . E5 .  D5 . ',
+  'A5 .  .  F#5 .  .  E5 . ',
+  'D5 .  E5 .  F#5 . A5 . ',
+  'D5 .  .  .  .  .  .  . ',
+].join(' ')
+
+const WALL_BASS = [
+  'D3 .  D3 .  A2 .  A2 . ',
+  'B2 .  B2 .  E3 .  E3 . ',
+  'G2 .  G2 .  D3 .  D3 . ',
+  'A2 .  A2 .  A2 .  C#3 .',
+  'D3 .  D3 .  A2 .  A2 . ',
+  'B2 .  B2 .  F#2 . F#2 .',
+  'G2 .  G2 .  A2 .  A2 . ',
+  'D3 .  A2 .  D3 D3 A2 . ',
+].join(' ')
+
+/** One held note a bar, which is the third of whatever is underneath. */
+const WALL_BED = [
+  'F#4 . .  .  .  .  .  . ',
+  'D4 .  .  .  .  .  .  . ',
+  'B3 .  .  .  .  .  .  . ',
+  'C#4 . .  .  .  .  .  . ',
+  'F#4 . .  .  .  .  .  . ',
+  'A3 .  .  .  .  .  .  . ',
+  'B3 .  .  .  .  .  .  . ',
+  'F#4 . .  .  .  .  .  . ',
+].join(' ')
+
+const WALL_PUSH = [
+  '.  D3 .  D3 .  D3 .  D3',
+  '.  B2 .  B2 .  B2 .  B2',
+  '.  G2 .  G2 .  G2 .  G2',
+  '.  A2 .  A2 .  A2 .  A2',
+  '.  D3 .  D3 .  D3 .  D3',
+  '.  B2 .  B2 .  B2 .  B2',
+  '.  G2 .  G2 .  G2 .  G2',
+  '.  A2 .  A2 .  A2 A2 A2',
+].join(' ')
+
+const WALL_DRUMS = 'x - - - x - - - '.repeat(7) + 'x - x - x - x x'
+
+export const WALL: Track = {
+  name: 'The Wall',
+  beatsPerMinute: 126,
+  hotter: 14,
+  drums: WALL_DRUMS,
+  parts: [
+    { wave: 'pluck', gain: 0.09, sustain: 0.75, pattern: WALL_LEAD },
+    { wave: 'pluck', gain: 0.075, sustain: 0.6, pattern: WALL_BASS },
+    { wave: 'strings', gain: 0.03, sustain: 1, chord: [0, 7], pattern: WALL_BED },
+    { wave: 'pulse', duty: 0.25, gain: 0.045, sustain: 0.26, pattern: WALL_PUSH, from: 0.5 },
+  ],
+}
+
 export const TRACKS = {
   chase: CHASE,
   garden: GARDEN,
+  wall: WALL,
   thinking: THINKING,
   pipes: PIPES,
   cavern: CAVERN,
@@ -1949,8 +2021,113 @@ export const GARDEN_CUES = {
   slip: SLIP,
 } as const
 
+
+/*
+ * The wall.
+ *
+ * D major, which is the last key in here nobody is using. The two that fire
+ * constantly — the ball meeting a wall and the ball taking a chip out of a
+ * brick — are a single note each and gone, because at the speeds this reaches
+ * there are several a second and anything longer is a drone.
+ */
+
+/** The ball meeting something that does not break: a wall, the bat. */
+export const TINK: Track = {
+  name: 'Tink',
+  beatsPerMinute: 280,
+  parts: [{ wave: 'pulse', duty: 0.25, gain: 0.05, sustain: 0.25, pattern: 'A5 D5' }],
+}
+
+/** A hit that did not finish the job. */
+export const CHIP: Track = {
+  name: 'Chip',
+  beatsPerMinute: 280,
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.055, sustain: 0.25, pattern: 'F#5 A4' }],
+}
+
+/** And one that did. */
+export const SMASH: Track = {
+  name: 'Smash',
+  beatsPerMinute: 240,
+  parts: [
+    { wave: 'pulse', duty: 0.5, gain: 0.07, sustain: 0.35, pattern: 'D6 A5 D5 ' },
+    { wave: 'triangle', gain: 0.06, sustain: 0.5, pattern: 'D4 .  .  ' },
+  ],
+}
+
+/** Something that will not break, however often you hit it. */
+export const CLANK: Track = {
+  name: 'Clank',
+  beatsPerMinute: 260,
+  parts: [{ wave: 'triangle', gain: 0.075, sustain: 0.4, pattern: 'D3 A2 ' }],
+}
+
+/** Something has come loose and is on its way down. */
+export const FALLING: Track = {
+  name: 'Falling',
+  beatsPerMinute: 220,
+  parts: [{ wave: 'pulse', duty: 0.25, gain: 0.05, sustain: 0.4, pattern: 'B4 A4 F#4 ' }],
+}
+
+/** And it has been caught. */
+export const PRIZE: Track = {
+  name: 'Prize',
+  beatsPerMinute: 190,
+  parts: [
+    { wave: 'bell', gain: 0.075, sustain: 1, pattern: 'D5 .  F#5 . A5 .  ' },
+    { wave: 'strings', gain: 0.04, sustain: 1, pattern: 'D3 .  .  .  .  .  ' },
+  ],
+}
+
+/** The gun. */
+export const PEW: Track = {
+  name: 'Pew',
+  beatsPerMinute: 280,
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.045, sustain: 0.3, pattern: 'D6 A5' }],
+}
+
+/** The ball gone past the bat. */
+export const MISSED: Track = {
+  name: 'Missed',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'triangle', gain: 0.11, sustain: 0.8, pattern: 'A4 .  F#4 . D4 .  .  .  ' },
+    { wave: 'pulse', duty: 0.5, gain: 0.05, sustain: 0.6, pattern: 'D3 .  .  .  .  .  .  .  ' },
+  ],
+}
+
+/** A wall down. */
+export const WALL_DOWN: Track = {
+  name: 'Wall down',
+  beatsPerMinute: 140,
+  parts: [
+    { wave: 'piano', gain: 0.1, sustain: 0.9, chord: [0, 7, 12], pattern: 'D5 .  A5 .  D6 .  .  .  ' },
+    { wave: 'pluck', gain: 0.075, sustain: 0.8, pattern: 'D3 .  A3 .  D4 .  .  .  ' },
+  ],
+}
+
+/** And the ball let go of. */
+export const SERVE: Track = {
+  name: 'Serve',
+  beatsPerMinute: 230,
+  parts: [{ wave: 'pulse', duty: 0.25, gain: 0.055, sustain: 0.35, pattern: 'D4 A4 D5 ' }],
+}
+
+export const BRICK_CUES = {
+  tink: TINK,
+  chip: CHIP,
+  smash: SMASH,
+  clank: CLANK,
+  falling: FALLING,
+  prize: PRIZE,
+  pew: PEW,
+  missed: MISSED,
+  wallDown: WALL_DOWN,
+  serve: SERVE,
+} as const
+
 export const CUES = {
   ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES, ...SPACE_CUES,
-  ...GARDEN_CUES, ...WIPE_CUES,
+  ...GARDEN_CUES, ...BRICK_CUES, ...WIPE_CUES,
 } as const
 export type CueName = keyof typeof CUES

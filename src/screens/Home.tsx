@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { drawCan, drawCar, drawMine, drawRacer, drawRoad } from '../road/draw'
 import { BEAD as SNAKE_BEAD, ROSTER as SNAKE_ROSTER } from '../snake/level'
+import { newRun as newWall, readWall } from '../bricks/run'
+import { drawRun as drawWall } from '../bricks/draw'
 import { newRun as newGarden, newSnake } from '../snake/run'
 import { drawRun as drawGarden } from '../snake/draw'
 import { ROSTER } from '../road/level'
@@ -320,6 +322,32 @@ const TILES: Tile[] = [
         ring,
         ringFor: 0.8,
       }, view)
+    },
+  },
+  {
+    id: 'bricks',
+    title: 'The Wall',
+    blurb: 'A bat, a ball, and something in the way. Catch what falls.',
+    tint: '#05060a',
+    emblem(ctx, w, h) {
+      /*
+       * The real game, with a wall half down and something on its way to the
+       * bat — which is the picture that says what this one is, rather than a
+       * full wall nobody has started on.
+       */
+      const base = newWall(1)
+      drawWall(ctx, {
+        ...base,
+        bricks: readWall([
+          '.bbbbbbbbbb..',
+          '.bb.bbb.bbb..',
+          '.aa..aa..a...',
+          '..a...a......',
+        ]),
+        balls: [{ id: 1, x: 7.4, y: 14, dx: 0.4, dy: -0.92, speed: 9, stuck: false, along: 0 }],
+        drops: [{ id: 2, x: 4.2, y: 11, kind: 'gun' }],
+        bat: 6.2,
+      }, { w, h, clock: 0 })
     },
   },
 ]

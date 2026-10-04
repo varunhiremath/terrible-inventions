@@ -13,7 +13,7 @@ import lengths from '../../public/spoken/index.json'
  * like a loading bug rather than a missing picture.
  */
 /** The scenes that are a real level being played. */
-const LEVELS = ['maze', 'cave', 'dungeon', 'pipes', 'road', 'space', 'deep', 'garden']
+const LEVELS = ['maze', 'cave', 'dungeon', 'pipes', 'road', 'space', 'deep', 'garden', 'wall']
 
 /**
  * How `scripts/render-voice.py` names a clip: the line as written, unfilled.
@@ -94,7 +94,9 @@ describe('the stories', () => {
     // Every story has to name a control somewhere in it. An intro that sets up
     // a story and then drops you in with no idea which button does what is an
     // intro you skip.
-    const controls = /touch|thumb|jump|button|hold|walk|step|point|run/i
+    // `slide` and `tap` arrived with the two newest games, which are played
+    // with one finger on the picture rather than with buttons.
+    const controls = /touch|thumb|jump|button|hold|walk|step|point|run|slide|tap|drag/i
     for (const story of Object.values(STORIES)) {
       const said = story.beats.some((b) => controls.test(b.line))
       expect(said, `${story.id} never says how to play`).toBe(true)

@@ -248,11 +248,46 @@ def main():
             spoken = spoken.replace(token, word)
 
         config, lift = delivery(voice, line)
-        buffer = io.BytesIO()
-        with wave.open(buffer, 'wb') as w:
-            loaded[model].synthesize_wav(spoken, w, syn_config=config)
-        buffer.seek(0)
-        audio, rate = sf.read(buffer, dtype='float32')
+
+        """
+        Synthesised, and checked, and synthesised again if it came out wrong.
+
+        Piper occasionally returns something about thirty-two seconds long for
+        a line of ten words. Not often, not the same line twice, and running
+        that line again on its own produces the right two and a half seconds —
+        so it is something going astray inside a voice that has already spoken
+        a hundred times, and not anything about the words.
+
+        It matters because nothing downstream could catch it. A long clip is a
+        perfectly valid clip; it went into a build, and into the beat timings
+        that are measured against these lengths, and the only reason it was
+        noticed at all is that a story beat was asked to be thirty-two seconds
+        long. Two of a hundred and four, on two consecutive runs.
+
+        So: a clip gets as long as its words can account for, and a few goes to
+        produce one.
+        """
+        words = len(spoken.split())
+        most = words / 1.6 + 3
+        audio = None
+        rate = 22050
+        for go in range(4):
+            buffer = io.BytesIO()
+            with wave.open(buffer, 'wb') as w:
+                loaded[model].synthesize_wav(spoken, w, syn_config=config)
+            buffer.seek(0)
+            got, rate = sf.read(buffer, dtype='float32')
+            if len(got) / rate <= most * 1.4:
+                audio = got
+                break
+            print(
+                f'  {key}: {len(got) / rate:.1f}s for {words} words, going again '
+                f'({go + 1}) — "{line[:40]}"',
+                file=sys.stderr,
+            )
+        if audio is None:
+            print(f'{key}: never came out a sensible length — "{line}"', file=sys.stderr)
+            return 1
 
         # And the lift: played back faster than it was recorded, which raises
         # the pitch with it. See the note on PAPA_LIFT.
@@ -267,10 +302,15 @@ def main():
             pad = int(rate * 0.04)
             audio = audio[max(0, first - pad):min(len(audio), last + pad)]
 
+        seconds = round(len(audio) / rate, 2)
+        if seconds > most:
+            print(f'{key}: {seconds}s for {words} words — "{line}"', file=sys.stderr)
+            return 1
+
         out = os.path.join(OUT, f'{key}.opus')
         sf.write(out, level(resample(audio, rate, OPUS_RATE)), OPUS_RATE, format='OGG', subtype='OPUS')
         total += os.path.getsize(out)
-        index[key] = round(len(audio) / rate, 2)
+        index[key] = seconds
 
     # Anything left over from a line that has since been reworded.
     #

@@ -1,0 +1,49 @@
+<!doctype html>
+<!--
+  Every wall at once, served by the dev server and left out of the build.
+
+  Twelve levels is twelve pictures and the only question worth asking about
+  them — do they get more interesting? — cannot be answered one at a time.
+
+      npx vite --port 5199
+      node scripts/walls-shot.mjs
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>walls</title>
+    <style>
+      body { margin: 0; background: #05060a; color: #8a91ab;
+             font: 11px ui-monospace, monospace }
+      #all { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 6px }
+      .cell { position: relative; height: 420px }
+      canvas { display: block; width: 100%; height: 100% }
+      .tag { position: absolute; top: 2px; left: 4px; z-index: 2 }
+    </style>
+  </head>
+  <body>
+    <div id="all"></div>
+    <script type="module">
+      import { WALLS } from '/src/bricks/level.ts'
+      import { newRun } from '/src/bricks/run.ts'
+      import { drawRun } from '/src/bricks/draw.ts'
+      const host = document.getElementById('all')
+      const canvases = []
+      for (let level = 1; level <= WALLS.length; level++) {
+        const cell = document.createElement('div')
+        cell.className = 'cell'
+        cell.innerHTML = `<span class="tag">wall ${level}</span>`
+        const canvas = document.createElement('canvas')
+        cell.appendChild(canvas)
+        host.appendChild(cell)
+        const box = canvas.getBoundingClientRect()
+        canvas.width = Math.round(box.width * 2)
+        canvas.height = Math.round(box.height * 2)
+        drawRun(canvas.getContext('2d'), newRun(level), { w: canvas.width, h: canvas.height, clock: 0 })
+        canvases.push(canvas)
+      }
+      window.__sizes = () => canvases.map((c) => [c.width, c.height])
+      window.__ready = true
+    </script>
+  </body>
+</html>

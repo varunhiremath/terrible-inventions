@@ -43,6 +43,10 @@ import { SHIP_WIDE, SIZE_OF as RUBBLE_SIZE } from '../space/level'
 import { drawRun as drawFlight } from '../space/draw'
 import { FIXED as SPACE_FIXED, newRun as newFlight, step as flyOn, type Input as Stick, type Run as Flight } from '../space/run'
 import { ARENA as GARDEN_EDGE } from '../snake/level'
+import { drawRun as drawWall } from '../bricks/draw'
+import {
+  newRun as newWall, serve as newBall, step as knockOn, type Run as Wall,
+} from '../bricks/run'
 import { drawRun as drawGarden } from '../snake/draw'
 import {
   headOf as crawlHead, newRun as newGarden, respawn as crawlAgain, step as crawlOn,
@@ -522,6 +526,40 @@ function gardenFilm(): Crawl[] {
 }
 
 /**
+ * The wall, knocked about once and kept.
+ *
+ * A bat that follows the ball, which is the whole of what anybody does in that
+ * game, on a wall a few levels in so there is something to look at rather than
+ * a plain grid. Cheap enough to grow on demand without anybody noticing: this
+ * one has no snakes making decisions in it, only a ball.
+ */
+let wallFilmed: Wall[] | null = null
+
+function wallFilm(): Wall[] {
+  if (wallFilmed) return wallFilmed
+  const frames: Wall[] = []
+  let run = newWall(4, 99, 0, 11)
+  const step = 1 / 60
+  for (let t = 0; t < 46; t += step) {
+    const lowest = [...run.balls].sort((a, b) => b.y - a.y)[0]
+    // A little off the ball, and wandering: parked exactly under it sends the
+    // ball back up the same hole for ever, which is a dull thing to watch and
+    // was the first cut of this.
+    const lean = Math.sin(t * 0.8) * 0.7
+    run = knockOn(run, {
+      to: lowest ? lowest.x + lean : null,
+      left: false,
+      right: false,
+      act: true,
+    }, step)
+    if (run.status !== 'playing') run = newBall({ ...run, lives: 99, status: 'lost' })
+    if (frames.length < Math.floor(t * 10) + 1) frames.push(run)
+  }
+  wallFilmed = frames
+  return frames
+}
+
+/**
  * How long each recorded scene has footage for, in seconds.
  *
  * Exported so the stories can be checked against it. A beat that starts after
@@ -539,6 +577,7 @@ export const FOOTAGE_SECONDS: Record<string, number> = {
    * which is a test and the first play of the cutscene, and never again.
    */
   get garden() { return gardenFilm().length / 10 },
+  get wall() { return wallFilm().length / 10 },
 }
 
 /** The deep-space recording, for the test that counts what is in it. */
@@ -825,6 +864,15 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     const film = gardenFilm()
     const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
     drawGarden(ctx, frame, { w, h, clock })
+  },
+
+  /**
+   * The wall: a bat, a ball, and bricks coming down.
+   */
+  wall({ ctx, w, h, clock }) {
+    const film = wallFilm()
+    const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
+    drawWall(ctx, frame, { w, h, clock })
   },
 
   /**

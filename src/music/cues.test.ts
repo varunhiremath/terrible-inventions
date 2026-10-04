@@ -6,6 +6,7 @@ import {
   MAZE_CUES,
   PIPE_CUES,
   ROAD_CUES,
+  BRICK_CUES,
   GARDEN_CUES,
   SPACE_CUES,
   WIPE_CUES,
@@ -84,6 +85,11 @@ const TICKS: CueName[] = [
   // And a pellet in the garden, which is the busiest of the lot: a snake
   // crossing a field takes several a second for the whole of a round.
   'nibble',
+  // And the ball meeting things. A ball in a corner of the wall can take four
+  // bricks in half a second, and the bat and the walls on top of that.
+  // And the ball hitting a brick that will not break, which in a maze level
+  // happens as often as anything else in the game.
+  'tink', 'chip', 'pew', 'clank',
 ]
 
   it('are short enough to be cues rather than tunes', () => {
@@ -250,7 +256,7 @@ describe('every cue', () => {
      */
     const sets = [
       DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES, GARDEN_CUES,
-      WIPE_CUES,
+      BRICK_CUES, WIPE_CUES,
     ]
     const seen = new Set<string>()
     for (const set of sets) {
@@ -345,5 +351,33 @@ describe('the garden cues', () => {
 
   it('keeps the pellet short enough to keep up with a snake', () => {
     expect(loopLength(CUES.nibble) * eighthSeconds(CUES.nibble)).toBeLessThan(0.3)
+  })
+})
+
+/**
+ * And the wall's are held to D major, the last key nobody was using.
+ *
+ * Same reason as all the others: a cue is recognised by its key long before
+ * anybody works out which sound it was, so a set that wanders stops belonging
+ * to its game.
+ */
+describe('the wall cues', () => {
+  const MAJOR = [2, 4, 6, 7, 9, 11, 1]
+
+  it('stay in D major', () => {
+    for (const name of Object.keys(BRICK_CUES) as CueName[]) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          expect(MAJOR, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain(pitchClass(note.frequency))
+        }
+      }
+    }
+  })
+
+  it('keeps the ones the ball sets off constantly out of the way', () => {
+    for (const name of ['tink', 'chip', 'pew', 'clank'] as CueName[]) {
+      expect(loopLength(CUES[name]) * eighthSeconds(CUES[name]), name).toBeLessThan(0.3)
+    }
   })
 })

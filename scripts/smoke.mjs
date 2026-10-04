@@ -143,7 +143,7 @@ await page.waitForTimeout(1500)
 
 const GAMES = [
   'Papa Panic', 'The Caves', 'The Dungeon', 'The Pipes', 'The Road', 'The Long Way Out',
-  'The Garden',
+  'The Garden', 'The Wall',
 ]
 const homeText = await page.innerText('body')
 for (const game of GAMES) {
@@ -606,6 +606,46 @@ if (await enter('The Long Way Out')) {
   if (after === before) problems.push('the garden did not change while it was being steered')
 }
 
+// --- the wall ---------------------------------------------------------------
+{
+  /*
+   * A bat following a ball, driven with a real pointer.
+   *
+   * By finger rather than by keyboard, because the bat is a touch control and
+   * "works by keyboard, fails by finger" has cost this project three evenings.
+   */
+  await page.goto(URL, { waitUntil: 'networkidle' })
+  await page.waitForTimeout(500)
+  await page.getByRole('button', { name: /the wall/i }).first().click()
+  await page.waitForTimeout(400)
+  const skip = page.getByRole('button', { name: /skip/i })
+  if (await skip.count()) { await skip.first().click(); await page.waitForTimeout(700) }
+
+  const grab = async () => (await page.locator('p.font-mono').allTextContents()).join(' ')
+  const before = await grab()
+  const leftOf = (text) => Number((text.match(/(\d+) left/)?.[1] ?? '0'))
+  if (leftOf(before) === 0) problems.push('the wall has no bricks in it')
+
+  const box = await page.locator('canvas').first().boundingBox()
+  if (!box) problems.push('the wall has no board')
+  else {
+    const cy = box.y + box.height * 0.9
+    // Tap to let the ball go, then follow it about.
+    await page.mouse.move(box.x + box.width / 2, cy)
+    await page.mouse.down()
+    await page.mouse.up()
+    for (let i = 0; i < 60; i++) {
+      await page.mouse.move(box.x + box.width * (0.5 + Math.sin(i / 6) * 0.3), cy)
+      await page.waitForTimeout(90)
+    }
+  }
+
+  const after = await grab()
+  if (leftOf(after) >= leftOf(before)) {
+    problems.push(`the wall lost no bricks: ${leftOf(before)} before, ${leftOf(after)} after`)
+  }
+}
+
 await browser.close()
 
 // No screen may grow a score for being right at maths. The question between
@@ -618,4 +658,4 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, went down into the dungeon, ran the pipes, drove the road, flew out towards Mercury, and took a snake round the garden')
+console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, went down into the dungeon, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, and knocked a wall down')
