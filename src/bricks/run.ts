@@ -135,6 +135,15 @@ export interface Run {
   lives: number
   score: number
   status: Status
+  /**
+   * The last thing caught, and how long it has left to say so.
+   *
+   * Twelve powers were going into the bat as twelve small coloured glyphs and
+   * nothing else — the names and the one-line descriptions existed in the
+   * code, were checked by a test, and were shown to nobody. A charm nobody can
+   * read is a charm that may as well be a point.
+   */
+  caught: { kind: Power; life: number } | null
   /** Powers in hand and how long each has left. */
   held: Partial<Record<Power, number>>
   reload: number
@@ -239,6 +248,7 @@ export function newRun(level = 1, lives = LIVES, score = 0, seed = 1): Run {
     lives,
     score,
     status: 'playing',
+    caught: null,
     held: {},
     reload: 0,
     events: [],
@@ -263,6 +273,7 @@ export function serve(run: Run): Run {
     shots: [],
     sparks: [],
     held: {},
+    caught: null,
     status: 'playing',
     events: [],
   }
@@ -631,6 +642,12 @@ export function step(run: Run, input: Input, dt: number): Run {
   }
   next.sparks = next.sparks.filter((s) => s.life > 0 && s.y < TALL)
 
+  // The name of the last charm caught, fading.
+  if (next.caught) {
+    const left = next.caught.life - dt
+    next.caught = left > 0 ? { ...next.caught, life: left } : null
+  }
+
   // --- the drops -------------------------------------------------------------
   for (const drop of next.drops) drop.y += DROP_SPEED * dt
   const [bl, bt, br, bb] = batBox(next)
@@ -641,6 +658,9 @@ export function step(run: Run, input: Input, dt: number): Run {
       drop.x + DROP_W / 2 >= bl && drop.x - DROP_W / 2 <= br
     if (!caught) return true
     next.events.push('power')
+    // Long enough to read without being long enough to sit over the next one:
+    // a bat in a good run can take three charms in four seconds.
+    next.caught = { kind: drop.kind, life: 2.4 }
     if (isNasty(drop.kind)) next.events.push('nasty')
     if (drop.kind === 'life') {
       next.lives += 1

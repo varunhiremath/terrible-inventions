@@ -11,7 +11,7 @@
  */
 import { COLS, ROWS, colOf, rowOf, type Soul } from './level'
 import type { Token } from './find'
-import { blastOf, type Nudge, type Run } from './run'
+import { blastOf, type Run } from './run'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -488,30 +488,6 @@ function drawBanner(ctx: Ctx, run: Run, x: number, y: number, w: number, s: numb
   ctx.restore()
 }
 
-/**
- * The board offering a hand: a block that blinks.
- *
- * It shows where a find *starts* and nothing else, at first. That points the
- * eye without doing the reading, which is the whole value of it — a hint that
- * lights the answer up has not helped anybody think, it has just ended the
- * thinking.
- *
- * The blink quickens as the offer gets bigger, so the help arriving is
- * something you notice rather than something that was always there.
- */
-function drawNudge(ctx: Ctx, nudge: Nudge, bx: number, by: number, s: number, clock: number): void {
-  const beat = 3.5 + nudge.stage * 1.2
-  ctx.save()
-  ctx.globalAlpha = 0.3 + 0.4 * (0.5 + 0.5 * Math.sin(clock * beat))
-  ctx.strokeStyle = '#ffd27a'
-  ctx.lineWidth = Math.max(2, s * 0.08)
-  for (const i of nudge.cells) {
-    box(ctx, bx + colOf(i) * s + s * 0.04, by + rowOf(i) * s + s * 0.04, s * 0.92, s * 0.92, s * 0.15)
-    ctx.stroke()
-  }
-  ctx.restore()
-}
-
 export function drawRun(ctx: Ctx, run: Run, view: View): void {
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.fillStyle = INK.back
@@ -540,8 +516,6 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
   }
   ctx.restore()
 
-  // Never while a finger is down: the selection is what matters then.
-  if (run.nudge && run.anchor === null) drawNudge(ctx, run.nudge, x, by, scale, view.clock)
 }
 
 /** Which block a point lands on, or null. The screen's half of the dragging. */

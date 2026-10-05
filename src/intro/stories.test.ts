@@ -13,8 +13,17 @@ import lengths from '../../public/spoken/index.json'
  * like a loading bug rather than a missing picture.
  */
 /** The scenes that are a real level being played. */
+/*
+ * Every scene is a game being played, bar two that earn their place by being
+ * the one thing in the app that is not: the question card, and the card that
+ * names the twelve charms a brick can drop. Reading twelve names aloud would
+ * take most of a forty-second story, so that one is a picture with a voice
+ * over it — drawn with the game's own code in the game's own colours, which is
+ * what the old rule was really protecting against.
+ */
 const LEVELS = ['maze', 'cave', 'dungeon', 'pipes', 'road', 'space', 'deep', 'garden', 'wall', 'flood',
   'oneline', 'throughit', 'joined']
+const CARDS = ['question', 'charms']
 
 /**
  * How `scripts/render-voice.py` names a clip: the line as written, unfilled.
@@ -115,7 +124,7 @@ describe('the stories', () => {
      */
     for (const story of Object.values(STORIES)) {
       for (const beat of story.beats) {
-        expect([...LEVELS, 'question'], `${story.id} shows ${beat.scene}`).toContain(beat.scene)
+        expect([...LEVELS, ...CARDS], `${story.id} shows ${beat.scene}`).toContain(beat.scene)
       }
     }
   })

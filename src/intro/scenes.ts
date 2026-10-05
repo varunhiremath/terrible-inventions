@@ -43,7 +43,10 @@ import { SHIP_WIDE, SIZE_OF as RUBBLE_SIZE } from '../space/level'
 import { drawRun as drawFlight } from '../space/draw'
 import { FIXED as SPACE_FIXED, newRun as newFlight, step as flyOn, type Input as Stick, type Run as Flight } from '../space/run'
 import { ARENA as GARDEN_EDGE } from '../snake/level'
-import { drawRun as drawWall } from '../bricks/draw'
+import { drawRun as drawWall, drawCharm } from '../bricks/draw'
+import {
+  POWERS as CHARM_POWERS, POWER_INK, POWER_SAYS, isNasty as isNastyCharm,
+} from '../bricks/level'
 import {
   newRun as newWall, serve as newBall, step as knockOn, type Run as Wall,
 } from '../bricks/run'
@@ -733,6 +736,19 @@ export const gardenFootage = gardenFilm
 
 
 
+/** The biggest size this text fits in `room` at, down to something legible. */
+function fitting(ctx: Ctx, words: string, want: number, room: number, weight: number): number {
+  let size = want
+  for (let tries = 0; tries < 12 && size > want * 0.45; tries++) {
+    ctx.font = `${weight} ${size}px ${CARD_FACE}`
+    if (ctx.measureText(words).width <= room) break
+    size *= 0.92
+  }
+  return size
+}
+
+const CARD_FACE = 'ui-monospace, "SF Mono", Menlo, monospace'
+
 export const SCENES: Record<string, (stage: Stage) => void> = {
   /**
    * The maze: the real board, the real route, the real characters.
@@ -1018,6 +1034,78 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     const film = floodFilm()
     const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
     drawFlood(ctx, frame, { w, h, clock })
+  },
+
+  /**
+   * Every charm a brick can drop, at a size somebody can actually read.
+   *
+   * This is the one beat in any of the ten stories that is a chart rather than
+   * a game, and it earns it: twelve powers were going into the bat as twelve
+   * small coloured glyphs, and the names and descriptions existed in the code
+   * and were shown to nobody. Reading them aloud would take half a minute of a
+   * forty-second story, so the picture carries the list and the voice carries
+   * the idea.
+   *
+   * Drawn with the game's own `drawCharm` at the game's own colours, so what
+   * is on this card is exactly what falls out of a brick.
+   */
+  charms({ ctx, w, h, t }) {
+    ctx.fillStyle = '#05060a'
+    ctx.fillRect(0, 0, w, h)
+
+    const rows = Math.ceil(CHARM_POWERS.length / 2)
+    const pad = Math.min(w, h) * 0.05
+    const cellW = (w - pad * 3) / 2
+    const cellH = Math.min((h - pad * 2) / rows, h * 0.14)
+    const top = (h - cellH * rows) / 2
+
+    for (const [i, kind] of CHARM_POWERS.entries()) {
+      const col = i % 2
+      const row = Math.floor(i / 2)
+      // Staggered in, so the card assembles rather than appearing.
+      const shown = clamp((t - (i / CHARM_POWERS.length) * 0.35) * 6, 0, 1)
+      if (shown <= 0) continue
+
+      const x = pad + col * (cellW + pad)
+      const y = top + row * cellH
+      const said = POWER_SAYS[kind]
+      const bad = isNastyCharm(kind)
+
+      ctx.save()
+      ctx.globalAlpha = ease(shown)
+      ctx.translate(0, (1 - ease(shown)) * cellH * 0.3)
+
+      ctx.fillStyle = bad ? 'rgba(224,58,58,0.14)' : 'rgba(255,255,255,0.04)'
+      ctx.fillRect(x, y + cellH * 0.08, cellW, cellH * 0.84)
+      ctx.strokeStyle = POWER_INK[kind]
+      ctx.lineWidth = Math.max(1, cellH * 0.03)
+      ctx.strokeRect(x, y + cellH * 0.08, cellW, cellH * 0.84)
+
+      ctx.save()
+      ctx.translate(x + cellH * 0.5, y + cellH * 0.5)
+      ctx.fillStyle = POWER_INK[kind]
+      drawCharm(ctx, kind, cellH * 0.27)
+      ctx.restore()
+
+      /*
+       * The name only, and as big as it will go.
+       *
+       * The descriptions were on here too and could not be made to fit: forty
+       * characters beside an icon in a half-width box comes out at four pixels
+       * on a phone, so the card listed twelve things nobody could read, which
+       * is the exact fault it exists to fix. The card's job is this icon means
+       * this word; the word's meaning is flashed up in the game at the moment
+       * it matters, which is when it will actually stick.
+       */
+      const left = x + cellH * 0.92
+      const room = cellW - cellH * 1.05
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = POWER_INK[kind]
+      ctx.font = `700 ${fitting(ctx, said.name, cellH * 0.44, room, 700)}px ${CARD_FACE}`
+      ctx.fillText(said.name, left, y + cellH * 0.5)
+      ctx.restore()
+    }
   },
 
   /** The notebook: a figure being traced in one line. */

@@ -105,7 +105,7 @@ export const POWER_ODDS: Record<Power, number> = {
 }
 
 export const POWER_SAYS: Record<Power, { name: string; says: string }> = {
-  gun: { name: 'Gun', says: 'Two barrels. Tap to fire, and they lean the way you slide.' },
+  gun: { name: 'Gun', says: 'Tap to fire. Shots lean the way you slide.' },
   sticky: { name: 'Sticky', says: 'The ball waits on the bat until you let it go.' },
   slow: { name: 'Slow', says: 'Takes the pace off the ball.' },
   wide: { name: 'Wide', says: 'A longer bat.' },

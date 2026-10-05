@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { makeRng } from '../engine/rng'
 import {
-  BANDS, CELLS, COLS, DRAIN_PER_BLOCK, LEAST_FINDS, LIVES, NUDGE_AT, NUDGE_SAYS, ROWS, SURGE,
+  BANDS, CELLS, COLS, DRAIN_PER_BLOCK, LEAST_FINDS, LIVES, ROWS, SURGE,
   TO_CLEAR, at, bandFor, colOf, rowOf, writeFind,
 } from './level'
 import { LEAST_FIND, readLine } from './find'
 import {
-  FIXED, LOUDEST, askNudge, blastOf, findsOn, grab, letGo, newRun, reach, release, riseFor,
+  FIXED, LOUDEST, blastOf, findsOn, grab, letGo, newRun, reach, release, riseFor,
   runBetween, step, tryAgain, worthOf, type FloodEvent, type Run,
 } from './run'
 
@@ -364,14 +364,6 @@ describe('the noises', () => {
       }
     }
 
-    // And somebody sitting looking at it, which is the only way to be offered
-    // a hand. Driven on purpose rather than left to happen: it did happen, by
-    // the timing of the loop above, which is not the same as being covered.
-    {
-      let idle = newRun(1, 1100, 3, 0, 2)
-      for (let t = 0; t < 20; t += FIXED) { idle = step(idle, FIXED); watch(idle) }
-    }
-
     // And the two ends of the game, which only happen by doing nothing.
     for (const lives of [2, 1]) {
       let run = newRun(1, 1000, lives)
@@ -395,140 +387,6 @@ describe('the noises', () => {
     expect(gone.picked).toEqual([])
     expect(gone.events).toEqual([])
     expect(gone.water).toBe(run.water)
-  })
-})
-
-describe('the board offering a hand', () => {
-  /** Sit and look at the board for this long, touching nothing. */
-  function wait(run: Run, seconds: number): Run {
-    let on = run
-    for (let t = 0; t < seconds; t += FIXED) on = step(on, FIXED)
-    return on
-  }
-
-  it('offers nothing at all while he is still looking', () => {
-    // The first stage is fifteen seconds in. Before that the board says
-    // nothing, because somebody reading a grid is not somebody stuck.
-    const run = wait(newRun(1, 1100, LIVES, 0, 4), NUDGE_AT[0] - 2)
-    expect(run.nudge).toBe(null)
-  })
-
-  it('blinks one block, and only one, when he has been a while', () => {
-    /*
-     * The whole point of the first stage: it says where a find starts and not
-     * what it is. A hint that lights the answer up has not helped anybody
-     * think, it has ended the thinking.
-     */
-    const run = wait(newRun(1, 1100, LIVES, 0, 4), NUDGE_AT[0] + 1)
-    expect(run.nudge?.stage).toBe(1)
-    expect(run.nudge?.cells).toHaveLength(1)
-  })
-
-  it('gives away more the longer he is stuck, and stops at the whole line', () => {
-    let run = wait(newRun(1, 1100, LIVES, 0, 4), NUDGE_AT[0] + 1)
-    expect(run.nudge?.cells).toHaveLength(1)
-    run = wait(run, NUDGE_AT[1] - NUDGE_AT[0])
-    expect(run.nudge?.stage).toBe(2)
-    expect(run.nudge?.cells).toHaveLength(2)
-    run = wait(run, NUDGE_AT[2] - NUDGE_AT[1])
-    expect(run.nudge?.stage).toBe(3)
-    expect(run.nudge?.cells.length).toBeGreaterThanOrEqual(4)
-    // And it never climbs past the last rung, however long he sits there.
-    const was = run.nudge?.cells.length
-    run = wait(run, 60)
-    expect(run.nudge?.stage).toBe(NUDGE_AT.length)
-    expect(run.nudge?.cells.length).toBe(was)
-  })
-
-  it('always points at something that really is there', () => {
-    /*
-     * The one way a hint can be worse than no hint. It is taken from the live
-     * board rather than remembered, so it cannot go stale — but "cannot" is
-     * what a test is for.
-     */
-    for (let seed = 1; seed <= 25; seed++) {
-      const run = wait(newRun(1, 1200, LIVES, 0, seed), NUDGE_AT[2] + 1)
-      const nudge = run.nudge
-      expect(nudge, `seed ${seed}`).not.toBe(null)
-      if (!nudge) continue
-      // The whole line it ends up showing has to read as a find.
-      const after = take(run, nudge.cells)
-      expect(after.events, `seed ${seed}: the hint was not a find`).not.toContain('miss')
-      expect(after.score, `seed ${seed}`).toBeGreaterThan(0)
-    }
-  })
-
-  it('never interrupts a finger that is already working', () => {
-    /*
-     * A board that starts blinking at somebody mid-drag is a board talking
-     * over them. The clock stops while a finger is down, and it is a pause
-     * rather than a reset — otherwise anybody who keeps trying things would
-     * never be offered anything at all.
-     */
-    let run = wait(newRun(1, 1100, LIVES, 0, 4), NUDGE_AT[0] - 3)
-    run = grab(run, at(0, 0))
-    const held = wait(run, 30)
-    expect(held.nudge, 'offered a hand while he was mid-drag').toBe(null)
-    expect(held.idle).toBeCloseTo(run.idle, 1)
-    // And once the finger comes up, the clock carries on from where it was.
-    const after = wait(release(held), 4)
-    expect(after.nudge?.stage).toBe(1)
-  })
-
-  it('forgets all about it the moment he finds one', () => {
-    let run = wait(newRun(1, 1200, LIVES, 0, 6), NUDGE_AT[1] + 1)
-    expect(run.nudge).not.toBe(null)
-    const found = firstFind(run)
-    if (!found) return
-    run = take(run, found.cells)
-    expect(run.nudge).toBe(null)
-    expect(run.idle).toBe(0)
-  })
-
-  it('does not treat a wrong try as progress', () => {
-    /*
-     * Dragging the wrong line is still being stuck — more so, if anything. The
-     * clock keeps running, so somebody flailing is offered a hand rather than
-     * being left to flail quietly.
-     */
-    let run = wait(newRun(1, 1100, LIVES, 0, 3), NUDGE_AT[0] - 2)
-    const wrong = [at(0, 0), at(1, 0), at(2, 0), at(3, 0)]
-    if (!readLine(wrong.map((i) => run.cells[i].token))) {
-      run = take(run, wrong)
-      expect(run.idle).toBeGreaterThan(NUDGE_AT[0] - 4)
-    }
-  })
-
-  it('climbs the same ladder a rung at a time when he asks', () => {
-    // So somebody who only wants a nudge can take only a nudge.
-    let run = newRun(1, 1200, LIVES, 0, 8)
-    run = askNudge(run)
-    expect(run.nudge?.cells).toHaveLength(1)
-    run = askNudge(run)
-    expect(run.nudge?.cells).toHaveLength(2)
-    run = askNudge(run)
-    expect(run.nudge?.stage).toBe(3)
-    expect(run.nudge?.cells.length).toBeGreaterThanOrEqual(4)
-    // And asking again does not go further than showing it.
-    const was = run.nudge?.cells.length
-    run = askNudge(run)
-    expect(run.nudge?.cells.length).toBe(was)
-  })
-
-  it('has a word for every rung', () => {
-    expect(NUDGE_SAYS).toHaveLength(NUDGE_AT.length)
-    for (const said of NUDGE_SAYS) {
-      expect(said.length).toBeGreaterThan(0)
-      // Never "you are stuck": it is an offer, not a verdict.
-      expect(said.toLowerCase()).not.toContain('stuck')
-      expect(said.toLowerCase()).not.toContain('wrong')
-    }
-  })
-
-  it('says nothing on a run that is over', () => {
-    const done = { ...newRun(1, 1000, 1), status: 'over' as const }
-    expect(askNudge(done)).toBe(done)
-    expect(wait(done, 60).nudge).toBe(null)
   })
 })
 

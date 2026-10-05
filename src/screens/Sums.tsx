@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { LIVES, NUDGE_SAYS, TO_CLEAR, gotOut } from '../sums/level'
+import { LIVES, TO_CLEAR, gotOut } from '../sums/level'
 import {
-  FIXED, LOUDEST, askNudge, grab, newRun, nextLevel, reach, release, step, tryAgain,
+  FIXED, LOUDEST, grab, newRun, nextLevel, reach, release, step, tryAgain,
   type FloodEvent, type Run, type Status,
 } from '../sums/run'
 import { cellAt, drawRun, type View } from '../sums/draw'
@@ -36,7 +36,6 @@ const NOISE: Record<FloodEvent, CueName> = {
   miss: 'clunk',
   drain: 'gurgle',
   planted: 'fresh',
-  nudge: 'nudge',
   saved: 'rescued',
   soaked: 'under',
   over: 'allOut',
@@ -78,8 +77,6 @@ export function Sums() {
     status: 'playing', soul: '', band: '',
   })
   const [asking, setAsking] = useState(false)
-  /** Which rung of the hint ladder is showing, for the line of words with it. */
-  const [stage, setStage] = useState(0)
 
   useEffect(() => { spare.current = spareLives({ workshop: kit }) }, [kit])
 
@@ -152,8 +149,6 @@ export function Sums() {
             water: next.water, status: next.status, soul: next.soul.name, band: next.band.name,
           })
         }
-
-        if ((next.nudge?.stage ?? 0) !== stage) setStage(next.nudge?.stage ?? 0)
 
         const view: View = { w: canvas.width, h: canvas.height, clock: clock.current }
         drawRun(ctx, next, view)
@@ -228,22 +223,11 @@ export function Sums() {
 
   // --- between goes ----------------------------------------------------------
 
-  /** One more rung of the same ladder the clock climbs. */
-  const askForOne = () => {
-    const run = runRef.current
-    if (!run) return
-    const next = askNudge(run)
-    if (next.events.length > 0) playCue(NOISE.nudge)
-    runRef.current = next
-    setStage(next.nudge?.stage ?? 0)
-  }
-
   const carryOn = () => {
     const run = runRef.current
     if (!run) return
     runRef.current = tryAgain(run, rating)
     setAsking(false)
-    setStage(0)
     setHud((it) => ({ ...it, status: 'playing', water: 0, left: TO_CLEAR }))
   }
 
@@ -262,14 +246,12 @@ export function Sums() {
     const run = runRef.current
     if (!run) return
     runRef.current = nextLevel(run, rating)
-    setStage(0)
     setHud((it) => ({ ...it, status: 'playing', level: it.level + 1, water: 0, left: TO_CLEAR }))
   }
 
   const again = () => {
     runRef.current = newRun(1, rating, LIVES + spare.current)
     setAsking(false)
-    setStage(0)
     setHud({
       level: 1, score: 0, lives: LIVES + spare.current, left: TO_CLEAR,
       water: 0, status: 'playing', soul: '', band: '',
@@ -300,14 +282,6 @@ export function Sums() {
         onPointerMove={move}
       >
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
-
-        {stage > 0 && (
-          <div className="pointer-events-none absolute inset-x-0 top-1 z-20 flex justify-center">
-            <p className="rounded-full bg-ink/80 px-3 py-1 font-mono text-[0.65rem] text-bolt">
-              {NUDGE_SAYS[Math.min(NUDGE_SAYS.length - 1, stage - 1)]}
-            </p>
-          </div>
-        )}
 
         {asking && (
           <Interlude
@@ -349,13 +323,6 @@ export function Sums() {
         <p className="text-center font-mono text-[0.65rem] uppercase tracking-widest text-dim/60">
           drag along a line that is true · longer takes more of the wall
         </p>
-        {hud.status === 'playing' && (
-          <div className="mt-2 flex justify-center">
-            <Btn onClick={askForOne} tone="plain">
-              {stage === 0 ? 'Is there one?' : stage === 1 ? 'Which way?' : 'Show me'}
-            </Btn>
-          </div>
-        )}
       </div>
     </div>
   )

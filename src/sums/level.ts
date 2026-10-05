@@ -257,29 +257,6 @@ export const SURGE = 0.012
 /** How many blocks have to go before the chamber drains. */
 export const TO_CLEAR = 45
 
-/**
- * How long he can be looking before the board offers a hand, in seconds.
- *
- * Three stages, and the first one is deliberately the smallest help there is:
- * one block blinks — the one a find *starts* on — and nothing else. That says
- * "look here" without saying what it is, which leaves the whole of the reading
- * to him. The second stage lights the block after it, so the direction is
- * clear. Only the third shows the line.
- *
- * Fifteen seconds because that is about when looking turns into being stuck:
- * the first chamber allows roughly twenty-two seconds a find, so the offer
- * arrives just before it starts costing him. It never arrives while he is
- * dragging — a finger on the glass is somebody working, not somebody stuck.
- */
-export const NUDGE_AT: readonly number[] = [15, 28, 45]
-
-/** What the board says as it offers, which is never "you are stuck". */
-export const NUDGE_SAYS: readonly string[] = [
-  'something starts there',
-  'and it goes that way',
-  'there it is',
-]
-
 /** Score. Longer finds are worth much more than their length suggests. */
 export const WORTH = 20
 export const MOST_COMBO = 5

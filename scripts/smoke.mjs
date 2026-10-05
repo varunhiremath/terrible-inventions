@@ -696,30 +696,6 @@ if (await enter('The Long Way Out')) {
     await page.waitForTimeout(300)
   }
 
-  /*
-   * And the hand the board offers, which climbs a rung per press: one block,
-   * then the way it goes, then the line. It has to find something on a board
-   * that promises to hold something, so a press that says nothing is the
-   * promise being broken.
-   */
-  const hint = page.getByRole('button', { name: /is there one/i })
-  if ((await hint.count()) === 0) problems.push('the flood will not offer a hand')
-  else {
-    await hint.first().click()
-    await page.waitForTimeout(400)
-    if (!/something starts there/i.test(await page.innerText('body'))) {
-      problems.push('the flood could not find a line on its own board')
-    }
-    const more = page.getByRole('button', { name: /which way/i })
-    if ((await more.count()) === 0) problems.push('the hint does not go any further')
-    else {
-      await more.first().click()
-      await page.waitForTimeout(400)
-      if (!/it goes that way/i.test(await page.innerText('body'))) {
-        problems.push('the second rung of the hint said nothing')
-      }
-    }
-  }
 }
 
 // --- the notebook -----------------------------------------------------------

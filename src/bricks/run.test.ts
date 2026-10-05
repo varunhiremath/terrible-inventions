@@ -673,3 +673,58 @@ describe('the dozen things that drop', () => {
     expect(run.sparks, 'chips are piling up with nothing to remove them').toHaveLength(0)
   })
 })
+
+describe('saying what was caught', () => {
+  /**
+   * Twelve charms went into the bat as twelve small coloured glyphs and
+   * nothing else. The names and the one-line descriptions were written, were
+   * checked by a test, and were shown to nobody — so the only way to learn
+   * what a charm did was to catch it and watch what happened.
+   */
+  it('names every charm it can drop, and says what it does', () => {
+    for (const kind of POWERS) {
+      const said = POWER_SAYS[kind]
+      expect(said?.name, kind).toBeTruthy()
+      expect(said?.says, kind).toBeTruthy()
+      /*
+       * Long enough to be an explanation, short enough to read in the two and
+       * a bit seconds it is up for — with a ball in play. The gun's was
+       * fifty-eight characters, which is a sentence you read afterwards.
+       */
+      expect(said.says.length, `${kind}: "${said.says}"`).toBeGreaterThan(10)
+      expect(said.says.length, `${kind}: "${said.says}"`).toBeLessThan(52)
+    }
+  })
+
+  it('remembers the last one caught, so the screen can say so', () => {
+    let run = newRun(1)
+    run = {
+      ...run,
+      drops: [{ id: 99, x: run.bat, y: PADDLE_Y - 0.1, kind: 'gun' }],
+    }
+    const after = step(run, { to: null, left: false, right: false, act: false }, 1 / 60)
+    expect(after.events).toContain('power')
+    expect(after.caught?.kind).toBe('gun')
+    expect(after.caught?.life).toBeGreaterThan(0)
+  })
+
+  it('stops saying it after a couple of seconds', () => {
+    let run = newRun(1)
+    run = { ...run, caught: { kind: 'bomb', life: 2.4 } }
+    const still = { to: null, left: false, right: false, act: false }
+    for (let t = 0; t < 1.5; t += 1 / 60) run = step(run, still, 1 / 60)
+    expect(run.caught, 'gone before it could be read').not.toBe(null)
+    for (let t = 0; t < 2; t += 1 / 60) run = step(run, still, 1 / 60)
+    expect(run.caught, 'still sitting there').toBe(null)
+  })
+
+  it('replaces it when another one is caught straight after', () => {
+    // A bat in a good run can take three charms in four seconds, and the one
+    // on the screen should be the one in your hand.
+    let run = newRun(1)
+    run = { ...run, caught: { kind: 'bomb', life: 2.4 } }
+    run = { ...run, drops: [{ id: 99, x: run.bat, y: PADDLE_Y - 0.1, kind: 'slow' }] }
+    const after = step(run, { to: null, left: false, right: false, act: false }, 1 / 60)
+    expect(after.caught?.kind).toBe('slow')
+  })
+})

@@ -7,7 +7,7 @@
  * shape of the window is not a game.
  */
 import {
-  BALL_R, DROP_H, DROP_W, PADDLE_H, PADDLE_Y, POWERS, POWER_INK, SHOT_H, SHOT_W,
+  BALL_R, DROP_H, DROP_W, PADDLE_H, PADDLE_Y, POWERS, POWER_INK, POWER_SAYS, SHOT_H, SHOT_W,
   TALL, WIDE, inkFor, isNasty, type Power,
 } from './level'
 import { batBox, boxOf, type Run } from './run'
@@ -185,6 +185,47 @@ export function drawCharm(ctx: Ctx, kind: Power, r: number): void {
   ctx.fill()
 }
 
+/**
+ * The name of the charm just caught, across the field.
+ *
+ * Low down, just above the bat: the ball spends almost all of its time in the
+ * top two thirds, and a word written across the middle of a brick game is a
+ * word that hides the thing you are trying to hit. Low and fading, so it is
+ * out of the way by the time the ball comes back down.
+ */
+function drawCaught(
+  ctx: Ctx, run: Run,
+  at: (x: number, y: number) => { x: number; y: number },
+  px: (n: number) => number,
+): void {
+  const caught = run.caught
+  if (!caught) return
+  const said = POWER_SAYS[caught.kind]
+  if (!said) return
+
+  const middle = at(WIDE / 2, PADDLE_Y - 1.5)
+  const size = px(0.82)
+  ctx.save()
+  // In for a moment, held, then out — rather than a straight fade, which at
+  // two seconds reads as the screen being broken.
+  ctx.globalAlpha = Math.min(1, caught.life * 3, (2.4 - caught.life) * 5)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  ctx.font = `700 ${size}px ui-monospace, "SF Mono", Menlo, monospace`
+  ctx.fillStyle = '#05060a'
+  ctx.fillText(said.name.toUpperCase(), middle.x + px(0.03), middle.y + px(0.03))
+  ctx.fillStyle = POWER_INK[caught.kind]
+  ctx.fillText(said.name.toUpperCase(), middle.x, middle.y)
+
+  ctx.font = `600 ${size * 0.44}px ui-monospace, "SF Mono", Menlo, monospace`
+  ctx.fillStyle = '#05060a'
+  ctx.fillText(said.says, middle.x + px(0.02), middle.y + size * 0.72 + px(0.02))
+  ctx.fillStyle = INK.chalk
+  ctx.fillText(said.says, middle.x, middle.y + size * 0.72)
+  ctx.restore()
+}
+
 export function drawRun(ctx: Ctx, run: Run, view: View): void {
   ctx.fillStyle = INK.back
   ctx.fillRect(0, 0, view.w, view.h)
@@ -326,7 +367,8 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
   }
 
   ctx.restore()
-  void PADDLE_Y
+
+  drawCaught(ctx, run, at, px)
 }
 
 /** The powers in hand, as a row of charms along the bottom. */

@@ -2438,19 +2438,6 @@ export const HAUL: Track = {
   ],
 }
 
-/**
- * The board offering a hand.
- *
- * Quiet, warm and going up, because it is an offer and not a correction. It
- * had better not sound like being told off: he will hear it on the chambers he
- * is finding hard, which are exactly the ones where that would matter.
- */
-export const NUDGE: Track = {
-  name: 'Nudge',
-  beatsPerMinute: 150,
-  parts: [{ wave: 'bell', gain: 0.028, sustain: 0.9, pattern: 'E5 .  A5 .  ' }],
-}
-
 /** The board handing you something new when there was nothing left to find. */
 export const FRESH: Track = {
   name: 'Fresh',
@@ -2460,7 +2447,6 @@ export const FRESH: Track = {
 
 export const FLOOD_CUES = {
   haul: HAUL,
-  nudge: NUDGE,
   fresh: FRESH,
   crunch: CRUNCH,
   chain: CHAIN,
