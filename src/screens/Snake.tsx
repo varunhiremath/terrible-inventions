@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { ARENA, POWER_SAYS, POWERS, type Power } from '../snake/level'
 import {
-  FIXED, LOUDEST, newRun, respawn, step,
+  ARENA, GARDENS, GOAL_GOT, GOAL_SAYS, POWER_SAYS, POWERS, gardenFor, type Power,
+} from '../snake/level'
+import {
+  FIXED, LOUDEST, newRun, nextGarden, respawn, step,
   type Input, type Run, type SnakeEvent, type Status,
 } from '../snake/run'
 import { STILL, aimOf, aimOfKeys, knobOf, stickReach, type Aim, type Stick } from '../snake/controls'
@@ -36,12 +38,18 @@ const NOISE: Record<SnakeEvent, CueName> = {
   died: 'bitten',
   kill: 'fade',
   close: 'slip',
+  cleared: 'wallDown',
 }
 
 interface Hud {
   length: number
   score: number
   lives: number
+  level: number
+  goal: string
+  got: string
+  gotAt: number
+  want: number
   lived: number
   /** The longest this snake has got, across the lives spent so far. */
   best: number
@@ -65,6 +73,7 @@ export function Snake() {
   const best = useRef(0)
   const [hud, setHud] = useState<Hud>({
     length: 0, score: 0, lives: 3, lived: 0, best: 0, caught: 0, status: 'playing', held: {},
+    level: 1, goal: '', got: '', gotAt: 0, want: 0,
   })
   const [asking, setAsking] = useState(false)
 
@@ -88,7 +97,7 @@ export function Snake() {
     observer.observe(wrap)
 
     if (!runRef.current) {
-      runRef.current = newRun(Math.floor(Math.random() * 10000) + 1)
+      runRef.current = newRun(1, Math.floor(Math.random() * 10000) + 1)
       lives.current = 3 + spare.current
     }
 
@@ -150,6 +159,7 @@ export function Snake() {
         const held = you?.held ?? {}
         if (
           next.status !== hud.status || next.caught !== hud.caught ||
+          next.level !== hud.level || Math.floor(next.got * 10) !== Math.floor(hud.gotAt * 10) ||
           Math.round(next.lived) !== Math.round(hud.lived) ||
           Math.round((you?.length ?? 0) * 2) !== Math.round(hud.length * 2) ||
           (you?.score ?? 0) !== hud.score ||
@@ -164,6 +174,11 @@ export function Snake() {
             caught: next.caught,
             status: next.status,
             held: { ...held },
+            level: next.level,
+            goal: GOAL_SAYS[next.garden.goal](next.garden.want),
+            got: GOAL_GOT[next.garden.goal](next.got),
+            gotAt: next.got,
+            want: next.garden.want,
           })
         }
 
@@ -257,18 +272,30 @@ export function Snake() {
     if (lives.current > 0) carryOn()
   }
 
+  /** Start the garden he is in again, keeping the garden. */
   const again = () => {
-    runRef.current = newRun(Math.floor(Math.random() * 10000) + 1)
+    const was = runRef.current?.level ?? 1
+    runRef.current = newRun(was, Math.floor(Math.random() * 10000) + 1)
     lives.current = 3 + spare.current
     setAsking(false)
     best.current = 0
-    setHud({
+    setHud((h) => ({
+      ...h,
       length: 0, score: 0, lives: lives.current, lived: 0, best: 0,
-      caught: 0, status: 'playing', held: {},
-    })
+      caught: 0, status: 'playing', held: {}, got: '', gotAt: 0,
+    }))
+  }
+
+  /** On to the next garden, which is harder and has one more thing in it. */
+  const onwards = () => {
+    const run = runRef.current
+    if (!run) return
+    runRef.current = nextGarden(run)
+    setHud((h) => ({ ...h, status: 'playing', level: h.level + 1, got: '', gotAt: 0 }))
   }
 
   const lost = hud.status === 'lost'
+  const won = hud.status === 'won'
   const out = lost && lives.current <= 1
 
   return (
@@ -284,7 +311,7 @@ export function Snake() {
           {String(hud.score).padStart(6, '0')}
         </p>
         <p className="ml-auto font-mono text-[0.68rem] tabular-nums text-dim">
-          {hud.length.toFixed(1)} long · {hud.caught} caught · best {hud.best.toFixed(1)}
+          garden {hud.level} · {hud.goal} · {hud.got}
         </p>
         <p className="font-mono text-xs tabular-nums text-bolt">{'●'.repeat(Math.max(0, lives.current))}</p>
       </div>
@@ -305,6 +332,29 @@ export function Snake() {
             lastChance={lives.current <= 1}
             onDone={(right) => { if (right) carryOn(); else spendLife() }}
           />
+        )}
+
+        {won && (
+          <div
+            className="absolute inset-0 z-30 flex items-center justify-center bg-ink/85 p-4"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="block-panel w-full max-w-sm p-5 text-center">
+              <p className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-bolt">
+                {GARDENS[Math.min(GARDENS.length, hud.level) - 1]?.name ?? `Garden ${hud.level}`} done
+              </p>
+              <p className="mt-2 text-lg font-bold text-chalk">
+                You got to {hud.length.toFixed(1)} long and caught {hud.caught}.
+              </p>
+              <p className="mt-1 font-mono text-[0.7rem] text-dim">
+                next: {GOAL_SAYS[gardenFor(hud.level + 1).goal](gardenFor(hud.level + 1).want)}
+              </p>
+              <div className="mt-4 flex flex-col gap-2">
+                <Btn onClick={onwards} tone="go">On to garden {hud.level + 1}</Btn>
+                <Btn onClick={() => go('home')} tone="plain">Back</Btn>
+              </div>
+            </div>
+          </div>
         )}
 
         {lost && !asking && (
@@ -333,7 +383,7 @@ export function Snake() {
 
       <div className="shrink-0 px-4 pb-3 pt-1">
         <p className="text-center font-mono text-[0.65rem] uppercase tracking-widest text-dim/60">
-          hold anywhere to steer · push right over to dash
+          grow · ring the others · do not touch them
         </p>
       </div>
     </div>

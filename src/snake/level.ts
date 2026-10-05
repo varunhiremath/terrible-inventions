@@ -110,7 +110,7 @@ export const LURE_REACH = 2.6
 /** How much slower everything else moves under frost. */
 export const FROST_SCALE = 0.45
 
-/** The snakes in the garden besides you. */
+/** The snakes in the garden besides you, when nobody says otherwise. */
 export const RIVALS = 5
 
 /**
@@ -137,6 +137,122 @@ export const ROSTER: readonly Rival[] = [
   { name: 'Pip', ink: '#d8c45a', trim: '#8f7d26', mean: 0.2, care: 2.1 },
   { name: 'Shadow', ink: '#7a6f8c', trim: '#443d52', mean: 0.6, care: 1.5 },
 ]
+
+// --- the gardens ------------------------------------------------------------
+
+/**
+ * What a garden asks of you.
+ *
+ * The game had none of this: one endless round, three lives, and a score that
+ * was how long you got. Which is what the game it is based on does, and the
+ * verdict was "it's no fun without any clear objectives" — fair, because
+ * slither.io has a leaderboard full of strangers doing the asking and this has
+ * nobody. Something has to say what you are for.
+ *
+ * Four kinds, rotated so no two gardens in a row ask the same thing, and all
+ * four are things he would be doing anyway — the goal names the point of the
+ * game rather than bolting a chore onto it.
+ */
+export type GoalKind = 'grow' | 'catch' | 'graze' | 'last'
+
+export const GOAL_SAYS: Record<GoalKind, (want: number) => string> = {
+  grow: (n) => `get to ${n}`,
+  catch: (n) => (n === 1 ? 'ring somebody' : `ring ${n}`),
+  graze: (n) => `eat ${n}`,
+  last: (n) => `last ${n}s`,
+}
+
+/**
+ * How far along, in the goal's own words.
+ *
+ * Each goal counts something different, and "7" on its own tells nobody which
+ * of the four things is being counted. The growing one says "long" because
+ * that is the word the game uses for it everywhere else.
+ */
+export const GOAL_GOT: Record<GoalKind, (got: number) => string> = {
+  grow: (n) => `${n.toFixed(1)} long`,
+  catch: (n) => `${Math.floor(n)} ringed`,
+  graze: (n) => `${Math.floor(n)} eaten`,
+  last: (n) => `${Math.floor(n)}s`,
+}
+
+export interface Garden {
+  name: string
+  goal: GoalKind
+  want: number
+  rivals: number
+  /** A multiplier on how mean the rivals are by nature. One is themselves. */
+  mean: number
+  /** How far the garden reaches from the middle. Smaller is tighter. */
+  arena: number
+  charms: number
+  /** Hedges: lines of thorn, deadly to touch, and they do not move. */
+  hedges: number
+}
+
+/**
+ * Twelve gardens.
+ *
+ * The shape of the ladder: the first four teach the four things the game can
+ * ask for — grow, graze, ring somebody, stay alive — one each, in a garden big
+ * enough to make mistakes in. The hedges arrive at the fifth and are the only
+ * genuinely new thing after that; everything later is the same garden with
+ * less room, more company and worse manners.
+ *
+ * No two in a row ask for the same thing. Turning the page should be something
+ * else, not more of it.
+ *
+ * Arena shrinks from twelve to nine rather than growing, because a bigger
+ * garden is an easier one: the whole difficulty of a snake is how much room
+ * you have to turn around in.
+ */
+export const GARDENS: readonly Garden[] = [
+  { name: 'The lawn', goal: 'grow', want: 6, rivals: 2, mean: 0.6, arena: 12, charms: 4, hedges: 0 },
+  { name: 'The border', goal: 'graze', want: 25, rivals: 3, mean: 0.7, arena: 12, charms: 4, hedges: 0 },
+  { name: 'First ring', goal: 'catch', want: 1, rivals: 3, mean: 0.8, arena: 12, charms: 4, hedges: 0 },
+  { name: 'Hold still', goal: 'last', want: 40, rivals: 3, mean: 1, arena: 12, charms: 3, hedges: 0 },
+  { name: 'The hedges', goal: 'grow', want: 10, rivals: 3, mean: 1, arena: 12, charms: 3, hedges: 2 },
+  { name: 'Thicket', goal: 'catch', want: 2, rivals: 4, mean: 1, arena: 11, charms: 3, hedges: 3 },
+  { name: 'The maze', goal: 'graze', want: 40, rivals: 4, mean: 1.1, arena: 11, charms: 3, hedges: 5 },
+  { name: 'Close quarters', goal: 'grow', want: 12, rivals: 4, mean: 1.2, arena: 10, charms: 2, hedges: 4 },
+  { name: 'Hold on', goal: 'last', want: 60, rivals: 5, mean: 1.3, arena: 10, charms: 2, hedges: 4 },
+  { name: 'The hunt', goal: 'catch', want: 3, rivals: 5, mean: 1.4, arena: 10, charms: 2, hedges: 5 },
+  { name: 'Bramble', goal: 'grow', want: 14, rivals: 5, mean: 1.5, arena: 9, charms: 2, hedges: 7 },
+  { name: 'The whole garden', goal: 'catch', want: 4, rivals: 6, mean: 1.6, arena: 9, charms: 2, hedges: 6 },
+]
+
+/**
+ * Which garden, with the twelfth hardening for ever after.
+ *
+ * It asks for more of the same rather than inventing anything, because
+ * somebody who has cleared twelve gardens does not need a thirteenth idea,
+ * they need the twelfth one to stop being easy.
+ */
+export function gardenFor(level: number): Garden {
+  if (level <= GARDENS.length) return GARDENS[level - 1]
+  const past = level - GARDENS.length
+  const last = GARDENS[GARDENS.length - 1]
+  /*
+   * Everything is capped. A garden a hundred deep asking somebody to ring
+   * ninety-eight snakes is not a hard garden, it is a broken one — and a
+   * mistyped level number is how that was found: a screen handed `newRun` a
+   * random seed where the level now goes and opened garden 9836, which asked
+   * for 4916 rings.
+   */
+  return {
+    ...last,
+    name: `Garden ${level}`,
+    want: Math.min(last.want * 3, last.want + Math.floor(past / 2)),
+    mean: Math.min(2.2, last.mean + past * 0.08),
+    hedges: Math.min(12, last.hedges + Math.floor(past / 2)),
+  }
+}
+
+/** How long a hedge is, in points, and how far apart they are. */
+export const HEDGE_BEADS = 9
+export const HEDGE_STEP = 0.32
+/** How fat a hedge is, which is what you die by touching. */
+export const HEDGE_GIRTH = 0.34
 
 /**
  * How long you are left alone after coming back.

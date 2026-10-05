@@ -10,7 +10,7 @@
  * steer by, and the moment the camera pulls back too far the pellets vanish.
  */
 import {
-  ARENA, GIRTH, POWERS, POWER_INK, PICKUP, type Power,
+  GIRTH, HEDGE_GIRTH, POWERS, POWER_INK, PICKUP, type Power,
 } from './level'
 import { bodyOf, girthOf, headOf, type Point, type Run, type Snake } from './run'
 
@@ -59,7 +59,9 @@ const at = (p: Point, cam: { zoom: number; cx: number; cy: number }, view: View)
   y: view.h / 2 + (p.y - cam.cy) * cam.zoom,
 })
 
-function drawGround(ctx: Ctx, cam: { zoom: number; cx: number; cy: number }, view: View): void {
+function drawGround(
+  ctx: Ctx, cam: { zoom: number; cx: number; cy: number }, view: View, arena: number,
+): void {
   ctx.fillStyle = INK.back
   ctx.fillRect(0, 0, view.w, view.h)
 
@@ -68,7 +70,7 @@ function drawGround(ctx: Ctx, cam: { zoom: number; cx: number; cy: number }, vie
   const middle = at({ x: 0, y: 0 }, cam, view)
   ctx.save()
   ctx.beginPath()
-  ctx.arc(middle.x, middle.y, ARENA * cam.zoom, 0, Math.PI * 2)
+  ctx.arc(middle.x, middle.y, arena * cam.zoom, 0, Math.PI * 2)
   ctx.fillStyle = INK.soil
   ctx.fill()
   ctx.clip()
@@ -95,7 +97,7 @@ function drawGround(ctx: Ctx, cam: { zoom: number; cx: number; cy: number }, vie
   ctx.strokeStyle = INK.wall
   ctx.lineWidth = Math.max(3, cam.zoom * 0.14)
   ctx.beginPath()
-  ctx.arc(middle.x, middle.y, ARENA * cam.zoom, 0, Math.PI * 2)
+  ctx.arc(middle.x, middle.y, arena * cam.zoom, 0, Math.PI * 2)
   ctx.stroke()
 }
 
@@ -276,6 +278,7 @@ function drawRing(ctx: Ctx, run: Run, cam: { zoom: number; cx: number; cy: numbe
  * name.
  */
 function drawMap(ctx: Ctx, run: Run, view: View): void {
+  const arena = run.arena
   const r = Math.min(view.w, view.h) * 0.11
   const cx = view.w - r - 12
   const cy = r + 12
@@ -293,8 +296,8 @@ function drawMap(ctx: Ctx, run: Run, view: View): void {
     if (!s.alive) continue
     const head = headOf(s)
     const mine = s.id === run.snakes[0]?.id
-    const x = cx + (head.x / ARENA) * r * 0.92
-    const y = cy + (head.y / ARENA) * r * 0.92
+    const x = cx + (head.x / arena) * r * 0.92
+    const y = cy + (head.y / arena) * r * 0.92
     ctx.fillStyle = mine ? INK.you : s.who?.ink ?? INK.dim
     ctx.beginPath()
     ctx.arc(x, y, mine ? 3.4 : 2.4, 0, Math.PI * 2)
@@ -303,9 +306,87 @@ function drawMap(ctx: Ctx, run: Run, view: View): void {
   ctx.restore()
 }
 
+/**
+ * The hedges: lines of thorn that do not move and end anybody who touches one.
+ *
+ * Drawn as a dark bar with spikes off both sides rather than as a smooth line,
+ * because a smooth line in a garden full of smooth snake-shaped lines is
+ * something he will try to eat. It has to look like it would hurt.
+ */
+function drawHedges(
+  ctx: Ctx, run: Run, cam: { zoom: number; cx: number; cy: number }, view: View,
+): void {
+  const fat = HEDGE_GIRTH * cam.zoom
+  for (const hedge of run.hedges) {
+    const points = hedge.map((p) => at(p, cam, view))
+    ctx.save()
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+
+    ctx.strokeStyle = '#1d3320'
+    ctx.lineWidth = fat * 1.25
+    ctx.beginPath()
+    ctx.moveTo(points[0].x, points[0].y)
+    for (const p of points.slice(1)) ctx.lineTo(p.x, p.y)
+    ctx.stroke()
+
+    // The thorns, off alternate sides.
+    ctx.strokeStyle = '#4a6b3c'
+    ctx.lineWidth = Math.max(1, fat * 0.2)
+    ctx.beginPath()
+    for (let i = 1; i < points.length; i++) {
+      const dx = points[i].x - points[i - 1].x
+      const dy = points[i].y - points[i - 1].y
+      const len = Math.hypot(dx, dy) || 1
+      const side = i % 2 === 0 ? 1 : -1
+      const nx = (-dy / len) * fat * 0.75 * side
+      const ny = (dx / len) * fat * 0.75 * side
+      ctx.moveTo(points[i].x, points[i].y)
+      ctx.lineTo(points[i].x + nx, points[i].y + ny)
+    }
+    ctx.stroke()
+
+    ctx.strokeStyle = '#2f4a2c'
+    ctx.lineWidth = fat * 0.5
+    ctx.beginPath()
+    ctx.moveTo(points[0].x, points[0].y)
+    for (const p of points.slice(1)) ctx.lineTo(p.x, p.y)
+    ctx.stroke()
+    ctx.restore()
+  }
+}
+
+/**
+ * What the last ring did, across the middle of the screen.
+ *
+ * The one thing in this game nobody could work out on their own: the head
+ * meeting its own body does not kill you, it closes a loop and cuts away what
+ * it looped over — so a careless nick takes a chunk off and gives nothing
+ * back, and from outside it is a snake that shrank for no reason. It is a good
+ * rule and it was invisible.
+ */
+function drawSaid(ctx: Ctx, run: Run, view: View): void {
+  const said = run.said
+  if (!said) return
+  const size = Math.min(view.w, view.h) * 0.055
+  ctx.save()
+  // In quickly, held, then out — a plain fade over two seconds reads as a
+  // fault rather than as something being said.
+  ctx.globalAlpha = Math.min(1, said.life * 4, (2.2 - said.life) * 6)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = `700 ${size}px ui-monospace, "SF Mono", Menlo, monospace`
+  ctx.fillStyle = '#05060a'
+  ctx.fillText(said.words, view.w / 2 + size * 0.06, view.h * 0.3 + size * 0.06)
+  ctx.fillStyle = said.tint
+  ctx.fillText(said.words, view.w / 2, view.h * 0.3)
+  ctx.restore()
+}
+
 export function drawRun(ctx: Ctx, run: Run, view: View): void {
   const cam = camera(run, view)
-  drawGround(ctx, cam, view)
+  drawGround(ctx, cam, view, run.arena)
+  drawHedges(ctx, run, cam, view)
   drawRing(ctx, run, cam, view)
   drawPellets(ctx, run, cam, view, view.clock)
   drawDrops(ctx, run, cam, view, view.clock)
@@ -318,6 +399,7 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
   for (const s of run.snakes) if (s.id !== run.snakes[0]?.id) drawSnake(ctx, s, run, cam, view, view.clock)
   if (run.snakes[0]) drawSnake(ctx, run.snakes[0], run, cam, view, view.clock)
   drawMap(ctx, run, view)
+  drawSaid(ctx, run, view)
 }
 
 /** The powers in hand, as a row of charms with the time left on each. */

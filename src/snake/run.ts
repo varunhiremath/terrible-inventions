@@ -8,9 +8,10 @@
  * them are things you can see in a screenshot after the fact.
  */
 import {
-  ARENA, BEAD, DASH_COST, DASH_SPEED, FROST_SCALE, GIRTH, LEAST_LENGTH, LURE_PULL, LURE_REACH,
-  NECK, NEW_LENGTH, PELLET_COUNT, PELLET_FEEDS, PELLET_SCORE, PICKUP, POWER_COUNT, POWER_LASTS,
-  POWERS, REMAINS, RIVALS, ROSTER, SETTLING, SPEED, TURN, type Power, type Rival,
+  ARENA, BEAD, DASH_COST, DASH_SPEED, FROST_SCALE, GIRTH, HEDGE_BEADS, HEDGE_GIRTH, HEDGE_STEP,
+  LEAST_LENGTH, LURE_PULL, LURE_REACH, gardenFor, type Garden,
+  NECK, NEW_LENGTH, PELLET_COUNT, PELLET_FEEDS, PELLET_SCORE, PICKUP, POWER_LASTS,
+  POWERS, REMAINS, ROSTER, SETTLING, SPEED, TURN, type Power, type Rival,
 } from './level'
 
 export const FIXED = 1 / 60
@@ -19,7 +20,7 @@ export const FIXED = 1 / 60
 export const THINK_EVERY = 4 / 60
 
 export type SnakeEvent =
-  | 'eat' | 'grow' | 'power' | 'ring' | 'trap' | 'died' | 'kill' | 'close'
+  | 'eat' | 'grow' | 'power' | 'ring' | 'trap' | 'died' | 'kill' | 'close' | 'cleared'
 
 /**
  * Loudest first, for the screen to pick one noise a frame from.
@@ -29,6 +30,7 @@ export type SnakeEvent =
  * missing from one took the whole app down twice in an afternoon.
  */
 export const LOUDEST: readonly SnakeEvent[] = [
+  'cleared',
   'died', 'trap', 'kill', 'ring', 'power', 'close', 'grow', 'eat',
 ]
 
@@ -92,9 +94,27 @@ export interface Input {
 
 export const NO_INPUT: Input = { x: 0, y: 0, dash: false }
 
-export type Status = 'playing' | 'lost'
+export type Status = 'playing' | 'lost' | 'won'
+
+/** A line of thorn. It does not move, and touching it is the end of you. */
+export type Hedge = Point[]
+
+/** A word across the screen about what just happened, and how long it has left. */
+export interface Said {
+  words: string
+  tint: string
+  life: number
+}
 
 export interface Run {
+  level: number
+  garden: Garden
+  /** How far along this garden's goal you are, in the goal's own units. */
+  got: number
+  /** How big this garden is. */
+  arena: number
+  hedges: Hedge[]
+  said: Said | null
   snakes: Snake[]
   pellets: Pellet[]
   drops: Drop[]
@@ -109,6 +129,10 @@ export interface Run {
   nextId: number
   /** How many rivals this round has seen off, for the board. */
   caught: number
+  /** How many pellets you have had this garden, for the grazing goal. */
+  ate: number
+  /** The longest you have been this garden, for the growing goal. */
+  grew: number
   /**
    * How much the garden keeps on the ground.
    *
@@ -146,7 +170,14 @@ function makeRng(seed: number): Rng {
 export const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
 
 /** Inside the garden, which is a circle. */
-export const inGarden = (p: Point) => Math.hypot(p.x, p.y) <= ARENA
+/**
+ * Inside the garden, which is not the same size in every garden.
+ *
+ * It was a constant, and the arena shrinking from twelve to nine across the
+ * twelve gardens is most of what makes the later ones hard — the whole
+ * difficulty of a snake is how much room there is to turn around in.
+ */
+export const inGarden = (p: Point, arena = ARENA) => Math.hypot(p.x, p.y) <= arena
 
 /**
  * Whether a point is inside a closed ring.
@@ -288,6 +319,9 @@ export const bodyOf = (s: Snake): Point[] => beadsOf(s, 0)
  */
 export const CELL = 1
 
+/** Whose the hedge beads are. Nobody's, and no snake can ever be it. */
+export const HEDGE_ID = -1
+
 export interface Bead {
   x: number
   y: number
@@ -304,9 +338,26 @@ export interface Grid {
 const keyOf = (x: number, y: number) =>
   (Math.floor(x / CELL) + 512) * 4096 + (Math.floor(y / CELL) + 512)
 
-export function gridOf(snakes: readonly Snake[]): Grid {
+/**
+ * Everything deadly, in buckets.
+ *
+ * The hedges go in alongside the bodies and under an id nobody owns, so every
+ * piece of code that already knows to steer around a body steers around a
+ * hedge for nothing — including the rival brains, which would otherwise drive
+ * into the new scenery at full speed and die in the first second.
+ */
+export function gridOf(snakes: readonly Snake[], hedges: readonly Hedge[] = []): Grid {
   const cells = new Map<number, Bead[]>()
   const beads = new Map<number, Point[]>()
+  for (const hedge of hedges) {
+    for (const p of hedge) {
+      const key = keyOf(p.x, p.y)
+      const bead: Bead = { x: p.x, y: p.y, who: HEDGE_ID, at: 0 }
+      const bucket = cells.get(key)
+      if (bucket) bucket.push(bead)
+      else cells.set(key, [bead])
+    }
+  }
   for (const s of snakes) {
     if (!s.alive) continue
     const mine = beadsOf(s, 0)
@@ -372,19 +423,63 @@ function cutTo(s: Snake, at: number): number {
 
 // --- the garden ------------------------------------------------------------
 
-function scatter(rng: Rng): Point {
+function scatter(rng: Rng, arena = ARENA): Point {
   // Rejection into a circle. Picking an angle and a radius evenly bunches
   // everything in the middle, which looks like a flower rather than a field.
   for (;;) {
-    const x = (rng.next() * 2 - 1) * ARENA
-    const y = (rng.next() * 2 - 1) * ARENA
-    if (Math.hypot(x, y) < ARENA * 0.94) return { x, y }
+    const x = (rng.next() * 2 - 1) * arena
+    const y = (rng.next() * 2 - 1) * arena
+    if (Math.hypot(x, y) < arena * 0.94) return { x, y }
   }
 }
 
-export function newRun(seed = 1, rivals = RIVALS, food = PELLET_COUNT, charms = POWER_COUNT): Run {
+/**
+ * A line of thorn, laid somewhere that is not the middle.
+ *
+ * Not the middle because that is where you come back to life, and a hedge
+ * across the spawn is a garden you cannot be put into. Straight-ish rather
+ * than straight: a hedge with a bend in it is something to hide behind, and a
+ * ruler across the garden is only ever something to go round.
+ */
+function layHedge(rng: Rng, arena: number): Hedge {
+  const from = scatter(rng, arena * 0.7)
+  let angle = rng.next() * Math.PI * 2
+  const out: Hedge = [from]
+  for (let i = 1; i < HEDGE_BEADS; i++) {
+    angle += (rng.next() - 0.5) * 0.5
+    const last = out[out.length - 1]
+    out.push({
+      x: last.x + Math.cos(angle) * HEDGE_STEP,
+      y: last.y + Math.sin(angle) * HEDGE_STEP,
+    })
+  }
+  return out
+}
+
+/**
+ * A garden to play in.
+ *
+ * `set` overrides anything the level would have decided — which is what the
+ * tests use to ask for an empty garden with nobody in it, and is why `food`
+ * lives in there with the rest rather than beside it as a third number nobody
+ * can remember the position of.
+ */
+export function newRun(
+  level = 1, seed = 1, set?: Partial<Garden> & { food?: number },
+): Run {
+  const garden = { ...gardenFor(level), ...set }
+  const food = set?.food ?? PELLET_COUNT
+  const rivals = garden.rivals
+  const charms = garden.charms
+  const arena = garden.arena
   const rng = makeRng(seed)
   const run: Run = {
+    level,
+    garden,
+    got: 0,
+    arena,
+    hedges: [],
+    said: null,
     snakes: [],
     pellets: [],
     drops: [],
@@ -396,27 +491,46 @@ export function newRun(seed = 1, rivals = RIVALS, food = PELLET_COUNT, charms = 
     seed,
     nextId: 1,
     caught: 0,
+    ate: 0,
+    grew: 0,
     food,
     charms,
+  }
+  for (let i = 0; i < garden.hedges; i++) {
+    // Never near the middle: that is where somebody comes back to life.
+    for (let go = 0; go < 20; go++) {
+      const hedge = layHedge(rng, arena)
+      /*
+       * Clear of the middle, where somebody comes back to life, and inside the
+       * wall. A hedge walks nearly three units from where it starts, so one
+       * that started comfortably inside a small garden could still finish
+       * outside it — which is thorns nobody can see drawn on the far side of
+       * the fence.
+       */
+      const good = hedge.every(
+        (p) => Math.hypot(p.x, p.y) > 2.2 && Math.hypot(p.x, p.y) < arena * 0.92,
+      )
+      if (good) { run.hedges.push(hedge); break }
+    }
   }
   run.snakes.push(newSnake(run.nextId++, null, { x: 0, y: 0 }, rng.next() * Math.PI * 2))
   for (let i = 0; i < rivals; i++) {
     // Away from the middle, so nobody opens the round inside somebody else.
     const angle = (i / Math.max(1, rivals)) * Math.PI * 2 + rng.next() * 0.4
-    const far = ARENA * (0.45 + rng.next() * 0.4)
+    const far = arena * (0.45 + rng.next() * 0.4)
     run.snakes.push(newSnake(
       run.nextId++,
-      ROSTER[i % ROSTER.length],
+      { ...ROSTER[i % ROSTER.length], mean: Math.min(1, ROSTER[i % ROSTER.length].mean * garden.mean) },
       { x: Math.cos(angle) * far, y: Math.sin(angle) * far },
       angle + Math.PI,
     ))
   }
   for (let i = 0; i < food; i++) {
-    const at = scatter(rng)
+    const at = scatter(rng, arena)
     run.pellets.push({ id: run.nextId++, x: at.x, y: at.y, worth: 1, big: false })
   }
   for (let i = 0; i < charms; i++) {
-    const at = scatter(rng)
+    const at = scatter(rng, arena)
     run.drops.push({ id: run.nextId++, x: at.x, y: at.y, kind: POWERS[i % POWERS.length], bob: rng.next() })
   }
   return run
@@ -439,12 +553,21 @@ function spill(run: Run, s: Snake, rng: Rng): void {
 }
 
 /** Put a snake back in, somewhere nobody is, so the garden stays busy. */
+/**
+ * Keeping the garden as full as that garden asks for.
+ *
+ * It topped up to a constant five, which was right when there was one garden
+ * and wrong the moment there were twelve: the gentle opening garden asks for
+ * two, and after the first death it quietly refilled itself to five and stayed
+ * that way. The lawn was the hardest garden in the game by the second life.
+ */
 function restock(run: Run, rng: Rng): void {
   const living = run.snakes.filter((s) => s.alive && s.who).length
-  if (living >= RIVALS) return
+  if (living >= run.garden.rivals) return
   for (let tries = 0; tries < 20; tries++) {
-    const at = scatter(rng)
+    const at = scatter(rng, run.arena)
     const clear = run.snakes.every((s) => !s.alive || dist(headOf(s), at) > 3)
+      && run.hedges.every((hedge) => hedge.every((p) => dist(p, at) > 1))
     if (!clear) continue
     const who = ROSTER[rng.int(0, ROSTER.length - 1)]
     run.snakes.push(newSnake(run.nextId++, who, at, rng.next() * Math.PI * 2))
@@ -474,7 +597,7 @@ function brainOf(run: Run, grid: Grid, self: Snake, rng: Rng): number {
     let worst = 0
     // The wall. Measured against where it is looking, not where it is, or it
     // only ever notices the edge once it is in it.
-    const out = Math.hypot(look.x, look.y) - ARENA * 0.96
+    const out = Math.hypot(look.x, look.y) - run.arena * 0.96
     if (out > -0.5) worst = Math.max(worst, 2 + out)
     for (const bead of near(grid, look.x, look.y, care)) {
       if (bead.who === self.id && bead.at < NECK) continue
@@ -579,7 +702,7 @@ export function step(run: Run, input: Input, dt: number): Run {
    * being rebuilt — and, more to the point, that it is built once instead of
    * once per snake per heading.
    */
-  const grid = gridOf(next.snakes)
+  const grid = gridOf(next.snakes, next.hedges)
 
   // --- steering and walking --------------------------------------------------
   for (const s of next.snakes) {
@@ -621,7 +744,7 @@ export function step(run: Run, input: Input, dt: number): Run {
       if (Math.hypot(p.x - head.x, p.y - head.y) > reach) return true
       s.length += PELLET_FEEDS * p.worth
       s.score += PELLET_SCORE * p.worth
-      if (s.id === you.id) next.events.push('eat')
+      if (s.id === you.id) { next.events.push('eat'); next.ate += 1 }
       return false
     })
     /*
@@ -698,10 +821,29 @@ export function step(run: Run, input: Input, dt: number): Run {
     if (got > 0) {
       if (s.id === you.id) {
         next.caught += got
+        next.said = {
+          words: got === 1 ? 'RINGED ONE!' : `RINGED ${got}!`,
+          tint: '#8ad48a',
+          life: 2.2,
+        }
         next.events.push('trap')
       }
-    } else if (s.id === you.id && lost > 0.3) {
-      next.events.push('close')
+    } else if (s.id === you.id) {
+      /*
+       * A ring round nothing.
+       *
+       * This is the moment the whole game was being misread at: touching your
+       * own body does not kill you here, it closes a loop and cuts away the
+       * part you looped over — so a careless nick while turning takes a chunk
+       * off and gives nothing back, and from the outside that is a snake
+       * shrinking for no reason at all. Now it says so.
+       */
+      next.said = {
+        words: `RING ROUND NOTHING  -${lost.toFixed(1)}`,
+        tint: '#e0a52f',
+        life: 2.2,
+      }
+      if (lost > 0.3) next.events.push('close')
     }
   }
 
@@ -711,8 +853,16 @@ export function step(run: Run, input: Input, dt: number): Run {
   for (const s of next.snakes) {
     if (!s.alive) continue
     const head = headOf(s)
-    if (!inGarden(head)) { dead.push(s); continue }
+    if (!inGarden(head, next.arena)) { dead.push(s); continue }
     if (ghosting(s)) continue
+    // A hedge is as deadly as a body and never moves, so it is checked the
+    // same way and first — it is the cheaper test.
+    const thorn = next.hedges.some((hedge) => hedge.some((p) => {
+      const span = girthOf(s) * 0.5 + HEDGE_GIRTH * 0.5
+      return Math.abs(p.x - head.x) < span && Math.abs(p.y - head.y) < span
+        && Math.hypot(p.x - head.x, p.y - head.y) < span
+    }))
+    if (thorn) { dead.push(s); continue }
     /*
      * Against where everything is *now*, not where the grid said it was at the
      * top of the frame — a grid a frame out of date is a snake dying of a body
@@ -738,7 +888,32 @@ export function step(run: Run, input: Input, dt: number): Run {
 
   restock(next, rng)
 
+  // The word about the last ring, fading.
+  if (next.said) {
+    const left = next.said.life - dt
+    next.said = left > 0 ? { ...next.said, life: left } : null
+  }
+
+  /*
+   * How far along the garden's goal you are.
+   *
+   * Growing is measured by the longest you have *been*, not the length you are
+   * now — otherwise closing a ring, which is the move the game is named for,
+   * would undo the progress you made before it, and the right way to play a
+   * growing garden would be to never ring anybody.
+   */
+  next.grew = Math.max(next.grew, you.length)
+  next.got =
+    next.garden.goal === 'grow' ? next.grew
+    : next.garden.goal === 'catch' ? next.caught
+    : next.garden.goal === 'graze' ? next.ate
+    : next.lived
+
   if (!you.alive) next.status = 'lost'
+  else if (next.got >= next.garden.want) {
+    next.status = 'won'
+    next.events.push('cleared')
+  }
 
   return next
 }
@@ -758,21 +933,35 @@ export function respawn(run: Run): Run {
   const kept = run.snakes.filter((s) => s.who)
   const bodies = kept.filter((s) => s.alive).map(bodyOf)
   for (let tries = 0; tries < 40; tries++) {
-    const at = scatter(rng)
+    const at = scatter(rng, run.arena)
+    // Clear of every body, and clear of the thorns — being put down on a hedge
+    // is the same "appeared and died in the same second" this search exists to
+    // prevent, wearing different clothes.
     const clear = bodies.every((beads) => beads.every((b) => dist(b, at) > 3))
+      && run.hedges.every((hedge) => hedge.every((p) => dist(p, at) > 1.2))
     if (!clear) continue
     const you = newSnake(run.nextId, null, at, rng.next() * Math.PI * 2)
     you.score = run.snakes[0]?.score ?? 0
     // A moment to get your bearings, drawn as a snake you can see through.
     you.held = { ghost: SETTLING }
+    /*
+     * `lived`, `ate`, `grew` and `caught` all carry over.
+     *
+     * They are the garden's goal, and a life lost is not a reason to start the
+     * goal again: dying on the last pellet of "eat forty" and being sent back
+     * to nought is the sort of thing that makes somebody put a game down.
+     * Except in a garden asking you to last a minute, where the whole task is
+     * staying alive — so that one does go back.
+     */
     return {
       ...run,
       snakes: [you, ...kept],
-      lived: 0,
+      lived: run.garden.goal === 'last' ? 0 : run.lived,
       status: 'playing',
       nextId: run.nextId + 1,
       ring: null,
       ringFor: 0,
+      said: null,
       events: [],
     }
   }
@@ -780,7 +969,16 @@ export function respawn(run: Run): Run {
   you.score = run.snakes[0]?.score ?? 0
   you.held = { ghost: SETTLING }
   return {
-    ...run, snakes: [you, ...kept], lived: 0, status: 'playing',
+    ...run, snakes: [you, ...kept],
+    lived: run.garden.goal === 'last' ? 0 : run.lived,
+    status: 'playing', said: null,
     nextId: run.nextId + 1, events: [],
   }
+}
+
+/** On to the next garden, keeping the score and nothing else. */
+export function nextGarden(run: Run): Run {
+  const on = newRun(run.level + 1, run.seed + 1)
+  on.snakes[0].score = run.snakes[0]?.score ?? 0
+  return on
 }

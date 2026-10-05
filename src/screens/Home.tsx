@@ -314,7 +314,7 @@ const TILES: Tile[] = [
       }
       const you = { ...newSnake(1, null, { x: 0, y: 0 }, 0), body: ring, length: ring.length * SNAKE_BEAD }
       const caught = newSnake(2, SNAKE_ROSTER[1], { x: 0.1, y: 0.1 }, 1.2)
-      const base = newGarden(7, 0, 0, 0)
+      const base = newGarden(1, 7, { rivals: 0, food: 0, charms: 0, hedges: 0 })
       drawGarden(ctx, {
         ...base,
         snakes: [you, caught],

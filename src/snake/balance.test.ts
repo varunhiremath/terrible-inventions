@@ -56,12 +56,12 @@ function flailing(run: Run, t: number): Input {
  * that is the pilot below rather than the game: it weighs thirteen headings
  * against every bead of every snake, sixty times a second.
  */
-function howLong(pilot: (run: Run, t: number) => Input, goes = 3, seconds = 90) {
+function howLong(pilot: (run: Run, t: number) => Input, goes = 3, seconds = 90, level = 1) {
   const lived: number[] = []
   const why = { wall: 0, body: 0 }
   const quick: number[] = []
   for (let seed = 1; seed <= goes; seed++) {
-    let run = newRun(seed * 13)
+    let run = newRun(level, seed * 13, { goal: 'last', want: 1e6 })
     let since = 0
     for (let t = 0; t < seconds; t += FIXED) {
       const before = run
@@ -102,9 +102,24 @@ describe('how hard it is', () => {
     const mean = lived.reduce((a, b) => a + b, 0) / lived.length
     console.log(`  careful: ${lived.length} lives, ${mean.toFixed(0)}s each, ${trying.quick.length} under 2s`)
     expect(mean, 'a careful snake is being eaten alive').toBeGreaterThan(12)
-    // And not so quiet that nothing is at stake.
-    expect(mean, 'nothing in the garden is dangerous').toBeLessThan(90)
   })
+
+  it('gets harder as the gardens go on', () => {
+    /*
+     * The first garden is deliberately gentle — two rivals, both grazers, and
+     * all the room in the world — so the old assertion that "nothing in the
+     * garden is dangerous" if a careful pilot survives ninety seconds is not
+     * the right question any more. The right question is whether the ladder
+     * does anything, which is this.
+     */
+    const early = howLong(careful, 2, 60, 1)
+    const late = howLong(careful, 2, 60, 12)
+    const meanOf = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
+    const first = early.lived.length === 0 ? 60 : meanOf(early.lived)
+    const last = late.lived.length === 0 ? 60 : meanOf(late.lived)
+    console.log(`  garden 1: ${first.toFixed(0)}s a life · garden 12: ${last.toFixed(0)}s a life`)
+    expect(last, 'the twelfth garden is no harder than the first').toBeLessThan(first)
+  }, 60_000)
 
   it('does not kill anybody in the first second of a life', () => {
     /*
