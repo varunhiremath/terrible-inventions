@@ -91,7 +91,7 @@ describe('a snake', () => {
       // stays a test about eating rather than about chasing.
       prey: [{
         id: 99, x: head.x + 0.3, y: head.y, kind: 'ant' as const,
-        heading: 0, scare: 0, hop: 0, big: false,
+        heading: 0, scare: 0, hop: 0, spent: 0, big: false,
       }],
     }
     const after = fly(run, NO_INPUT, 0.5)
@@ -359,6 +359,30 @@ describe('the noises', () => {
         run = step(run, { x: Math.cos(t * 2.6), y: Math.sin(t * 2.6), dash: false }, FIXED)
         watch(run)
       }
+    }
+
+    /*
+     * And a fight won, set up rather than hoped for.
+     *
+     * This used to come out of the flying above by luck: the pilot steered at
+     * rivals and sometimes happened to be the bigger snake when it arrived.
+     * Then the creatures were made catchable — everybody in the forest started
+     * feeding properly, the rivals included — and the pilot, which chases
+     * snakes and ignores food, stopped being the bigger one. So the noise the
+     * whole fighting rule makes went missing and the test caught it, which is
+     * the test working; a noise that only happens when the dice fall right is
+     * not tested by hoping they fall right again.
+     */
+    {
+      let run = newRun(1, 4, {
+        rivals: 1, food: 0, charms: 0, hedges: 0, burrows: 0, goal: 'last', want: 1e6,
+      })
+      run.snakes[0].length = 14
+      run.snakes[1].length = 2
+      const at = headOf(run.snakes[1])
+      run.snakes[0].body = run.snakes[0].body.map((_b, i) => ({ x: at.x - i * 0.01, y: at.y }))
+      run = step(run, NO_INPUT, FIXED)
+      watch(run)
     }
 
     // And one round nothing, which is the costly half of the same move.

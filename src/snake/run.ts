@@ -11,7 +11,8 @@ import {
   ARENA, BEAD, DASH_COST, DASH_SPEED, FROST_SCALE, GIRTH, HEDGE_BEADS, HEDGE_GIRTH, HEDGE_STEP,
   LEAST_LENGTH, LURE_PULL, LURE_REACH, gardenFor, type Garden,
   NECK, NEW_LENGTH, PELLET_COUNT, PICKUP, POWER_LASTS,
-  CREATURES, KINDS, PREY, POWERS, REMAINS, ROSTER, SETTLING, SPEED, STANDOFF, TURN, openingLength,
+  BLOWN, CREATURES, KINDS, PREY, POWERS, PREY_TURN, RECOVER, REMAINS, ROSTER, SETTLING, SPEED,
+  SPRINT, STANDOFF, TURN, openingLength,
   BURROW_R, HIDE_AGAIN, HIDE_FOR,
   type Power, type PreyKind, type Rival, type Species,
 } from './level'
@@ -88,6 +89,8 @@ export interface Prey {
   scare: number
   /** For a frog, which is mid-hop and which is sitting still. */
   hop: number
+  /** How long it has been running. A sprint runs out; see `SPRINT`. */
+  spent: number
   /** What is left of a dead snake is worth more and does not run. */
   big: boolean
 }
@@ -346,13 +349,17 @@ function advance(s: Snake, by: number): void {
   s.body = kept
 }
 
-/** Turn towards a heading, by no more than the snake can manage. */
-function steer(s: Snake, want: number, dt: number): void {
-  let off = want - s.heading
+/** A heading turned towards another, by no more than `most`. */
+function turnTo(from: number, want: number, most: number): number {
+  let off = want - from
   while (off > Math.PI) off -= Math.PI * 2
   while (off < -Math.PI) off += Math.PI * 2
-  const most = TURN * dt
-  s.heading += Math.max(-most, Math.min(most, off))
+  return from + Math.max(-most, Math.min(most, off))
+}
+
+/** Turn towards a heading, by no more than the snake can manage. */
+function steer(s: Snake, want: number, dt: number): void {
+  s.heading = turnTo(s.heading, want, TURN * dt)
 }
 
 /**
@@ -658,6 +665,7 @@ function newPrey(run: Run, at: Point, rng: Rng, kind?: PreyKind): Prey {
     heading: rng.next() * Math.PI * 2,
     scare: 0,
     hop: rng.next(),
+    spent: 0,
     big: false,
   }
 }
@@ -680,7 +688,7 @@ function spill(run: Run, s: Snake, rng: Rng): void {
       heading: 0,
       scare: 0,
       hop: 0,
-      big: true,
+      spent: 0, big: true,
     })
   }
 }
@@ -899,12 +907,20 @@ export function step(run: Run, input: Input, dt: number): Run {
         if (gap < close) { close = gap; near = head }
       }
       if (near) {
-        p.heading = Math.atan2(p.y - near.y, p.x - near.x)
+        // Turned towards, not snapped to. An animal that can face directly
+        // away from you every frame can never be cut off.
+        const away = Math.atan2(p.y - near.y, p.x - near.x)
+        p.heading = turnTo(p.heading, away, PREY_TURN * dt)
         p.scare = 1.1
       }
     }
-    if (p.scare <= 0) continue
+    if (p.scare <= 0) {
+      // Standing still is how it gets its wind back.
+      p.spent = Math.max(0, p.spent - RECOVER * dt)
+      continue
+    }
     p.scare -= dt
+    p.spent += dt
 
     /*
      * A frog hops: it goes in bursts with a pause between them, which is both
@@ -913,22 +929,54 @@ export function step(run: Run, input: Input, dt: number): Run {
      */
     p.hop += dt
     const going = sort.hops ? (p.hop % 0.75) < 0.3 : true
+
+    /*
+     * At the fence, run along it rather than into it.
+     *
+     * This used to clamp the animal to the rim and turn it round by half a
+     * turn. The next frame the fright pointed it straight away from the snake
+     * again — which, at the fence, is straight at the fence — so it clamped
+     * and spun again, and again, several times a second: the "acts weird and
+     * starts sliding along the wall" in the report. Taking the outward part
+     * off its heading leaves the way along the fence, which is what a cornered
+     * animal actually does, and which a player can cut off.
+     */
+    const out = Math.hypot(p.x, p.y)
+    if (out > next.arena * 0.88) {
+      const nx = p.x / out
+      const ny = p.y / out
+      const outward = Math.cos(p.heading) * nx + Math.sin(p.heading) * ny
+      if (outward > 0) {
+        let tx = Math.cos(p.heading) - outward * nx
+        let ty = Math.sin(p.heading) - outward * ny
+        const along = Math.hypot(tx, ty)
+        // Pinned dead against the fence with no way along it: pick a side.
+        if (along < 1e-6) { tx = -ny; ty = nx } else { tx /= along; ty /= along }
+        p.heading = Math.atan2(ty, tx)
+      }
+    }
+
     if (going) {
-      const pace = sort.flees * (sort.hops ? 2.1 : 1)
+      // Flat out, until it is blown — and then slower than the snake after it.
+      const puffed = Math.min(1, Math.max(0, (p.spent - SPRINT) / SPRINT))
+      const pace = sort.flees * (sort.hops ? 2.1 : 1) * (1 - puffed * (1 - BLOWN))
       p.x += Math.cos(p.heading) * pace * dt
       p.y += Math.sin(p.heading) * pace * dt
     }
 
-    // Down a hole if one is handy, which is what they are for.
-    const hole = next.burrows.find((b) => Math.hypot(b.x - p.x, b.y - p.y) < BURROW_R)
-    if (hole) { p.scare = 0; p.x = hole.x; p.y = hole.y }
+    /*
+     * A hole is somewhere to feel safe, not somewhere to be parked.
+     *
+     * It used to move the animal onto the burrow and leave it sitting there,
+     * so over a round the prey piled up on the holes and stayed on them.
+     */
+    if (next.burrows.some((b) => Math.hypot(b.x - p.x, b.y - p.y) < BURROW_R)) p.scare = 0
 
-    // And they stay in the forest.
-    const out = Math.hypot(p.x, p.y)
-    if (out > next.arena * 0.97) {
-      p.x = (p.x / out) * next.arena * 0.97
-      p.y = (p.y / out) * next.arena * 0.97
-      p.heading += Math.PI
+    // And whatever happens, it stays in the forest.
+    const now = Math.hypot(p.x, p.y)
+    if (now > next.arena * 0.97) {
+      p.x = (p.x / now) * next.arena * 0.97
+      p.y = (p.y / now) * next.arena * 0.97
     }
   }
 

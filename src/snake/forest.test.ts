@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  CREATURES, GARDENS, GOAL_GOT, GOAL_SAYS, HIDE_AGAIN, HIDE_FOR, KINDS, NEW_LENGTH, PREY, ROSTER,
-  SPECIES, STANDOFF, gardenFor, openingLength,
+  BLOWN, CREATURES, GARDENS, GOAL_GOT, GOAL_SAYS, HIDE_AGAIN, HIDE_FOR, KINDS, NEW_LENGTH, PREY,
+  ROSTER, SPECIES, SPEED, SPRINT, STANDOFF, gardenFor, openingLength,
 } from './level'
 import {
   FIXED, fight, headOf, hiding, newRun, newSnake, powerOf, respawn, step, type Run, type Snake,
@@ -159,7 +159,7 @@ describe('the creatures', () => {
       const head = headOf(run.snakes[0])
       // Just out of reach, so this is about fleeing and not about eating.
       const at = { x: head.x + 0.9, y: head.y }
-      run = { ...run, prey: [{ id: 99, ...at, kind, heading: 0, scare: 0, hop: 0, big: false }] }
+      run = { ...run, prey: [{ id: 99, ...at, kind, heading: 0, scare: 0, hop: 0, spent: 0, big: false }] }
       for (let t = 0; t < 1; t += FIXED) run = step(run, still, FIXED)
       const now = run.prey[0]
       if (!now) continue
@@ -175,7 +175,7 @@ describe('the creatures', () => {
     const edge = { x: run.arena * 0.95, y: 0 }
     run = {
       ...run,
-      prey: [{ id: 99, ...edge, kind: 'rabbit' as const, heading: 0, scare: 2, hop: 0, big: false }],
+      prey: [{ id: 99, ...edge, kind: 'rabbit' as const, heading: 0, scare: 2, hop: 0, spent: 0, big: false }],
       snakes: [{ ...run.snakes[0], body: run.snakes[0].body.map(() => ({ x: run.arena * 0.5, y: 0 })) }],
     }
     for (let t = 0; t < 3; t += FIXED) run = step(run, still, FIXED)
@@ -430,4 +430,145 @@ describe('the ladder', () => {
     // And it stops, so garden forty is not opened by a snake the size of it.
     expect(openingLength(40)).toBe(openingLength(12))
   })
+})
+
+/**
+ * Catching one.
+ *
+ * Reported from play: "it's very hard to catch anything — frog, rat, rabbit —
+ * as they keep jumping away until they reach the boundary where they act weird
+ * and start sliding along the wall." Both halves of that were real, and both
+ * are measured here rather than argued about.
+ */
+describe('a chase', () => {
+  /** One creature, one snake, straight after it. Returns how it went. */
+  const after = (kind: typeof PREY[number], seed: number) => {
+    let run = newRun(1, seed, {
+      rivals: 0, food: 0, charms: 0, hedges: 0, burrows: 0, goal: 'last', want: 1e6,
+    })
+    const from = headOf(run.snakes[0])
+    run = {
+      ...run,
+      prey: [{
+        id: 1, x: from.x + 2, y: from.y + 0.5, kind,
+        heading: 0, scare: 0, hop: 0, spent: 0, big: false,
+      }],
+    }
+    let t = 0
+    let atWall = 0
+    let ticks = 0
+    while (t < 30 && run.prey.length > 0 && run.status === 'playing') {
+      const head = headOf(run.snakes[0])
+      const p = run.prey[0]
+      const want = Math.atan2(p.y - head.y, p.x - head.x)
+      run = step(run, { x: Math.cos(want), y: Math.sin(want), dash: false }, FIXED)
+      t += FIXED
+      ticks++
+      if (run.prey[0] && Math.hypot(run.prey[0].x, run.prey[0].y) > run.arena * 0.9) atWall++
+    }
+    return { got: run.prey.length === 0, took: t, wall: atWall / Math.max(1, ticks) }
+  }
+
+  it('ends with every creature caught', () => {
+    for (const kind of PREY) {
+      const runs = Array.from({ length: 10 }, (_, i) => after(kind, i + 1))
+      const got = runs.filter((r) => r.got)
+      expect(got.length, `${kind}: caught ${got.length} of 10`).toBe(10)
+      const mean = got.reduce((a, r) => a + r.took, 0) / got.length
+      expect(mean, `${kind} takes ${mean.toFixed(1)}s`).toBeLessThan(12)
+    }
+  }, 60_000)
+
+  it('is not decided at the fence', () => {
+    // It was: two thirds of a chase after a rabbit used to be spent out on the
+    // rim, because that was the only place the thing could be cornered.
+    for (const kind of PREY) {
+      const runs = Array.from({ length: 10 }, (_, i) => after(kind, i + 1))
+      const wall = runs.reduce((a, r) => a + r.wall, 0) / runs.length
+      expect(wall, `${kind} spends ${(wall * 100).toFixed(0)}% of the chase at the fence`)
+        .toBeLessThan(0.25)
+    }
+  }, 60_000)
+
+  it('keeps the creatures in the order they are worth', () => {
+    const took = PREY.map((kind) => {
+      const runs = Array.from({ length: 10 }, (_, i) => after(kind, i + 1)).filter((r) => r.got)
+      return { kind, secs: runs.reduce((a, r) => a + r.took, 0) / runs.length }
+    })
+    for (let i = 1; i < took.length; i++) {
+      expect(took[i].secs, `a ${took[i].kind} is no harder than a ${took[i - 1].kind}`)
+        .toBeGreaterThan(took[i - 1].secs)
+    }
+  }, 60_000)
+})
+
+describe('a frightened animal', () => {
+  it('runs along the fence rather than in and out of it', () => {
+    /*
+     * The old code clamped it to the rim and turned it by half a turn; the
+     * next frame the fright pointed it at the fence again, so it spun several
+     * times a second and appeared to slide. Measured as how much its distance
+     * from the middle wobbles once it is out there — a creature running along
+     * the fence keeps the same distance, one bouncing off it does not.
+     */
+    let run = newRun(1, 3, {
+      rivals: 0, food: 0, charms: 0, hedges: 0, burrows: 0, goal: 'last', want: 1e6,
+    })
+    const rim = run.arena * 0.95
+    // The rabbit out at the fence, the snake just inside it, driving outwards.
+    run = {
+      ...run,
+      prey: [{
+        id: 1, x: rim, y: 0, kind: 'rabbit' as const,
+        heading: 0, scare: 1, hop: 0, spent: 0, big: false,
+      }],
+      snakes: [{
+        ...run.snakes[0],
+        body: run.snakes[0].body.map((_b, i) => ({ x: rim - 1.2 - i * 0.14, y: 0 })),
+      }],
+    }
+    const out: number[] = []
+    for (let t = 0; t < 1.2; t += FIXED) {
+      run = step(run, { x: 1, y: 0, dash: false }, FIXED)
+      if (run.prey[0]) out.push(Math.hypot(run.prey[0].x, run.prey[0].y))
+    }
+    expect(out.length, 'it was eaten before anything could be measured').toBeGreaterThan(20)
+    // It should stay out near the fence, smoothly, rather than jittering.
+    let jitter = 0
+    for (let i = 1; i < out.length; i++) jitter += Math.abs(out[i] - out[i - 1])
+    const drift = Math.abs(out[out.length - 1] - out[0])
+    expect(
+      jitter,
+      `its distance from the middle moved ${jitter.toFixed(2)} in total to end up ` +
+      `${drift.toFixed(2)} from where it started`,
+    ).toBeLessThan(drift + 0.6)
+  })
+
+  it('runs out of puff, and is slower than a snake once it has', () => {
+    for (const kind of PREY) {
+      const sort = CREATURES[kind]
+      if (sort.flees === 0) continue
+      const blown = sort.flees * (sort.hops ? 2.1 : 1) * BLOWN
+      expect(blown, `a blown ${kind} still outruns a snake`).toBeLessThan(SPEED)
+    }
+    // And the burst is a real one, or there is nothing to run out of.
+    expect(CREATURES.rabbit.flees).toBeGreaterThan(SPEED)
+    expect(SPRINT).toBeGreaterThan(0.5)
+  })
+
+  it('does not end up parked on a burrow', () => {
+    /*
+     * Prey used to be moved onto any hole they came near and left there, so
+     * over a round they collected on the burrows and sat on them.
+     */
+    let run = newRun(9, 5, { rivals: 2, goal: 'last', want: 1e6 })
+    for (let t = 0; t < 25; t += FIXED) {
+      run = step(run, { x: Math.cos(t * 0.7), y: Math.sin(t), dash: false }, FIXED)
+      if (run.status !== 'playing') run = respawn({ ...run, status: 'lost' })
+    }
+    for (const b of run.burrows) {
+      const on = run.prey.filter((p) => Math.hypot(p.x - b.x, p.y - b.y) < 0.2).length
+      expect(on, `${on} creatures stacked on one hole`).toBeLessThan(3)
+    }
+  }, 30_000)
 })

@@ -320,10 +320,10 @@ const TILES: Tile[] = [
         snakes: [you, caught],
         // One of each, so the tile shows a forest rather than a field of dots.
         prey: [
-          { id: 10, x: 2.4, y: -1.6, kind: 'rat' as const, heading: 2.4, scare: 0, hop: 0, big: false },
-          { id: 11, x: -2.6, y: 1.9, kind: 'rabbit' as const, heading: -0.7, scare: 1, hop: 0, big: false },
-          { id: 12, x: 1.1, y: 2.7, kind: 'frog' as const, heading: 1.1, scare: 0, hop: 0.4, big: false },
-          { id: 13, x: -1.9, y: -2.4, kind: 'ant' as const, heading: 0.3, scare: 0, hop: 0, big: false },
+          { id: 10, x: 2.4, y: -1.6, kind: 'rat' as const, heading: 2.4, scare: 0, hop: 0, spent: 0, big: false },
+          { id: 11, x: -2.6, y: 1.9, kind: 'rabbit' as const, heading: -0.7, scare: 1, hop: 0, spent: 0, big: false },
+          { id: 12, x: 1.1, y: 2.7, kind: 'frog' as const, heading: 1.1, scare: 0, hop: 0.4, spent: 0, big: false },
+          { id: 13, x: -1.9, y: -2.4, kind: 'ant' as const, heading: 0.3, scare: 0, hop: 0, spent: 0, big: false },
         ],
         drops: [{ id: 14, x: 2.8, y: 1.3, kind: 'lure', bob: 0 }],
         ring,

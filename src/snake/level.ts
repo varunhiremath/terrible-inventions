@@ -220,6 +220,35 @@ export const CREATURES: Record<PreyKind, Creature> = {
 }
 
 /** How many creatures the forest keeps about. */
+/**
+ * How a frightened animal runs, which is not flat out for ever.
+ *
+ * A rabbit is faster than a snake — that is true of real ones and it has to
+ * stay true here, or catching one means nothing. What was missing is the other
+ * half of it: a rabbit sprints and then it is blown. Measured before this went
+ * in, a straight chase after a rabbit ended with it caught nine times in
+ * twenty and sixty-five per cent of the chase spent out at the fence, which is
+ * not a hunt, it is a treadmill.
+ *
+ * So the burst stays quick and it runs out, and what is left afterwards is
+ * slower than a snake. The chase became: it bolts, you stay after it, it tires,
+ * you have it.
+ */
+export const SPRINT = 1.3
+export const BLOWN = 0.42
+/** Seconds of sprint got back for each second spent not running. */
+export const RECOVER = 0.8
+
+/**
+ * How fast a frightened animal can turn, in radians a second.
+ *
+ * It used to turn instantly, recomputing the way away from the snake every
+ * frame, which made it perfectly evasive and made the chase a tail-chase that
+ * could only ever be won at the fence. An animal that commits to a direction
+ * for a moment can be cut off, which is the whole of how you catch one.
+ */
+export const PREY_TURN = 4.5
+
 export const PREY_COUNT = 90
 
 // --- somewhere to hide -------------------------------------------------------
