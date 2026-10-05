@@ -332,7 +332,9 @@ export type GoalKind = 'grow' | 'catch' | 'graze' | 'last'
 
 export const GOAL_SAYS: Record<GoalKind, (want: number) => string> = {
   grow: (n) => `get to ${n}`,
-  catch: (n) => (n === 1 ? 'ring somebody' : `ring ${n}`),
+  // "See off", not "ring": there are two ways to take a snake down now, and
+  // naming only one of them sends him looking for the wrong move.
+  catch: (n) => (n === 1 ? 'see off somebody' : `see off ${n}`),
   graze: (n) => `eat ${n}`,
   last: (n) => `last ${n}s`,
 }

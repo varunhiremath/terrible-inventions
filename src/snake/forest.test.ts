@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  CREATURES, GARDENS, HIDE_AGAIN, HIDE_FOR, KINDS, NEW_LENGTH, PREY, ROSTER, SPECIES, STANDOFF,
-  gardenFor, openingLength,
+  CREATURES, GARDENS, GOAL_GOT, GOAL_SAYS, HIDE_AGAIN, HIDE_FOR, KINDS, NEW_LENGTH, PREY, ROSTER,
+  SPECIES, STANDOFF, gardenFor, openingLength,
 } from './level'
 import {
   FIXED, fight, headOf, hiding, newRun, newSnake, powerOf, respawn, step, type Run, type Snake,
@@ -332,6 +332,26 @@ describe('seeing a snake off', () => {
     run = step(run, still, FIXED)
     expect(run.got, 'a bite did not count').toBeGreaterThanOrEqual(1)
     expect(run.status).toBe('won')
+  })
+
+  it('tells him which move to make, and the two halves agree', () => {
+    /*
+     * The goal said "ring 3" and the counter under it said "0 seen off",
+     * because the wording was changed in one of the two places and the edit to
+     * the other silently did not apply. Nothing failed — the only test on
+     * these words checked they were longer than four characters.
+     */
+    for (const want of [1, 3]) {
+      const says = GOAL_SAYS.catch(want)
+      const got = GOAL_GOT.catch(0)
+      expect(says, `"${says}" names the ring, which is now only half of it`).not.toMatch(/ring/i)
+      // The two strings are read one after the other on the same line, so they
+      // have to be about the same thing.
+      // On the stem, since one of them is in the past tense: "see off 3" and
+      // "1 seen off" are the same verb and "ring 3" and "1 seen off" are not.
+      const stem = got.replace(/^[\d.]+\s*/, '').split(' ')[0].slice(0, 3)
+      expect(says, `"${says}" and "${got}" are not about the same thing`).toContain(stem)
+    }
   })
 
   it('is worth something on the board', () => {
