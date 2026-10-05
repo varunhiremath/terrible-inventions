@@ -22,7 +22,7 @@
  */
 
 /** How big the garden is, in the units everything else is measured in. */
-export const ARENA = 12
+export const ARENA = 18
 
 /**
  * How fast a snake travels, and how quickly it can turn.
@@ -59,7 +59,16 @@ export const PELLET_FEEDS = 0.22
 export const PELLET_SCORE = 10
 
 /** How many pellets the garden keeps scattered about. */
-export const PELLET_COUNT = 150
+/**
+ * How many creatures the forest holds.
+ *
+ * Raised with the forest, which is more than twice the ground it was. It was
+ * also, until this was noticed, two constants: a `PREY_COUNT` added when the
+ * dots became animals and wired to nothing, and this one, still carrying its
+ * old name from when the food was pellets. Changing the dead one did exactly
+ * nothing, twice, before the measurement refused to move and gave it away.
+ */
+export const PREY_COUNT = 230
 
 /**
  * What is left behind when a snake dies, per unit of its length.
@@ -249,7 +258,6 @@ export const RECOVER = 0.8
  */
 export const PREY_TURN = 4.5
 
-export const PREY_COUNT = 90
 
 // --- somewhere to hide -------------------------------------------------------
 
@@ -477,18 +485,18 @@ export interface Garden {
  * with nothing to hunt, and growing by fighting is half of what the game is.
  */
 export const GARDENS: readonly Garden[] = [
-  { name: 'The lawn', goal: 'grow', want: 6, rivals: 2, mean: 0.6, arena: 12, charms: 4, hedges: 0, burrows: 2, roster: [0, 1] },
-  { name: 'The border', goal: 'graze', want: 25, rivals: 3, mean: 0.7, arena: 12, charms: 4, hedges: 0, burrows: 2, roster: [0, 1] },
-  { name: 'First ring', goal: 'catch', want: 1, rivals: 3, mean: 0.8, arena: 12, charms: 4, hedges: 0, burrows: 3, roster: [0, 1, 2] },
-  { name: 'Hold still', goal: 'last', want: 40, rivals: 3, mean: 1, arena: 12, charms: 3, hedges: 0, burrows: 3, roster: [0, 1, 2] },
-  { name: 'The hedges', goal: 'grow', want: 10, rivals: 3, mean: 1, arena: 12, charms: 3, hedges: 2, burrows: 3, roster: [0, 2, 3] },
-  { name: 'Thicket', goal: 'catch', want: 2, rivals: 4, mean: 1, arena: 12, charms: 3, hedges: 3, burrows: 4, roster: [0, 2, 3] },
-  { name: 'The warren', goal: 'graze', want: 40, rivals: 4, mean: 1.1, arena: 11.5, charms: 3, hedges: 3, burrows: 5, roster: [1, 2, 3] },
-  { name: 'Close quarters', goal: 'grow', want: 12, rivals: 4, mean: 1.2, arena: 11.5, charms: 2, hedges: 4, burrows: 4, roster: [1, 2, 3, 4] },
-  { name: 'Hold on', goal: 'last', want: 60, rivals: 5, mean: 1.3, arena: 11, charms: 2, hedges: 3, burrows: 5, roster: [1, 2, 3, 4] },
-  { name: 'The hunt', goal: 'catch', want: 3, rivals: 5, mean: 1.4, arena: 11, charms: 2, hedges: 4, burrows: 5, roster: [1, 2, 3, 4, 5] },
-  { name: 'Bramble', goal: 'grow', want: 14, rivals: 5, mean: 1.5, arena: 11, charms: 2, hedges: 5, burrows: 5, roster: [1, 3, 4, 5] },
-  { name: 'The whole forest', goal: 'catch', want: 4, rivals: 6, mean: 1.6, arena: 10.5, charms: 2, hedges: 4, burrows: 6, roster: [1, 2, 3, 4, 5] },
+  { name: 'The lawn', goal: 'grow', want: 6, rivals: 2, mean: 0.6, arena: 18.0, charms: 4, hedges: 0, burrows: 2, roster: [0, 1] },
+  { name: 'The border', goal: 'graze', want: 25, rivals: 3, mean: 0.7, arena: 18.0, charms: 4, hedges: 0, burrows: 2, roster: [0, 1] },
+  { name: 'First ring', goal: 'catch', want: 1, rivals: 3, mean: 0.8, arena: 18.0, charms: 4, hedges: 0, burrows: 3, roster: [0, 1, 2] },
+  { name: 'Hold still', goal: 'last', want: 40, rivals: 3, mean: 1, arena: 18.0, charms: 3, hedges: 0, burrows: 3, roster: [0, 1, 2] },
+  { name: 'The hedges', goal: 'grow', want: 10, rivals: 3, mean: 1, arena: 18.0, charms: 3, hedges: 2, burrows: 3, roster: [0, 2, 3] },
+  { name: 'Thicket', goal: 'catch', want: 2, rivals: 4, mean: 1, arena: 18.0, charms: 3, hedges: 3, burrows: 4, roster: [0, 2, 3] },
+  { name: 'The warren', goal: 'graze', want: 40, rivals: 4, mean: 1.1, arena: 17.2, charms: 3, hedges: 3, burrows: 5, roster: [1, 2, 3] },
+  { name: 'Close quarters', goal: 'grow', want: 12, rivals: 4, mean: 1.2, arena: 17.2, charms: 2, hedges: 4, burrows: 4, roster: [1, 2, 3, 4] },
+  { name: 'Hold on', goal: 'last', want: 60, rivals: 5, mean: 1.3, arena: 16.5, charms: 2, hedges: 3, burrows: 5, roster: [1, 2, 3, 4] },
+  { name: 'The hunt', goal: 'catch', want: 3, rivals: 5, mean: 1.4, arena: 16.5, charms: 2, hedges: 4, burrows: 5, roster: [1, 2, 3, 4, 5] },
+  { name: 'Bramble', goal: 'grow', want: 14, rivals: 5, mean: 1.5, arena: 16.5, charms: 2, hedges: 5, burrows: 5, roster: [1, 3, 4, 5] },
+  { name: 'The whole forest', goal: 'catch', want: 4, rivals: 6, mean: 1.6, arena: 15.8, charms: 2, hedges: 4, burrows: 6, roster: [1, 2, 3, 4, 5] },
 ]
 
 /**

@@ -84,6 +84,7 @@ const NOISE: Record<SnakeEvent, CueName> = {
   bite: 'fang',
   hide: 'burrow',
   out: 'surface',
+  bump: 'slip',
   grow: 'swell',
   power: 'charm',
   ring: 'loop',

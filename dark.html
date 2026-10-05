@@ -1,0 +1,31 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>forest bench</title></head>
+<body style="margin:0;background:#0b1410">
+<div id="pad" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+<script type="module">
+import '/src/index.css'
+import { newRun, step, FIXED, headOf } from '/src/snake/run.ts'
+import { drawRun } from '/src/snake/draw.ts'
+const pad = document.getElementById('pad')
+// The same forest seen from the middle, from halfway out, and from the fence.
+for (const [where, frac] of [['in the heart', 0], ['halfway out', 0.55], ['at the fence', 0.93]]) {
+  const box = document.createElement('div')
+  const tag = document.createElement('p')
+  tag.style.cssText = 'color:#e8ebf5;font:12px ui-monospace;margin:4px'
+  tag.textContent = where
+  box.appendChild(tag)
+  const c = document.createElement('canvas')
+  c.width = 400; c.height = 620
+  box.appendChild(c)
+  pad.appendChild(box)
+  let run = newRun(6, 4, { goal: 'last', want: 1e6 })
+  run.snakes[0].length = 8
+  for (let t = 0; t < 2; t += FIXED) run = step(run, { x: 1, y: 0.2, dash: false }, FIXED)
+  // Put the player where we want to look from.
+  const at = { x: run.arena * frac * 0.72, y: run.arena * frac * 0.7 }
+  run = { ...run, snakes: [{ ...run.snakes[0], body: run.snakes[0].body.map((b, i) => ({ x: at.x - i * 0.14, y: at.y })) }, ...run.snakes.slice(1)] }
+  drawRun(c.getContext('2d'), run, { w: c.width, h: c.height, clock: 2.4 })
+}
+window.__ready = true
+</script>
+</body></html>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   BLOWN, CREATURES, GARDENS, GOAL_GOT, GOAL_SAYS, HIDE_FOR, KINDS, NEW_LENGTH, PREY,
-  ROSTER, SPECIES, SPEED, SPRINT, STANDOFF, gardenFor, openingLength,
+  PREY_COUNT, ROSTER, SPECIES, SPEED, SPRINT, STANDOFF, gardenFor, openingLength,
 } from './level'
 import {
   FIXED, fight, headOf, hiding, newRun, newSnake, powerOf, respawn, step, type Run, type Snake, dist,
@@ -636,4 +636,86 @@ describe('a frightened animal', () => {
       expect(on, `${on} creatures stacked on one hole`).toBeLessThan(3)
     }
   }, 30_000)
+})
+
+describe('the shape of the forest', () => {
+  it('keeps most of what is alive in the middle of it', () => {
+    /*
+     * "More action happening in the middle — as you move closer to the edge,
+     * you don't see much."
+     *
+     * Things were spread evenly over the whole disc, so the middle was no
+     * busier than anywhere else, and the rim was the worst place to be:
+     * everything was as sparse as everywhere else *and* half of what was
+     * around you lay outside the fence.
+     */
+    for (const level of [1, 6, 12]) {
+      let inner = 0
+      let outer = 0
+      for (let seed = 1; seed <= 8; seed++) {
+        const run = newRun(level, seed)
+        for (const p of run.prey) {
+          if (Math.hypot(p.x, p.y) < run.arena / 2) inner++
+          else outer++
+        }
+      }
+      /*
+       * The inner half of the radius is a quarter of the ground. An even
+       * spread puts a quarter of the creatures in it; this wants most of them.
+       */
+      const share = inner / (inner + outer)
+      expect(share, `garden ${level}: only ${(share * 100).toFixed(0)}% of the forest's life is in the middle half`)
+        .toBeGreaterThan(0.55)
+      // And the outskirts are not empty, or there is no reason to ever go out.
+      expect(outer, `garden ${level}: nothing at all out towards the fence`).toBeGreaterThan(0)
+    }
+  })
+
+  it('actually holds as many creatures as it says it does', () => {
+    /*
+     * There were two constants for this and the game read the wrong one.
+     * `PREY_COUNT` was added when the dots became animals and wired to
+     * nothing; the live one still carried its old name from when the food was
+     * pellets. Raising the dead one did nothing, twice, and the only reason it
+     * was caught is that a measurement refused to move when it should have.
+     */
+    for (const level of [1, 6, 12]) {
+      const run = newRun(level, 3)
+      expect(run.prey.length, `garden ${level} laid out ${run.prey.length}`)
+        .toBeGreaterThan(PREY_COUNT * 0.9)
+    }
+  })
+
+  it('is big enough to lose somebody in', () => {
+    // The point of the dark outskirts is somewhere to shake a bigger snake
+    // off. That needs room: a forest you cross in four seconds has none.
+    for (const garden of GARDENS) {
+      const across = (garden.arena * 2) / SPEED
+      expect(across, `${garden.name} is ${across.toFixed(0)}s across`).toBeGreaterThan(12)
+    }
+  })
+
+  it('bounces you off the fence instead of killing you', () => {
+    let run = newRun(1, 2, { rivals: 0, food: 0, charms: 0, hedges: 0, burrows: 0, goal: 'last', want: 1e6 })
+    // Pointed straight out and held there.
+    run.snakes[0].heading = 0
+    run.snakes[0].body = run.snakes[0].body.map((p) => ({ ...p, x: p.x + run.arena - 0.3 }))
+    for (let t = 0; t < 4; t += FIXED) run = step(run, { x: 1, y: 0, dash: false }, FIXED)
+    expect(run.snakes[0].alive, 'died on the fence').toBe(true)
+    expect(run.status).toBe('playing')
+    const head = headOf(run.snakes[0])
+    expect(Math.hypot(head.x, head.y), 'left the forest').toBeLessThanOrEqual(run.arena + 0.01)
+  })
+
+  it('bounces the rivals off it too, so they cannot be herded into it', () => {
+    let run = newRun(6, 3, { food: 0, charms: 0, hedges: 0, burrows: 0, goal: 'last', want: 1e6 })
+    for (const s of run.snakes.slice(1)) {
+      s.heading = 0
+      s.body = s.body.map((p) => ({ ...p, x: p.x + run.arena - 0.3 }))
+    }
+    for (let t = 0; t < 2; t += FIXED) run = step(run, still, FIXED)
+    for (const s of run.snakes.slice(1)) {
+      expect(s.alive, `${s.who?.name} died on the fence`).toBe(true)
+    }
+  })
 })

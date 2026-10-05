@@ -100,12 +100,31 @@ describe('a snake', () => {
     expect(bodyOf(after.snakes[0]).length).toBeGreaterThan(bodyOf(run.snakes[0]).length)
   })
 
-  it('dies on the garden wall', () => {
+  it('bounces off the garden wall rather than dying on it', () => {
+    /*
+     * The fence used to kill you. It is the one wall in the game you cannot
+     * see coming — the camera follows your head — so it was a death with
+     * nothing to learn from, and it made the whole rim a strip nobody dared
+     * use. It is a dead end now, which is what the player asked for and what
+     * a fence is.
+     */
     const run = alone()
-    const out = { ...run, snakes: [{ ...run.snakes[0], heading: 0, body: run.snakes[0].body.map((p) => ({ ...p, x: p.x + ARENA - 0.1 })) }] }
+    const out = {
+      ...run,
+      snakes: [{
+        ...run.snakes[0],
+        heading: 0,
+        body: run.snakes[0].body.map((p) => ({ ...p, x: p.x + ARENA - 0.1 })),
+      }],
+    }
     const after = fly(out, NO_INPUT, 1)
-    expect(after.status).toBe('lost')
-    expect(after.snakes[0].alive).toBe(false)
+    expect(after.status).toBe('playing')
+    expect(after.snakes[0].alive).toBe(true)
+    // Back inside, and pointing back in.
+    const head = headOf(after.snakes[0])
+    expect(Math.hypot(head.x, head.y)).toBeLessThanOrEqual(ARENA)
+    const outward = Math.cos(after.snakes[0].heading) * head.x + Math.sin(after.snakes[0].heading) * head.y
+    expect(outward, 'bounced off the fence and carried on into it').toBeLessThan(0)
   })
 
   it('does not die on its own neck, which it is always touching', () => {
@@ -383,6 +402,19 @@ describe('the noises', () => {
       run.snakes[0].body = run.snakes[0].body.map((_b, i) => ({ x: at.x - i * 0.01, y: at.y }))
       run = step(run, NO_INPUT, FIXED)
       watch(run)
+    }
+
+    // And a bounce off the fence, which is a noise now rather than a death.
+    {
+      let run = newRun(1, 5, {
+        rivals: 0, food: 0, charms: 0, hedges: 0, burrows: 0, goal: 'last', want: 1e6,
+      })
+      run.snakes[0].heading = 0
+      run.snakes[0].body = run.snakes[0].body.map((p) => ({ ...p, x: p.x + run.arena - 0.1 }))
+      for (let t = 0; t < 0.5; t += FIXED) {
+        run = step(run, { x: 1, y: 0, dash: false }, FIXED)
+        watch(run)
+      }
     }
 
     // And one round nothing, which is the costly half of the same move.

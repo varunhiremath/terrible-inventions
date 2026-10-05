@@ -104,6 +104,39 @@ function drawGround(
 }
 
 /**
+ * The dark, which deepens the further out you go.
+ *
+ * Drawn in the world and not on the screen: the gradient is centred on the
+ * middle of the forest, so it does not move with the camera and the dark is a
+ * place rather than an effect. The heart of the forest is where the hunting
+ * is; out towards the fence there is less and less, and the dark is how the
+ * game says so without a word.
+ *
+ * It stops short of black. Being unable to see the fence you are about to
+ * bounce off would make the outskirts unfair rather than unrewarding, and the
+ * point of them is that they are a place to shake somebody off — which needs
+ * you to be able to see the somebody.
+ */
+const DARKEST = 0.74
+
+function drawDark(
+  ctx: Ctx, cam: { zoom: number; cx: number; cy: number }, view: View, arena: number,
+): void {
+  const middle = at({ x: 0, y: 0 }, cam, view)
+  const edge = arena * cam.zoom
+  // Clear in the heart, dark at the fence, and beyond the fence it is solid —
+  // which is what makes the fence read as the end of the world.
+  const wash = ctx.createRadialGradient(middle.x, middle.y, edge * 0.34, middle.x, middle.y, edge)
+  wash.addColorStop(0, 'rgba(3,7,5,0)')
+  wash.addColorStop(0.55, `rgba(3,7,5,${(DARKEST * 0.3).toFixed(3)})`)
+  wash.addColorStop(1, `rgba(3,7,5,${DARKEST})`)
+  ctx.save()
+  ctx.fillStyle = wash
+  ctx.fillRect(0, 0, view.w, view.h)
+  ctx.restore()
+}
+
+/**
  * What makes a cobra look like a cobra.
  *
  * Four patterns off the real animals: the grass snake's dark bars, the
@@ -356,54 +389,118 @@ function drawSnake(ctx: Ctx, s: Snake, run: Run, cam: { zoom: number; cx: number
  * Those are the parts a nine-year-old names them by, so those are the parts
  * that get the pixels.
  */
-function drawAnt(ctx: Ctx, r: number, look: number): void {
-  const along = (d: number) => ({ x: Math.cos(look) * d, y: Math.sin(look) * d })
-  // Six legs, as three strokes straight through the body.
-  ctx.strokeStyle = CREATURES.ant.trim
-  ctx.lineWidth = Math.max(0.6, r * 0.14)
-  for (const d of [-0.5, 0, 0.5]) {
-    const o = along(d * r)
-    const side = { x: Math.cos(look + Math.PI / 2) * r * 0.9, y: Math.sin(look + Math.PI / 2) * r * 0.9 }
+function drawAnt(ctx: Ctx, r: number, look: number, clock: number, id: number): void {
+  ctx.save()
+  ctx.rotate(look)
+  const ink = CREATURES.ant.ink
+  const trim = CREATURES.ant.trim
+
+  // Six legs, in three pairs, angled the way an insect's are rather than
+  // straight through the body like spokes.
+  ctx.strokeStyle = trim
+  ctx.lineWidth = Math.max(0.5, r * 0.12)
+  ctx.lineCap = 'round'
+  const step = Math.sin(clock * 14 + id) * 0.18
+  for (const [i, along] of [0.42, 0.05, -0.32].entries()) {
+    for (const side of [-1, 1]) {
+      const swing = step * (i % 2 === 0 ? 1 : -1) * side
+      ctx.beginPath()
+      ctx.moveTo(r * along, side * r * 0.22)
+      ctx.lineTo(r * (along + 0.1), side * r * 0.62)
+      ctx.lineTo(r * (along - 0.25 + swing), side * r * 0.95)
+      ctx.stroke()
+    }
+  }
+
+  // Antennae, which is most of what says insect rather than crumb.
+  ctx.lineWidth = Math.max(0.4, r * 0.09)
+  for (const side of [-1, 1]) {
     ctx.beginPath()
-    ctx.moveTo(o.x - side.x, o.y - side.y)
-    ctx.lineTo(o.x + side.x, o.y + side.y)
+    ctx.moveTo(r * 0.72, side * r * 0.12)
+    ctx.quadraticCurveTo(r * 1.15, side * r * 0.3, r * 1.3, side * r * 0.75)
     ctx.stroke()
   }
-  ctx.fillStyle = CREATURES.ant.ink
-  for (const [d, size] of [[0.75, 0.42], [0, 0.3], [-0.7, 0.5]] as const) {
-    const o = along(d * r)
-    ctx.beginPath()
-    ctx.arc(o.x, o.y, r * size, 0, Math.PI * 2)
-    ctx.fill()
-  }
+
+  // Head, thorax, gaster — three lumps with a waist, not three equal beads.
+  ctx.fillStyle = ink
+  ctx.beginPath()
+  ctx.ellipse(r * 0.72, 0, r * 0.34, r * 0.3, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.ellipse(r * 0.18, 0, r * 0.3, r * 0.24, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = trim
+  ctx.beginPath()
+  ctx.ellipse(-r * 0.52, 0, r * 0.52, r * 0.4, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
 }
 
 function drawFrog(ctx: Ctx, r: number, look: number, hop: number): void {
-  // A hop is a stretch and a squash, which is the whole animation budget.
-  const stretch = 1 + Math.sin(hop * Math.PI) * 0.35
+  // Mid-hop a frog stretches out and lands squat, which is the whole of the
+  // animation and most of what makes it read as a frog rather than a pebble.
+  const stretch = 1 + Math.sin(hop * Math.PI) * 0.3
+  const tuck = Math.max(0, Math.sin(hop * Math.PI))
   ctx.save()
   ctx.rotate(look)
   ctx.scale(stretch, 1 / stretch)
-  // Back legs, folded, because a frog at rest is mostly folded back legs.
-  ctx.fillStyle = CREATURES.frog.trim
+  const ink = CREATURES.frog.ink
+  const trim = CREATURES.frog.trim
+
+  // Back legs: thigh folded forward, shin back, foot splayed — the Z that a
+  // frog's leg makes and the reason it looks ready to go.
+  ctx.strokeStyle = trim
+  ctx.lineWidth = r * 0.26
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
   for (const side of [-1, 1]) {
     ctx.beginPath()
-    ctx.ellipse(-r * 0.45, side * r * 0.6, r * 0.6, r * 0.28, side * 0.6, 0, Math.PI * 2)
+    ctx.moveTo(-r * 0.1, side * r * 0.52)
+    ctx.lineTo(-r * (0.62 - tuck * 0.2), side * r * (0.78 - tuck * 0.2))
+    ctx.lineTo(-r * (1.05 - tuck * 0.45), side * r * (0.32 + tuck * 0.1))
+    ctx.stroke()
+  }
+  // Front legs, small and propping it up.
+  ctx.lineWidth = r * 0.16
+  for (const side of [-1, 1]) {
+    ctx.beginPath()
+    ctx.moveTo(r * 0.35, side * r * 0.38)
+    ctx.lineTo(r * 0.72, side * r * 0.6)
+    ctx.stroke()
+  }
+
+  ctx.fillStyle = ink
+  ctx.beginPath()
+  ctx.ellipse(0, 0, r * 1.02, r * 0.74, 0, 0, Math.PI * 2)
+  ctx.fill()
+  // A paler throat, which is what you mostly see of a frog facing you.
+  ctx.fillStyle = '#86bf72'
+  ctx.beginPath()
+  ctx.ellipse(r * 0.42, 0, r * 0.46, r * 0.44, 0, 0, Math.PI * 2)
+  ctx.fill()
+  // Mottling down the back.
+  ctx.fillStyle = trim
+  ctx.globalAlpha = 0.55
+  for (const [dx, dy, rr] of [[-0.5, 0.26, 0.17], [-0.3, -0.34, 0.14], [-0.72, -0.1, 0.13]] as const) {
+    ctx.beginPath()
+    ctx.ellipse(r * dx, r * dy, r * rr, r * rr * 0.75, 0, 0, Math.PI * 2)
     ctx.fill()
   }
-  ctx.fillStyle = CREATURES.frog.ink
-  ctx.beginPath()
-  ctx.ellipse(0, 0, r, r * 0.8, 0, 0, Math.PI * 2)
-  ctx.fill()
-  // Eyes on top of the head, a frog's one unmistakable feature.
+  ctx.globalAlpha = 1
+
+  // The eyes, which sit on top of the head and are the one unmistakable part.
   for (const side of [-1, 1]) {
-    ctx.fillStyle = '#f2f6e8'
+    ctx.fillStyle = ink
     ctx.beginPath()
-    ctx.arc(r * 0.5, side * r * 0.42, r * 0.3, 0, Math.PI * 2)
+    ctx.arc(r * 0.46, side * r * 0.42, r * 0.3, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = '#17210f'
+    ctx.fillStyle = '#f6d96a'
     ctx.beginPath()
-    ctx.arc(r * 0.58, side * r * 0.42, r * 0.16, 0, Math.PI * 2)
+    ctx.arc(r * 0.5, side * r * 0.42, r * 0.21, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#14200d'
+    ctx.beginPath()
+    ctx.ellipse(r * 0.56, side * r * 0.42, r * 0.08, r * 0.15, 0, 0, Math.PI * 2)
     ctx.fill()
   }
   ctx.restore()
@@ -412,81 +509,173 @@ function drawFrog(ctx: Ctx, r: number, look: number, hop: number): void {
 function drawRat(ctx: Ctx, r: number, look: number, clock: number, id: number): void {
   ctx.save()
   ctx.rotate(look)
-  // The tail, which is the whole point, and it whips.
-  ctx.strokeStyle = CREATURES.rat.trim
-  ctx.lineWidth = Math.max(0.7, r * 0.16)
-  ctx.lineCap = 'round'
-  const whip = Math.sin(clock * 6 + id) * r * 0.8
+  const ink = CREATURES.rat.ink
+  const trim = CREATURES.rat.trim
+  const trot = Math.sin(clock * 12 + id)
+
+  // The tail: long, thin, tapering, and it whips. It is the one part nobody
+  // mistakes for anything else, so it gets drawn first and drawn properly.
+  /*
+   * One tapering shape rather than two strokes of different widths. Two
+   * strokes was the quick way to get a taper and it drew a forked tail, which
+   * is the sort of thing that only shows up when you look at the picture.
+   */
+  const tipX = r * -2.3
+  const tipY = trot * r * 0.85
+  ctx.fillStyle = trim
   ctx.beginPath()
-  ctx.moveTo(-r * 0.8, 0)
-  ctx.quadraticCurveTo(-r * 1.7, whip * 0.5, -r * 2.4, whip)
-  ctx.stroke()
-  ctx.fillStyle = CREATURES.rat.ink
-  ctx.beginPath()
-  ctx.ellipse(0, 0, r * 1.05, r * 0.68, 0, 0, Math.PI * 2)
+  ctx.moveTo(r * -0.7, -r * 0.16)
+  ctx.quadraticCurveTo(r * -1.5, trot * r * 0.25 - r * 0.1, tipX, tipY)
+  ctx.quadraticCurveTo(r * -1.5, trot * r * 0.25 + r * 0.1, r * -0.7, r * 0.16)
   ctx.fill()
-  // A pointed snout rather than a round one: that is a rat and not a mouse.
+
+  // Legs, trotting.
+  ctx.lineWidth = Math.max(0.6, r * 0.14)
+  for (const [i, along] of [0.5, -0.45].entries()) {
+    for (const side of [-1, 1]) {
+      const swing = trot * 0.22 * (i === 0 ? side : -side)
+      ctx.beginPath()
+      ctx.moveTo(r * along, side * r * 0.3)
+      ctx.lineTo(r * (along + swing), side * r * 0.72)
+      ctx.stroke()
+    }
+  }
+
+  ctx.fillStyle = ink
+  // Body: a teardrop, heavier at the hindquarters.
   ctx.beginPath()
-  ctx.moveTo(r * 0.6, -r * 0.4)
-  ctx.lineTo(r * 1.6, 0)
-  ctx.lineTo(r * 0.6, r * 0.4)
-  ctx.closePath()
+  ctx.moveTo(r * 0.95, 0)
+  ctx.quadraticCurveTo(r * 0.5, -r * 0.62, -r * 0.35, -r * 0.55)
+  ctx.quadraticCurveTo(-r * 0.95, -r * 0.42, -r * 0.82, 0)
+  ctx.quadraticCurveTo(-r * 0.95, r * 0.42, -r * 0.35, r * 0.55)
+  ctx.quadraticCurveTo(r * 0.5, r * 0.62, r * 0.95, 0)
   ctx.fill()
-  // Ears: small, round, set back.
-  ctx.fillStyle = CREATURES.rat.trim
+  // A paler belly, so it is a creature with a top and a bottom.
+  ctx.fillStyle = '#b3a89c'
+  ctx.globalAlpha = 0.5
+  ctx.beginPath()
+  ctx.ellipse(-r * 0.1, r * 0.3, r * 0.6, r * 0.2, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = 1
+
+  // Ears: round, thin-rimmed, set back on the skull.
   for (const side of [-1, 1]) {
+    ctx.fillStyle = trim
     ctx.beginPath()
-    ctx.arc(r * 0.35, side * r * 0.6, r * 0.33, 0, Math.PI * 2)
+    ctx.ellipse(r * 0.46, side * r * 0.66, r * 0.31, r * 0.27, side * 0.4, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#c69a92'
+    ctx.beginPath()
+    ctx.ellipse(r * 0.47, side * r * 0.68, r * 0.17, r * 0.14, side * 0.4, 0, Math.PI * 2)
     ctx.fill()
   }
-  ctx.fillStyle = '#1a1410'
+
+  // The snout, long and pointed: a rat, not a mouse.
+  ctx.fillStyle = ink
   ctx.beginPath()
-  ctx.arc(r * 0.85, -r * 0.12, r * 0.13, 0, Math.PI * 2)
+  ctx.moveTo(r * 0.72, -r * 0.34)
+  ctx.quadraticCurveTo(r * 1.45, -r * 0.12, r * 1.6, 0)
+  ctx.quadraticCurveTo(r * 1.45, r * 0.12, r * 0.72, r * 0.34)
   ctx.fill()
+  ctx.fillStyle = '#d2a49b'
+  ctx.beginPath()
+  ctx.arc(r * 1.55, 0, r * 0.1, 0, Math.PI * 2)
+  ctx.fill()
+  // Eye and whiskers.
+  ctx.fillStyle = '#17120e'
+  ctx.beginPath()
+  ctx.arc(r * 0.88, -r * 0.2, r * 0.11, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(240,235,225,0.5)'
+  ctx.lineWidth = Math.max(0.4, r * 0.05)
+  for (const side of [-1, 1]) {
+    for (const lean of [-0.3, 0.1]) {
+      ctx.beginPath()
+      ctx.moveTo(r * 1.3, side * r * 0.1)
+      ctx.lineTo(r * 1.9, side * r * (0.45 + lean))
+      ctx.stroke()
+    }
+  }
   ctx.restore()
 }
 
 function drawRabbit(ctx: Ctx, r: number, look: number, clock: number, id: number): void {
   ctx.save()
   ctx.rotate(look)
-  ctx.fillStyle = CREATURES.rabbit.ink
-  // Haunches first, then the body over them: a rabbit is a sitting triangle.
-  ctx.beginPath()
-  ctx.ellipse(-r * 0.5, 0, r * 0.8, r * 0.66, 0, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.beginPath()
-  ctx.ellipse(r * 0.2, 0, r * 0.85, r * 0.55, 0, 0, Math.PI * 2)
-  ctx.fill()
-  // The ears, which swivel. Nothing else in the forest has these.
-  const twitch = Math.sin(clock * 3 + id) * 0.22
-  ctx.fillStyle = CREATURES.rabbit.ink
-  ctx.strokeStyle = CREATURES.rabbit.trim
-  ctx.lineWidth = Math.max(0.5, r * 0.1)
+  const ink = CREATURES.rabbit.ink
+  const trim = CREATURES.rabbit.trim
+  const bound = Math.sin(clock * 9 + id)
+
+  // Ears first, behind the head, swept back the way a running rabbit's are.
   for (const side of [-1, 1]) {
     ctx.save()
-    ctx.translate(r * 0.55, side * r * 0.3)
-    ctx.rotate(side * (0.35 + twitch * side) - 0.3)
+    ctx.translate(r * 0.5, side * r * 0.22)
+    ctx.rotate(side * (0.5 + bound * 0.08) + Math.PI * 0.04)
+    ctx.fillStyle = ink
     ctx.beginPath()
-    ctx.ellipse(r * 0.5, 0, r * 0.75, r * 0.24, 0, 0, Math.PI * 2)
+    ctx.ellipse(r * 0.52, 0, r * 0.62, r * 0.2, 0, 0, Math.PI * 2)
     ctx.fill()
-    ctx.stroke()
+    ctx.fillStyle = '#d8b6ad'
+    ctx.beginPath()
+    ctx.ellipse(r * 0.5, 0, r * 0.42, r * 0.09, 0, 0, Math.PI * 2)
+    ctx.fill()
     ctx.restore()
   }
-  // A scut, white and round and the last thing you see of one.
-  ctx.fillStyle = '#f4efe6'
+
+  // Hind legs, which on a rabbit are the whole engine.
+  ctx.fillStyle = trim
+  for (const side of [-1, 1]) {
+    ctx.save()
+    ctx.translate(-r * 0.5, side * r * 0.42)
+    ctx.rotate(side * bound * 0.2)
+    ctx.beginPath()
+    ctx.ellipse(0, 0, r * 0.52, r * 0.26, side * 0.3, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }
+  // Front paws, small and tucked.
+  ctx.strokeStyle = trim
+  ctx.lineCap = 'round'
+  ctx.lineWidth = Math.max(0.7, r * 0.15)
+  for (const side of [-1, 1]) {
+    ctx.beginPath()
+    ctx.moveTo(r * 0.2, side * r * 0.32)
+    ctx.lineTo(r * (0.42 + bound * 0.1), side * r * 0.6)
+    ctx.stroke()
+  }
+
+  // The body: a crouched arch, high at the haunch and low at the shoulder.
+  ctx.fillStyle = ink
   ctx.beginPath()
-  ctx.arc(-r * 1.15, 0, r * 0.3, 0, Math.PI * 2)
+  ctx.moveTo(r * 0.75, -r * 0.18)
+  ctx.quadraticCurveTo(r * 0.2, -r * 0.72, -r * 0.5, -r * 0.6)
+  ctx.quadraticCurveTo(-r * 1.1, -r * 0.42, -r * 1.0, r * 0.12)
+  ctx.quadraticCurveTo(-r * 0.8, r * 0.6, -r * 0.1, r * 0.55)
+  ctx.quadraticCurveTo(r * 0.5, r * 0.5, r * 0.75, r * 0.2)
   ctx.fill()
-  ctx.fillStyle = '#1a1410'
+  // Head.
   ctx.beginPath()
-  ctx.arc(r * 0.75, -r * 0.2, r * 0.12, 0, Math.PI * 2)
+  ctx.ellipse(r * 0.78, 0, r * 0.44, r * 0.37, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // The scut: white, round, and the last thing you see of one.
+  ctx.fillStyle = '#e9e2d6'
+  ctx.beginPath()
+  ctx.ellipse(-r * 0.92, r * 0.08, r * 0.24, r * 0.21, 0.3, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.fillStyle = '#17120e'
+  ctx.beginPath()
+  ctx.arc(r * 0.95, -r * 0.14, r * 0.11, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#d2a49b'
+  ctx.beginPath()
+  ctx.arc(r * 1.2, 0, r * 0.07, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 }
 
 /**
- * One creature, at a radius, facing a way.
- *
  * Pulled out of the loop below so the cutscene's card can draw the four of
  * them with the game's own code rather than a second set of drawings that
  * would quietly drift from it.
@@ -494,7 +683,7 @@ function drawRabbit(ctx: Ctx, r: number, look: number, clock: number, id: number
 export function drawCreature(
   ctx: Ctx, kind: PreyKind, r: number, look: number, hop: number, clock: number, id: number,
 ): void {
-  if (kind === 'ant') drawAnt(ctx, r, look)
+  if (kind === 'ant') drawAnt(ctx, r, look, clock, id)
   else if (kind === 'frog') drawFrog(ctx, r, look, hop)
   else if (kind === 'rat') drawRat(ctx, r, look, clock, id)
   else drawRabbit(ctx, r, look, clock, id)
@@ -857,6 +1046,13 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
    */
   for (const s of run.snakes) if (s.id !== run.snakes[0]?.id) drawSnake(ctx, s, run, cam, view, view.clock)
   if (run.snakes[0]) drawSnake(ctx, run.snakes[0], run, cam, view, view.clock)
+  /*
+   * The dark goes on over the forest and under the readouts: it is something
+   * in the world, so it falls on the creatures and the snakes, but the map in
+   * the corner and the words across the middle are not in the world and should
+   * not be dimmed by where the player happens to be standing.
+   */
+  drawDark(ctx, cam, view, run.arena)
   drawMap(ctx, run, view)
   drawSaid(ctx, run, view)
 }

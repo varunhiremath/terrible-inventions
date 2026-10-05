@@ -10,7 +10,7 @@
 import {
   ARENA, BEAD, DASH_COST, DASH_SPEED, FROST_SCALE, GIRTH, HEDGE_BEADS, HEDGE_GIRTH, HEDGE_STEP,
   LEAST_LENGTH, LURE_PULL, LURE_REACH, gardenFor, type Garden,
-  NECK, NEW_LENGTH, PELLET_COUNT, PICKUP, POWER_LASTS,
+  NECK, NEW_LENGTH, PREY_COUNT, PICKUP, POWER_LASTS,
   BLOWN, CREATURES, KINDS, LEAVING, PREY, POWERS, PREY_TURN, RECOVER, REMAINS, ROSTER,
   SETTLING, SPEED, SPRINT, STANDOFF, TURN, openingLength,
   BURROW_R, HIDE_AGAIN, HIDE_FOR,
@@ -24,7 +24,7 @@ export const THINK_EVERY = 4 / 60
 
 export type SnakeEvent =
   | 'eat' | 'catch' | 'grow' | 'power' | 'ring' | 'trap' | 'died' | 'kill' | 'close'
-  | 'cleared' | 'bite' | 'hide' | 'out'
+  | 'cleared' | 'bite' | 'hide' | 'out' | 'bump'
 
 /**
  * Loudest first, for the screen to pick one noise a frame from.
@@ -35,7 +35,8 @@ export type SnakeEvent =
  */
 export const LOUDEST: readonly SnakeEvent[] = [
   'cleared',
-  'died', 'bite', 'trap', 'kill', 'ring', 'power', 'hide', 'out', 'close', 'grow', 'catch', 'eat',
+  'died', 'bite', 'trap', 'kill', 'ring', 'power', 'hide', 'out', 'bump', 'close', 'grow', 'catch',
+  'eat',
 ]
 
 export interface Point {
@@ -518,14 +519,31 @@ function cutTo(s: Snake, at: number): number {
 
 // --- the garden ------------------------------------------------------------
 
-function scatter(rng: Rng, arena = ARENA): Point {
-  // Rejection into a circle. Picking an angle and a radius evenly bunches
-  // everything in the middle, which looks like a flower rather than a field.
-  for (;;) {
-    const x = (rng.next() * 2 - 1) * arena
-    const y = (rng.next() * 2 - 1) * arena
-    if (Math.hypot(x, y) < arena * 0.94) return { x, y }
-  }
+/**
+ * Somewhere in the forest, with the middle of it the busiest part.
+ *
+ * This used to spread things evenly over the whole disc, on purpose: picking
+ * an angle and a radius without correcting for the area bunches everything in
+ * the middle, which looks like a flower rather than a field, so the correction
+ * was applied.
+ *
+ * It is deliberately un-applied now, and then some. An even field over a
+ * forest this size means the middle is no busier than the rim, so wherever you
+ * stand there is as little going on as anywhere else — and the rim is the
+ * worst of both, because half of what is around you lies outside the fence.
+ * Weighting it inwards gives the forest a heart: that is where the hunting is,
+ * the dark outskirts are where you go to shake somebody off, and choosing
+ * between them is a real choice.
+ *
+ * `HEART` is the exponent on a uniform roll. A half is an even field; one is a
+ * density falling off as 1/r; above one is more huddled still.
+ */
+export const HEART = 1.25
+
+function scatter(rng: Rng, arena = ARENA, heart = HEART): Point {
+  const a = rng.next() * Math.PI * 2
+  const r = arena * 0.94 * Math.pow(rng.next(), heart)
+  return { x: Math.cos(a) * r, y: Math.sin(a) * r }
 }
 
 /**
@@ -564,7 +582,7 @@ export function newRun(
 ): Run {
   const garden = { ...gardenFor(level), ...set }
   const mine = set?.mine ?? 'grass'
-  const food = set?.food ?? PELLET_COUNT
+  const food = set?.food ?? PREY_COUNT
   const rivals = garden.rivals
   const charms = garden.charms
   const arena = garden.arena
@@ -1172,7 +1190,30 @@ export function step(run: Run, input: Input, dt: number): Run {
   for (const s of next.snakes) {
     if (!s.alive) continue
     const head = headOf(s)
-    if (!inGarden(head, next.arena)) { dead.push(s); continue }
+    /*
+     * The fence is a dead end, not a death.
+     *
+     * Running into the edge of the forest used to kill you outright, which is
+     * a hard thing to learn from — it is the one wall in the game you cannot
+     * see coming, because the camera follows your head — and it made the whole
+     * rim a strip nobody dared use. Now you bounce: the head is put back
+     * inside and the heading is reflected off the fence.
+     */
+    if (!inGarden(head, next.arena)) {
+      const far = Math.hypot(head.x, head.y) || 1
+      const nx = head.x / far
+      const ny = head.y / far
+      s.body[0] = { x: nx * next.arena * 0.995, y: ny * next.arena * 0.995 }
+      const into = Math.cos(s.heading) * nx + Math.sin(s.heading) * ny
+      if (into > 0) {
+        const bx = Math.cos(s.heading) - 2 * into * nx
+        const by = Math.sin(s.heading) - 2 * into * ny
+        s.heading = Math.atan2(by, bx)
+        s.want = s.heading
+        if (s.id === you.id) next.events.push('bump')
+      }
+      continue
+    }
     if (ghosting(s)) continue
     // A hedge is as deadly as a body and never moves, so it is checked the
     // same way and first — it is the cheaper test.

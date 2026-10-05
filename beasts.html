@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>creatures bench</title></head>
+<body style="margin:0;background:#13241c">
+<div id="pad"></div>
+<script type="module">
+import '/src/index.css'
+import { drawCreature } from '/src/snake/draw.ts'
+import { PREY, CREATURES } from '/src/snake/level.ts'
+const pad = document.getElementById('pad')
+// Each creature big, and then at the three sizes the game really draws it.
+for (const [label, sizes] of [['close up', [70]], ['as the game draws them', [26, 17, 11]]]) {
+  const tag = document.createElement('p')
+  tag.style.cssText = 'color:#e8ebf5;font:12px ui-monospace;margin:6px'
+  tag.textContent = label
+  pad.appendChild(tag)
+  const c = document.createElement('canvas')
+  c.width = 760; c.height = sizes[0] * 3.2
+  c.style.cssText = 'display:block;margin:0 8px 10px'
+  pad.appendChild(c)
+  const ctx = c.getContext('2d')
+  PREY.forEach((kind, i) => {
+    sizes.forEach((base, j) => {
+      const r = base * (CREATURES[kind].size / CREATURES.rabbit.size)
+      ctx.save()
+      ctx.translate(100 + i * 180, 60 + j * base * 1.6)
+      drawCreature(ctx, kind, r, 0.25, 0.5, 2.1, i)
+      ctx.restore()
+    })
+    ctx.fillStyle = '#e8ebf5'
+    ctx.font = '12px ui-monospace'
+    ctx.fillText(kind, 60 + i * 180, 16)
+  })
+}
+window.__ready = true
+</script>
+</body></html>
