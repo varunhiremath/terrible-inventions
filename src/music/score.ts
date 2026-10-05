@@ -2227,6 +2227,20 @@ export const BURROW: Track = {
   ],
 }
 
+/**
+ * Back out of the hole.
+ *
+ * The same three notes as going down, the other way up, because it is the same
+ * event in reverse and sounding like it costs nothing.
+ */
+export const SURFACE: Track = {
+  name: 'Surface',
+  beatsPerMinute: 220,
+  parts: [
+    { wave: 'triangle', gain: 0.07, sustain: 0.5, pattern: 'G4 .  B4 .  D5 .  ' },
+  ],
+}
+
 export const GARDEN_CUES = {
   nibble: NIBBLE,
   swell: SWELL,
@@ -2240,6 +2254,7 @@ export const GARDEN_CUES = {
   scurry: SCURRY,
   fang: FANG,
   burrow: BURROW,
+  surface: SURFACE,
 } as const
 
 

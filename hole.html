@@ -1,0 +1,46 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>hole bench</title></head>
+<body style="margin:0;background:#0b1410">
+<div id="pad"></div>
+<script type="module">
+import '/src/index.css'
+import { newRun, step, FIXED, headOf } from '/src/snake/run.ts'
+import { drawRun } from '/src/snake/draw.ts'
+const pad = document.getElementById('pad')
+// Drive into a hole, then look at it a second into the hiding and again later.
+let run = newRun(5, 3, { rivals: 0, charms: 0, hedges: 0, goal: 'last', want: 1e6 })
+const shots = []
+let t = 0
+while (t < 14) {
+  const head = headOf(run.snakes[0])
+  const hole = run.burrows.filter((b) => b.used === 0)
+    .sort((a, b) => Math.hypot(a.x - head.x, a.y - head.y) - Math.hypot(b.x - head.x, b.y - head.y))[0]
+  const aim = hole ? Math.atan2(hole.y - head.y, hole.x - head.x) : run.snakes[0].heading
+  run = step(run, { x: Math.cos(aim), y: Math.sin(aim), dash: false }, FIXED)
+  t += FIXED
+  if (run.snakes[0].down) {
+    const left = run.snakes[0].down.left
+    if (shots.length === 0 && left < 3.6) shots.push([JSON.parse(JSON.stringify(run)), 'just gone down'])
+    if (shots.length === 1 && left < 1.4) shots.push([JSON.parse(JSON.stringify(run)), 'nearly out'])
+  }
+  if (shots.length === 2) break
+}
+const note = document.createElement('p')
+note.style.cssText = 'color:#e8ebf5;font:12px ui-monospace;margin:6px'
+note.textContent = `ran ${t.toFixed(1)}s, status ${run.status}, alive ${run.snakes[0].alive}, ` +
+  `down ${run.snakes[0].down ? 'yes' : 'no'}, holes ${run.burrows.length}, ` +
+  `used ${run.burrows.map((b) => b.used.toFixed(1)).join(',')}, shots ${shots.length}`
+pad.appendChild(note)
+for (const [shown, why] of shots) {
+  const tag = document.createElement('p')
+  tag.style.cssText = 'color:#e8ebf5;font:12px ui-monospace;margin:6px'
+  tag.textContent = why
+  pad.appendChild(tag)
+  const c = document.createElement('canvas')
+  c.width = 420; c.height = 460
+  pad.appendChild(c)
+  drawRun(c.getContext('2d'), shown, { w: c.width, h: c.height, clock: 2 })
+}
+window.__ready = true
+</script>
+</body></html>

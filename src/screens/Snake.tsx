@@ -83,6 +83,7 @@ const NOISE: Record<SnakeEvent, CueName> = {
   catch: 'scurry',
   bite: 'fang',
   hide: 'burrow',
+  out: 'surface',
   grow: 'swell',
   power: 'charm',
   ring: 'loop',
@@ -516,7 +517,7 @@ export function Snake() {
 
       <div className="shrink-0 px-4 pb-3 pt-1">
         <p className="text-center font-mono text-[0.65rem] uppercase tracking-widest text-dim/60">
-          hunt to grow · {'\u25bc'} bite it · {'\u25b2'} run or hide · ring anybody
+          hunt to grow · {'\u25bc'} bite it · {'\u25b2'} run · dive in a hole · ring anybody
         </p>
       </div>
     </div>

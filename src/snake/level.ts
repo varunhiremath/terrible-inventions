@@ -265,8 +265,40 @@ export const PREY_COUNT = 90
  * both true and the reason a burrow is somewhere you want to be anyway.
  */
 export const BURROW_R = 0.55
+
+/**
+ * How long you stay down a hole, and how long the hole is no use afterwards.
+ *
+ * `HIDE_FOR` used to be four seconds of shelter that nobody could ever take.
+ * A snake never stops, so it crossed the hole's half-unit in under half a
+ * second and that was the whole of the hiding — measured at 0.95 seconds for a
+ * player driving straight at one and circling it for fourteen. The report was
+ * "I don't understand the point of those holes. How do I hide?", and the
+ * answer was that you could not.
+ *
+ * The clue had been sitting in the test for it the whole time: checking the
+ * four-second window needed a helper that pinned the snake onto the hole every
+ * frame, which is exactly the thing a player cannot do.
+ *
+ * So going over a hole now puts you *in* it and stops you there.
+ */
 export const HIDE_FOR = 4
 export const HIDE_AGAIN = 7
+
+/**
+ * Coming out is on a clock, not on the stick.
+ *
+ * The first cut let a push on the stick bring you out once you had settled,
+ * which read well and measured terribly: driving at a hole and carrying on
+ * driving got 0.92 seconds of cover out of four, because a player running away
+ * from a black mamba is holding the stick down and does not let go of it to
+ * read a hint. Hiding that only works if you stop pressing is not hiding.
+ *
+ * So the hole simply holds you for `HIDE_FOR` and lets you go, and you leave
+ * with a moment of being seen through so that you are not put back on the
+ * grass underneath whatever you hid from.
+ */
+export const LEAVING = 0.9
 
 export type Power = 'dash' | 'ghost' | 'lure' | 'frost'
 

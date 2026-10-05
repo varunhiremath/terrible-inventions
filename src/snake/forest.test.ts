@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
-  BLOWN, CREATURES, GARDENS, GOAL_GOT, GOAL_SAYS, HIDE_AGAIN, HIDE_FOR, KINDS, NEW_LENGTH, PREY,
+  BLOWN, CREATURES, GARDENS, GOAL_GOT, GOAL_SAYS, HIDE_FOR, KINDS, NEW_LENGTH, PREY,
   ROSTER, SPECIES, SPEED, SPRINT, STANDOFF, gardenFor, openingLength,
 } from './level'
 import {
-  FIXED, fight, headOf, hiding, newRun, newSnake, powerOf, respawn, step, type Run, type Snake,
+  FIXED, fight, headOf, hiding, newRun, newSnake, powerOf, respawn, step, type Run, type Snake, dist,
 } from './run'
 
 /**
@@ -217,50 +217,115 @@ describe('the creatures', () => {
 })
 
 describe('a burrow', () => {
+  /** Drive a snake at the nearest hole until it is in one. Returns the run. */
+  const dive = (run: Run, within = 6): Run => {
+    for (let t = 0; t < within; t += FIXED) {
+      const head = headOf(run.snakes[0])
+      const hole = run.burrows
+        .filter((b) => b.used === 0)
+        .sort((p, q) => dist(p, head) - dist(q, head))[0] ?? run.burrows[0]
+      const want = Math.atan2(hole.y - head.y, hole.x - head.x)
+      run = step(run, { x: Math.cos(want), y: Math.sin(want), dash: false }, FIXED)
+      if (run.snakes[0].down) break
+    }
+    return run
+  }
+
+  it('is somewhere a snake that is driving along can actually get into', () => {
+    /*
+     * The one that was broken, and badly.
+     *
+     * A hole sheltered you only while your head was inside its half-unit, and
+     * a snake never stops — so it crossed in under half a second and that was
+     * the hiding. Measured at the time: a player driving straight at one and
+     * circling it for fourteen seconds got 0.95 seconds of cover out of a
+     * promised four. "I don't understand the point of those holes. How do I
+     * hide?" was exactly right; there was no way to.
+     */
+    for (let seed = 1; seed <= 8; seed++) {
+      const run = dive(newRun(5, seed, { rivals: 0, food: 0, charms: 0, hedges: 0, goal: 'last', want: 1e6 }))
+      expect(run.snakes[0].down, `seed ${seed}: drove at a hole and never got in`).toBeTruthy()
+      expect(hiding(run.snakes[0])).toBe(true)
+      expect(run.events).toContain('hide')
+    }
+  })
+
+  it('holds you still, which is the whole of what hiding is', () => {
+    let run = dive(newRun(5, 3, { rivals: 0, food: 0, charms: 0, hedges: 0, goal: 'last', want: 1e6 }))
+    expect(run.snakes[0].down).toBeTruthy()
+    const was = headOf(run.snakes[0])
+    // Let go of the stick and stay put.
+    for (let t = 0; t < 2; t += FIXED) run = step(run, still, FIXED)
+    const now = headOf(run.snakes[0])
+    expect(dist(was, now), 'it drifted out of the hole on its own').toBeLessThan(0.05)
+    expect(hiding(run.snakes[0]), 'it did not stay down').toBe(true)
+  })
+
   it('keeps you from being bitten while you are down it', () => {
-    let run = newRun(5, 3, { rivals: 1, food: 0, charms: 0, hedges: 0, goal: 'last', want: 1e6 })
-    const hole = run.burrows[0]
-    expect(hole, 'the garden has no burrows').toBeTruthy()
+    let run = dive(newRun(5, 3, { rivals: 1, food: 0, charms: 0, hedges: 0, goal: 'last', want: 1e6 }))
+    expect(run.snakes[0].down, 'never got in').toBeTruthy()
     const you = run.snakes[0]
     const them = run.snakes[1]
     you.length = 2
-    them.length = 14
-    // You down the hole, them right on top of you.
-    you.body = you.body.map(() => ({ x: hole.x, y: hole.y }))
-    them.body = them.body.map((_b, i) => ({ x: hole.x + i * 0.01, y: hole.y }))
+    them.length = 16
+    // Them right on top of you, which without the hole is certain death.
+    const at = headOf(you)
+    them.body = them.body.map((_b, i) => ({ x: at.x + i * 0.01, y: at.y }))
     run = step(run, still, FIXED)
-    expect(hiding(run, run.snakes[0]), 'not counted as hidden').toBe(true)
     expect(run.snakes[0].alive, 'bitten while down a hole').toBe(true)
-    expect(run.events).toContain('hide')
   })
 
-  it('is used up after a while, so hiding is not the game', () => {
-    let run = newRun(5, 3, { rivals: 0, food: 0, charms: 0, hedges: 0, goal: 'last', want: 1e6 })
-    const hole = run.burrows[0]
-    // Parked on the hole and kept there: a snake is always moving forward, so
-    // without re-pinning it this measures how far it swam, not the clock.
-    const sit = () => {
-      run.snakes[0].body = run.snakes[0].body.map(() => ({ x: hole.x, y: hole.y }))
+  it('holds you down even while the stick is pushed', () => {
+    /*
+     * The first cut let a push bring you out once you had settled, which read
+     * well and measured terribly: a player driving at a hole and carrying on
+     * driving got 0.92 seconds of the four, because somebody running from a
+     * black mamba holds the stick down. The clock lets you out, not the thumb.
+     */
+    let run = dive(newRun(5, 3, { rivals: 0, food: 0, charms: 0, hedges: 0, goal: 'last', want: 1e6 }))
+    expect(run.snakes[0].down).toBeTruthy()
+    let held = 0
+    // Collected as they happen: a step clears the one before it, so looking at
+    // the last step's events only ever shows the last step's events.
+    const heard: string[] = []
+    for (let t = 0; t < HIDE_FOR * 1.5; t += FIXED) {
+      run = step(run, { x: 1, y: 0, dash: false }, FIXED)
+      heard.push(...run.events)
+      if (run.snakes[0].down) held += FIXED
     }
-    sit()
-    for (let t = 0; t < HIDE_FOR - 0.5; t += FIXED) { run = step(run, still, FIXED); sit() }
-    expect(hiding(run, run.snakes[0]), 'thrown out early').toBe(true)
-    for (let t = 0; t < 1; t += FIXED) { run = step(run, still, FIXED); sit() }
-    expect(hiding(run, run.snakes[0]), 'still hiding long past its welcome').toBe(false)
+    expect(held, `only stayed down ${held.toFixed(2)}s while pushing`).toBeGreaterThan(HIDE_FOR * 0.9)
+    expect(heard).toContain('out')
   })
 
-  it('takes a while to be worth anything again', () => {
-    let run = newRun(5, 3, { rivals: 0, food: 0, charms: 0, hedges: 0, goal: 'last', want: 1e6 })
-    const hole = run.burrows[0]
-    const sit = () => {
-      run.snakes[0].body = run.snakes[0].body.map(() => ({ x: hole.x, y: hole.y }))
+  it('gives you a moment to get clear on the way out', () => {
+    // Four seconds is not long enough for a big snake to have gone far, and
+    // popping out underneath it with no say would make the hole a trap.
+    let run = dive(newRun(5, 3, { rivals: 0, food: 0, charms: 0, hedges: 0, goal: 'last', want: 1e6 }))
+    for (let t = 0; t < HIDE_FOR + 0.2; t += FIXED) {
+      run = step(run, still, FIXED)
+      if (!run.snakes[0].down) break
     }
-    sit()
-    for (let t = 0; t < HIDE_FOR + 1; t += FIXED) { run = step(run, still, FIXED); sit() }
-    expect(hiding(run, run.snakes[0])).toBe(false)
-    // And it is still no good a few seconds later.
-    for (let t = 0; t < HIDE_AGAIN - 3; t += FIXED) { run = step(run, still, FIXED); sit() }
-    expect(hiding(run, run.snakes[0]), 'the hole refilled too soon').toBe(false)
+    expect(run.snakes[0].down).toBe(null)
+    expect(run.snakes[0].held.ghost, 'put straight back on the grass').toBeGreaterThan(0)
+  })
+
+  it('puts you out by itself before you can live down there', () => {
+    let run = dive(newRun(5, 3, { rivals: 0, food: 0, charms: 0, hedges: 0, goal: 'last', want: 1e6 }))
+    for (let t = 0; t < HIDE_FOR + 1; t += FIXED) run = step(run, still, FIXED)
+    expect(hiding(run.snakes[0]), 'still down there long past its welcome').toBe(false)
+  })
+
+  it('is no use again for a while, so hiding is not a strategy', () => {
+    let run = dive(newRun(5, 3, { rivals: 0, food: 0, charms: 0, hedges: 0, goal: 'last', want: 1e6 }))
+    const hole = run.burrows.find((b) => b.used > 0)
+    expect(hole, 'nothing was used').toBeTruthy()
+    for (let t = 0; t < HIDE_FOR + 1; t += FIXED) run = step(run, still, FIXED)
+    // Sitting on the mouth of a spent hole does not get you back in.
+    const spent = run.burrows.find((b) => b.used > 0)
+    expect(spent, 'the hole was ready again immediately').toBeTruthy()
+    run.snakes[0].body = run.snakes[0].body.map(() => ({ x: spent!.x, y: spent!.y }))
+    run = step(run, still, FIXED)
+    expect(run.snakes[0].down, 'got back into a hole it had just used').toBe(null)
   })
 
   it('is never laid where somebody comes back to life', () => {

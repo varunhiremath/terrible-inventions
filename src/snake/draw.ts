@@ -10,8 +10,8 @@
  * steer by, and the moment the camera pulls back too far the pellets vanish.
  */
 import {
-  BURROW_R, CREATURES, GIRTH, HEDGE_GIRTH, HIDE_AGAIN, KINDS, POWERS, POWER_INK, PICKUP,
-  type Power, type Species,
+  BURROW_R, CREATURES, GIRTH, HEDGE_GIRTH, HIDE_AGAIN, HIDE_FOR, KINDS, POWERS, POWER_INK,
+  PICKUP, type Power, type Species,
 } from './level'
 import { bodyOf, fight, girthOf, headOf, type Point, type Run, type Snake } from './run'
 import type { PreyKind } from './level'
@@ -225,6 +225,12 @@ function drawSnake(ctx: Ctx, s: Snake, run: Run, cam: { zoom: number; cx: number
   const ghosting = s.held.ghost !== undefined
   ctx.save()
   if (ghosting) ctx.globalAlpha = 0.45
+  /*
+   * Down a hole: the snake is drawn faint, with its tail still lying out on
+   * the grass where it was when it went in. Which is what it would look like,
+   * and is also the fair warning — anybody watching can see where you went.
+   */
+  if (s.down) ctx.globalAlpha = 0.3
 
   // Drawn as one stroked line rather than a bead at a time: a hundred filled
   // circles a frame is the whole frame on a phone, and a round join makes the
@@ -594,7 +600,7 @@ function drawCreatures(ctx: Ctx, run: Run, cam: { zoom: number; cx: number; cy: 
  * mouth with a rim, occupied has somebody's tail still showing, and spent is
  * collapsed and flat.
  */
-function drawBurrows(ctx: Ctx, run: Run, cam: { zoom: number; cx: number; cy: number }, view: View, clock: number): void {
+function drawBurrows(ctx: Ctx, run: Run, cam: { zoom: number; cx: number; cy: number }, view: View): void {
   for (const b of run.burrows) {
     const q = at(b, cam, view)
     const r = BURROW_R * cam.zoom
@@ -614,12 +620,23 @@ function drawBurrows(ctx: Ctx, run: Run, cam: { zoom: number; cx: number; cy: nu
     ctx.ellipse(0, 0, r * (spent ? 0.4 : 0.62), r * (spent ? 0.22 : 0.44), 0, 0, Math.PI * 2)
     ctx.fill()
     if (sheltering) {
-      // Somebody is down there: a ring of safety, breathing.
+      /*
+       * Somebody is down there, and how much longer they have got.
+       *
+       * An arc that empties rather than a ring that breathes, because the one
+       * thing worth knowing while you are down a hole is when you are coming
+       * back out of it.
+       */
       ctx.strokeStyle = '#8fd6a0'
-      ctx.globalAlpha = 0.5 + 0.3 * Math.sin(clock * 5)
-      ctx.lineWidth = Math.max(1.5, r * 0.12)
+      ctx.lineWidth = Math.max(2, r * 0.16)
+      ctx.globalAlpha = 0.2
       ctx.beginPath()
-      ctx.ellipse(0, r * 0.12, r * 1.05, r * 0.84, 0, 0, Math.PI * 2)
+      ctx.ellipse(0, r * 0.12, r * 1.1, r * 0.88, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.globalAlpha = 0.9
+      const left = Math.max(0, Math.min(1, (b.used - HIDE_AGAIN) / HIDE_FOR))
+      ctx.beginPath()
+      ctx.ellipse(0, r * 0.12, r * 1.1, r * 0.88, 0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left)
       ctx.stroke()
     }
     ctx.restore()
@@ -829,7 +846,7 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
   drawGround(ctx, cam, view, run.arena)
   drawHedges(ctx, run, cam, view)
   drawRing(ctx, run, cam, view)
-  drawBurrows(ctx, run, cam, view, view.clock)
+  drawBurrows(ctx, run, cam, view)
   drawCreatures(ctx, run, cam, view, view.clock)
   drawDrops(ctx, run, cam, view, view.clock)
   /*

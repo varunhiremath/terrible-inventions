@@ -11,8 +11,8 @@ import {
   ARENA, BEAD, DASH_COST, DASH_SPEED, FROST_SCALE, GIRTH, HEDGE_BEADS, HEDGE_GIRTH, HEDGE_STEP,
   LEAST_LENGTH, LURE_PULL, LURE_REACH, gardenFor, type Garden,
   NECK, NEW_LENGTH, PELLET_COUNT, PICKUP, POWER_LASTS,
-  BLOWN, CREATURES, KINDS, PREY, POWERS, PREY_TURN, RECOVER, REMAINS, ROSTER, SETTLING, SPEED,
-  SPRINT, STANDOFF, TURN, openingLength,
+  BLOWN, CREATURES, KINDS, LEAVING, PREY, POWERS, PREY_TURN, RECOVER, REMAINS, ROSTER,
+  SETTLING, SPEED, SPRINT, STANDOFF, TURN, openingLength,
   BURROW_R, HIDE_AGAIN, HIDE_FOR,
   type Power, type PreyKind, type Rival, type Species,
 } from './level'
@@ -24,7 +24,7 @@ export const THINK_EVERY = 4 / 60
 
 export type SnakeEvent =
   | 'eat' | 'catch' | 'grow' | 'power' | 'ring' | 'trap' | 'died' | 'kill' | 'close'
-  | 'cleared' | 'bite' | 'hide'
+  | 'cleared' | 'bite' | 'hide' | 'out'
 
 /**
  * Loudest first, for the screen to pick one noise a frame from.
@@ -35,7 +35,7 @@ export type SnakeEvent =
  */
 export const LOUDEST: readonly SnakeEvent[] = [
   'cleared',
-  'died', 'bite', 'trap', 'kill', 'ring', 'power', 'hide', 'close', 'grow', 'catch', 'eat',
+  'died', 'bite', 'trap', 'kill', 'ring', 'power', 'hide', 'out', 'close', 'grow', 'catch', 'eat',
 ]
 
 export interface Point {
@@ -70,6 +70,14 @@ export interface Snake {
    */
   want: number
   thinkIn: number
+  /**
+   * Down a hole: where, and how long is left of it.
+   *
+   * A snake that is down one does not move and cannot be bitten. It is the
+   * only state in the game where the snake is still, which is the whole point
+   * of it — hiding you cannot stop for is not hiding.
+   */
+  down: { x: number; y: number; left: number } | null
 }
 
 /**
@@ -273,7 +281,7 @@ export function newSnake(
     id, who, kind: who?.kind ?? kind, body, heading,
     length: len,
     alive: true, score: 0, held: {},
-    flash: 0, want: heading, thinkIn: 0,
+    flash: 0, want: heading, thinkIn: 0, down: null,
   }
 }
 
@@ -308,10 +316,7 @@ export function fight(a: Snake, b: Snake): number {
  * count, not the bottom — which is what it was, meaning a burrow sheltered you
  * only once it had stopped sheltering you.
  */
-export const hiding = (run: Run, s: Snake): boolean => {
-  const head = headOf(s)
-  return run.burrows.some((b) => b.used > HIDE_AGAIN && dist(b, head) < BURROW_R)
-}
+export const hiding = (s: Snake): boolean => s.down !== null
 
 /** How fat a snake is: it thickens as it grows, the way the original does. */
 export const girthOf = (s: Snake): number =>
@@ -854,9 +859,35 @@ export function step(run: Run, input: Input, dt: number): Run {
    */
   const grid = gridOf(next.snakes, next.hedges)
 
+  // --- down a hole ------------------------------------------------------------
+  /*
+   * Being down one is the only time a snake is still.
+   *
+   * You go in by crossing a hole that is ready, you stay until it runs out,
+   * and after a moment to settle a push on the stick brings you back out —
+   * so letting go keeps you down and steering gets you going again, and
+   * neither needs explaining to anybody who has tried it once.
+   */
+  for (const s of next.snakes) {
+    if (!s.alive || !s.down) continue
+    s.down.left -= dt
+    if (s.down.left > 0) continue
+    s.down = null
+    /*
+     * A moment of being seen through on the way out.
+     *
+     * Four seconds is not long enough for a big snake to have gone far, and
+     * popping out underneath the thing you hid from, with no say in it, would
+     * make the hole a trap rather than a hiding place.
+     */
+    s.held = { ...s.held, ghost: Math.max(s.held.ghost ?? 0, LEAVING) }
+    if (s.id === you.id) next.events.push('out')
+  }
+
   // --- steering and walking --------------------------------------------------
   for (const s of next.snakes) {
     if (!s.alive) continue
+    if (s.down) continue
     const mine = s.id === you.id
 
     if (mine) {
@@ -982,12 +1013,38 @@ export function step(run: Run, input: Input, dt: number): Run {
 
   // --- burrows ----------------------------------------------------------------
   for (const b of next.burrows) {
-    const over = next.snakes.some((s) => s.alive && dist(headOf(s), b) < BURROW_R)
-    if (b.used === 0 && over) b.used = HIDE_FOR + HIDE_AGAIN
-    else if (b.used > 0) b.used = Math.max(0, b.used - dt)
-  }
-  if (you.alive && hiding(next, you) && !next.events.includes('hide')) {
-    next.events.push('hide')
+    if (b.used > 0) { b.used = Math.max(0, b.used - dt); continue }
+    /*
+     * A ready hole takes the first snake whose head crosses it.
+     *
+     * The head is put on the mouth of the hole so the snake is visibly in it
+     * rather than somewhere near it, and the rest of the body is left lying
+     * where it was — a tail still out of the hole, which is both what it would
+     * look like and a fair warning to anybody that you are down there.
+     */
+    /*
+     * Yours, not theirs.
+     *
+     * The rivals were allowed down holes too, for consistency — and a rival
+     * that went down one stopped dead in the middle of the forest for four
+     * seconds, which looks broken rather than clever, and used up a hole the
+     * player might have wanted. Nothing in the rivals' heads knows what a hole
+     * is for, so letting them fall into one bought nothing and cost both.
+     */
+    const took = next.snakes.find(
+      (s) => s.alive && !s.down && s.id === you.id && dist(headOf(s), b) < BURROW_R,
+    )
+    if (!took) continue
+    b.used = HIDE_FOR + HIDE_AGAIN
+    took.down = { x: b.x, y: b.y, left: HIDE_FOR }
+    took.body[0] = { x: b.x, y: b.y }
+    if (took.id === you.id) {
+      next.events.push('hide')
+      // Said at the moment it happens, which is the only time anybody reads
+      // anything — the same reason the charms in the brick game name
+      // themselves as they are caught rather than on a card nobody opens.
+      next.said = { words: 'DOWN THE HOLE — SAFE', tint: '#8fd6a0', life: 2.2 }
+    }
   }
 
   // --- eating ----------------------------------------------------------------
@@ -1132,7 +1189,7 @@ export function step(run: Run, input: Input, dt: number): Run {
      */
     // Down a hole is safe. It is the only thing that saves a small snake from
     // a big one, since a big one is usually a faster one as well.
-    if (hiding(next, s)) continue
+    if (hiding(s)) continue
 
     /*
      * Meeting somebody, which is no longer simply fatal.
@@ -1158,7 +1215,7 @@ export function step(run: Run, input: Input, dt: number): Run {
        * seconds of being a free meal, which is why a life in the last garden
        * lasted two seconds.
        */
-      if (hiding(next, other) || other.held.ghost !== undefined) continue
+      if (hiding(other) || other.held.ghost !== undefined) continue
       const span = reach + girthOf(other) * 0.5
       const met = bodyOf(other).some(
         (bead) => Math.abs(bead.x - head.x) < span && Math.abs(bead.y - head.y) < span
