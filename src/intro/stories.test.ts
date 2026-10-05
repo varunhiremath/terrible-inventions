@@ -23,7 +23,7 @@ import lengths from '../../public/spoken/index.json'
  */
 const LEVELS = ['maze', 'cave', 'dungeon', 'pipes', 'road', 'space', 'deep', 'garden', 'wall', 'flood',
   'oneline', 'throughit', 'joined']
-const CARDS = ['question', 'charms']
+const CARDS = ['question', 'charms', 'forest']
 
 /**
  * How `scripts/render-voice.py` names a clip: the line as written, unfilled.

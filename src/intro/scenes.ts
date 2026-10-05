@@ -42,7 +42,10 @@ import { FIXED as ROAD_FIXED, NO_INPUT as ROAD_STILL, newRun as newDrive, step a
 import { SHIP_WIDE, SIZE_OF as RUBBLE_SIZE } from '../space/level'
 import { drawRun as drawFlight } from '../space/draw'
 import { FIXED as SPACE_FIXED, newRun as newFlight, step as flyOn, type Input as Stick, type Run as Flight } from '../space/run'
-import { ARENA as GARDEN_EDGE } from '../snake/level'
+import {
+  ARENA as GARDEN_EDGE, CREATURES, KINDS, PREY as PREY_KINDS, SPECIES,
+} from '../snake/level'
+import { drawCreature, drawSwatch } from '../snake/draw'
 import { drawRun as drawWall, drawCharm } from '../bricks/draw'
 import {
   POWERS as CHARM_POWERS, POWER_INK, POWER_SAYS, isNasty as isNastyCharm,
@@ -511,7 +514,7 @@ function gardenFilm(): Crawl[] {
       want = Math.atan2(-head.y, -head.x)
     } else {
       let near = Infinity
-      for (const p of run.pellets) {
+      for (const p of run.prey) {
         const gap = Math.hypot(p.x - head.x, p.y - head.y)
         if (gap < near) { near = gap; want = Math.atan2(p.y - head.y, p.x - head.x) }
       }
@@ -1025,6 +1028,84 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     const film = gardenFilm()
     const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
     drawGarden(ctx, frame, { w, h, clock })
+  },
+
+  /**
+   * Who lives in the forest.
+   *
+   * The same argument as the charms card: five species and four creatures, all
+   * of which the game already draws, and reading nine names and nine numbers
+   * aloud would be the whole story. So the picture carries the list and the
+   * voice carries the idea — attack the smaller, run from the bigger.
+   *
+   * Drawn with the game's own `drawSwatch` and `drawCreature`, so a diamond on
+   * this card is the diamond on the thing that is about to eat you.
+   */
+  forest({ ctx, w, h, t, clock }) {
+    ctx.fillStyle = '#0b1410'
+    ctx.fillRect(0, 0, w, h)
+
+    const pad = Math.min(w, h) * 0.06
+    const rowH = Math.min((h - pad * 2.6) / (SPECIES.length + PREY_KINDS.length + 1), h * 0.1)
+    const fat = rowH * 0.34
+    /*
+     * The swatch column, measured rather than guessed at a fraction of the
+     * width: at a fraction, the head of the snake sat on the first letter of
+     * its own name on anything phone-shaped.
+     */
+    const swatch = Math.min(w * 0.26, h * 0.2)
+    let y = pad + rowH * 0.6
+
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#8a91ab'
+    ctx.font = `bold ${rowH * 0.34}px ui-monospace, monospace`
+    ctx.textAlign = 'left'
+    ctx.fillText('THE SNAKES', pad, y - rowH * 0.5)
+
+    for (const [i, kind] of SPECIES.entries()) {
+      const shown = clamp((t - (i / (SPECIES.length + PREY_KINDS.length)) * 0.55) * 7, 0, 1)
+      if (shown <= 0) continue
+      ctx.save()
+      ctx.globalAlpha = ease(shown)
+      drawSwatch(ctx, kind, pad + swatch / 2, y, swatch, fat)
+      ctx.fillStyle = '#e8ebf5'
+      ctx.font = `bold ${rowH * 0.4}px ui-monospace, monospace`
+      ctx.textAlign = 'left'
+      ctx.fillText(KINDS[kind].name, pad + swatch + rowH * 0.5, y)
+      ctx.restore()
+      y += rowH
+    }
+
+    y += rowH * 0.5
+    ctx.fillStyle = '#8a91ab'
+    ctx.font = `bold ${rowH * 0.34}px ui-monospace, monospace`
+    ctx.textAlign = 'left'
+    ctx.fillText('AND WHAT THEY EAT', pad, y - rowH * 0.5)
+
+    for (const [i, kind] of PREY_KINDS.entries()) {
+      const shown = clamp((t - ((i + SPECIES.length) / (SPECIES.length + PREY_KINDS.length)) * 0.55) * 7, 0, 1)
+      if (shown <= 0) continue
+      const it = CREATURES[kind]
+      ctx.save()
+      ctx.globalAlpha = ease(shown)
+      ctx.save()
+      ctx.translate(pad + swatch / 2, y)
+      // Scaled off the real sizes, so the rabbit is the biggest here because
+      // it is the biggest there.
+      drawCreature(ctx, kind, rowH * 1.5 * it.size, 0, 0.5, clock, i)
+      ctx.restore()
+      ctx.fillStyle = '#e8ebf5'
+      ctx.font = `bold ${rowH * 0.4}px ui-monospace, monospace`
+      ctx.textAlign = 'left'
+      ctx.fillText(it.name, pad + swatch + rowH * 0.5, y)
+      ctx.fillStyle = '#9fe08a'
+      ctx.textAlign = 'right'
+      // Capped, so on a wide screen the score does not end up a hand's width
+      // from the name it belongs to.
+      ctx.fillText(`+${it.score}`, Math.min(w - pad, pad + swatch + rowH * 6), y)
+      ctx.restore()
+      y += rowH
+    }
   },
 
   /**

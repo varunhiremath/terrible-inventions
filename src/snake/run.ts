@@ -10,8 +10,10 @@
 import {
   ARENA, BEAD, DASH_COST, DASH_SPEED, FROST_SCALE, GIRTH, HEDGE_BEADS, HEDGE_GIRTH, HEDGE_STEP,
   LEAST_LENGTH, LURE_PULL, LURE_REACH, gardenFor, type Garden,
-  NECK, NEW_LENGTH, PELLET_COUNT, PELLET_FEEDS, PELLET_SCORE, PICKUP, POWER_LASTS,
-  POWERS, REMAINS, ROSTER, SETTLING, SPEED, TURN, type Power, type Rival,
+  NECK, NEW_LENGTH, PELLET_COUNT, PICKUP, POWER_LASTS,
+  CREATURES, KINDS, PREY, POWERS, REMAINS, ROSTER, SETTLING, SPEED, STANDOFF, TURN, openingLength,
+  BURROW_R, HIDE_AGAIN, HIDE_FOR,
+  type Power, type PreyKind, type Rival, type Species,
 } from './level'
 
 export const FIXED = 1 / 60
@@ -20,7 +22,8 @@ export const FIXED = 1 / 60
 export const THINK_EVERY = 4 / 60
 
 export type SnakeEvent =
-  | 'eat' | 'grow' | 'power' | 'ring' | 'trap' | 'died' | 'kill' | 'close' | 'cleared'
+  | 'eat' | 'catch' | 'grow' | 'power' | 'ring' | 'trap' | 'died' | 'kill' | 'close'
+  | 'cleared' | 'bite' | 'hide'
 
 /**
  * Loudest first, for the screen to pick one noise a frame from.
@@ -31,7 +34,7 @@ export type SnakeEvent =
  */
 export const LOUDEST: readonly SnakeEvent[] = [
   'cleared',
-  'died', 'trap', 'kill', 'ring', 'power', 'close', 'grow', 'eat',
+  'died', 'bite', 'trap', 'kill', 'ring', 'power', 'hide', 'close', 'grow', 'catch', 'eat',
 ]
 
 export interface Point {
@@ -42,6 +45,8 @@ export interface Point {
 export interface Snake {
   id: number
   who: Rival | null
+  /** Which real snake this is: how fast it goes and how hard it bites. */
+  kind: Species
   /** Head first. Every bead is BEAD apart along the path. */
   body: Point[]
   /** Where the head is pointing, in radians. */
@@ -66,12 +71,24 @@ export interface Snake {
   thinkIn: number
 }
 
-export interface Pellet {
+/**
+ * Something alive, and worth eating.
+ *
+ * `scare` is how long it has left to keep running after it last saw a snake —
+ * a rabbit that bolts the moment you look at it and stops the moment you blink
+ * is a twitching dot, not an animal.
+ */
+export interface Prey {
   id: number
   x: number
   y: number
-  worth: number
-  /** Bigger ones are what is left of a snake, and are worth looking at. */
+  kind: PreyKind
+  /** Where it is going while it is frightened. */
+  heading: number
+  scare: number
+  /** For a frog, which is mid-hop and which is sitting still. */
+  hop: number
+  /** What is left of a dead snake is worth more and does not run. */
   big: boolean
 }
 
@@ -99,6 +116,14 @@ export type Status = 'playing' | 'lost' | 'won'
 /** A line of thorn. It does not move, and touching it is the end of you. */
 export type Hedge = Point[]
 
+/** A hole. A head over one cannot be bitten, for a while. */
+export interface Burrow {
+  x: number
+  y: number
+  /** Counts down while somebody is down it, then again before it can be used. */
+  used: number
+}
+
 /** A word across the screen about what just happened, and how long it has left. */
 export interface Said {
   words: string
@@ -109,14 +134,23 @@ export interface Said {
 export interface Run {
   level: number
   garden: Garden
+  /**
+   * Which snake you are.
+   *
+   * On the run rather than only on your snake, because you get a new snake
+   * every time you die and every time you move gardens, and a black mamba that
+   * comes back as a grass snake is not the snake you chose.
+   */
+  mine: Species
   /** How far along this garden's goal you are, in the goal's own units. */
   got: number
   /** How big this garden is. */
   arena: number
   hedges: Hedge[]
+  burrows: Burrow[]
   said: Said | null
   snakes: Snake[]
-  pellets: Pellet[]
+  prey: Prey[]
   drops: Drop[]
   /** How long this life has lasted, which is the score in this game. */
   lived: number
@@ -133,6 +167,8 @@ export interface Run {
   ate: number
   /** The longest you have been this garden, for the growing goal. */
   grew: number
+  /** The last creature you caught, for the word that flashes up. */
+  caughtKind: PreyKind | null
   /**
    * How much the garden keeps on the ground.
    *
@@ -210,22 +246,69 @@ export function ringArea(ring: readonly Point[]): number {
 
 // --- snakes -----------------------------------------------------------------
 
-export function newSnake(id: number, who: Rival | null, at: Point, heading: number): Snake {
+export function newSnake(
+  id: number, who: Rival | null, at: Point, heading: number, kind: Species = 'grass',
+  grown = NEW_LENGTH,
+): Snake {
+  /*
+   * A rival of a bigger species starts bigger, which is how a first garden
+   * tells you to leave the adder alone before it has to show you. `grown` is
+   * the same thing for the player, who starts a late forest as a grown snake
+   * because everything else in it has been eating too.
+   */
+  const len = who ? NEW_LENGTH * who.size : grown
   // One more bead than there are gaps between them, which is the whole of the
-  // difference between a snake 2.4 long and one 2.24 long.
-  const beads = Math.max(2, Math.round(NEW_LENGTH / BEAD) + 1)
+  // difference between a snake 2.4 long and one 2.24 long. Laid out at the
+  // length it is, not at the starting length — a snake whose body is shorter
+  // than it says it is spends its first seconds growing a tail out of nothing.
+  const beads = Math.max(2, Math.round(len / BEAD) + 1)
   const body: Point[] = []
   for (let i = 0; i < beads; i++) {
     body.push({ x: at.x - Math.cos(heading) * BEAD * i, y: at.y - Math.sin(heading) * BEAD * i })
   }
   return {
-    id, who, body, heading, length: NEW_LENGTH, alive: true, score: 0, held: {},
+    id, who, kind: who?.kind ?? kind, body, heading,
+    length: len,
+    alive: true, score: 0, held: {},
     flash: 0, want: heading, thinkIn: 0,
   }
 }
 
 /** The head, which is the only part that can do anything. */
 export const headOf = (s: Snake): Point => s.body[0]
+
+/**
+ * How strong a snake is: how long it is, times how hard its kind bites.
+ *
+ * The whole of the new game turns on this one number. "You find a weaker
+ * snake, attack. You find a stronger snake, run." A long rattlesnake beats a
+ * short mamba; a long mamba beats both. Length is most of it, so growing is
+ * still the thing you are doing — species only ever tilts it.
+ */
+export const powerOf = (s: Snake): number => s.length * KINDS[s.kind].bite
+
+/** Who wins if these two meet: 1 the first, -1 the second, 0 a standoff. */
+export function fight(a: Snake, b: Snake): number {
+  const mine = powerOf(a)
+  const theirs = powerOf(b)
+  const edge = (mine - theirs) / Math.max(mine, theirs)
+  if (Math.abs(edge) < STANDOFF) return 0
+  return edge > 0 ? 1 : -1
+}
+
+/**
+ * Whether a snake's head is down a hole, and so cannot be bitten.
+ *
+ * A burrow's clock runs from `HIDE_FOR + HIDE_AGAIN` down to nought the moment
+ * somebody goes down it: the first stretch is the hiding, the rest is the hole
+ * being no use to anybody until it settles. So protection is the *top* of that
+ * count, not the bottom — which is what it was, meaning a burrow sheltered you
+ * only once it had stopped sheltering you.
+ */
+export const hiding = (run: Run, s: Snake): boolean => {
+  const head = headOf(s)
+  return run.burrows.some((b) => b.used > HIDE_AGAIN && dist(b, head) < BURROW_R)
+}
 
 /** How fat a snake is: it thickens as it grows, the way the original does. */
 export const girthOf = (s: Snake): number =>
@@ -465,9 +548,10 @@ function layHedge(rng: Rng, arena: number): Hedge {
  * can remember the position of.
  */
 export function newRun(
-  level = 1, seed = 1, set?: Partial<Garden> & { food?: number },
+  level = 1, seed = 1, set?: Partial<Garden> & { food?: number; mine?: Species },
 ): Run {
   const garden = { ...gardenFor(level), ...set }
+  const mine = set?.mine ?? 'grass'
   const food = set?.food ?? PELLET_COUNT
   const rivals = garden.rivals
   const charms = garden.charms
@@ -476,12 +560,14 @@ export function newRun(
   const run: Run = {
     level,
     garden,
+    mine,
     got: 0,
     arena,
     hedges: [],
+    burrows: [],
     said: null,
     snakes: [],
-    pellets: [],
+    prey: [],
     drops: [],
     lived: 0,
     status: 'playing',
@@ -493,6 +579,7 @@ export function newRun(
     caught: 0,
     ate: 0,
     grew: 0,
+    caughtKind: null,
     food,
     charms,
   }
@@ -513,21 +600,29 @@ export function newRun(
       if (good) { run.hedges.push(hedge); break }
     }
   }
-  run.snakes.push(newSnake(run.nextId++, null, { x: 0, y: 0 }, rng.next() * Math.PI * 2))
+  run.snakes.push(newSnake(run.nextId++, null, { x: 0, y: 0 }, rng.next() * Math.PI * 2, mine, openingLength(level)))
   for (let i = 0; i < rivals; i++) {
     // Away from the middle, so nobody opens the round inside somebody else.
     const angle = (i / Math.max(1, rivals)) * Math.PI * 2 + rng.next() * 0.4
     const far = arena * (0.45 + rng.next() * 0.4)
     run.snakes.push(newSnake(
       run.nextId++,
-      { ...ROSTER[i % ROSTER.length], mean: Math.min(1, ROSTER[i % ROSTER.length].mean * garden.mean) },
+      pickRival(garden, i, rng),
       { x: Math.cos(angle) * far, y: Math.sin(angle) * far },
       angle + Math.PI,
     ))
   }
+  for (let i = 0; i < garden.burrows; i++) {
+    for (let go = 0; go < 20; go++) {
+      const at = scatter(rng, arena * 0.85)
+      const clear = Math.hypot(at.x, at.y) > 1.5
+        && run.hedges.every((h) => h.every((p) => dist(p, at) > 1))
+        && run.burrows.every((b) => dist(b, at) > 3)
+      if (clear) { run.burrows.push({ x: at.x, y: at.y, used: 0 }); break }
+    }
+  }
   for (let i = 0; i < food; i++) {
-    const at = scatter(rng, arena)
-    run.pellets.push({ id: run.nextId++, x: at.x, y: at.y, worth: 1, big: false })
+    run.prey.push(newPrey(run, scatter(rng, arena), rng))
   }
   for (let i = 0; i < charms; i++) {
     const at = scatter(rng, arena)
@@ -536,17 +631,55 @@ export function newRun(
   return run
 }
 
+/** Which snake this garden puts in next, from the ones that live in it. */
+function pickRival(garden: Garden, i: number, _rng: Rng): Rival {
+  const from = garden.roster.length > 0 ? garden.roster : [0]
+  const who = ROSTER[from[i % from.length] % ROSTER.length]
+  return { ...who, mean: Math.min(1, who.mean * garden.mean) }
+}
+
+/** Which creature to put out next, weighted by how common each one is. */
+function pickPrey(rng: Rng): PreyKind {
+  const roll = rng.next()
+  let seen = 0
+  for (const kind of PREY) {
+    seen += CREATURES[kind].share
+    if (roll <= seen) return kind
+  }
+  return 'ant'
+}
+
+function newPrey(run: Run, at: Point, rng: Rng, kind?: PreyKind): Prey {
+  return {
+    id: run.nextId++,
+    x: at.x,
+    y: at.y,
+    kind: kind ?? pickPrey(rng),
+    heading: rng.next() * Math.PI * 2,
+    scare: 0,
+    hop: rng.next(),
+    big: false,
+  }
+}
+
 /** What a snake leaves when it goes: its length back on the ground. */
 function spill(run: Run, s: Snake, rng: Rng): void {
   const beads = bodyOf(s)
   const want = Math.max(4, Math.round(s.length * REMAINS))
   for (let i = 0; i < want; i++) {
     const at = beads[Math.floor((i / want) * beads.length)] ?? headOf(s)
-    run.pellets.push({
+    /*
+     * What a snake leaves behind does not run away, which is the whole reason
+     * to go after one: a dead snake is the only still meal in the forest.
+     */
+    run.prey.push({
       id: run.nextId++,
       x: at.x + (rng.next() - 0.5) * 0.3,
       y: at.y + (rng.next() - 0.5) * 0.3,
-      worth: 2,
+      kind: 'rat',
+      heading: 0,
+      scare: 0,
+      hop: 0,
       big: true,
     })
   }
@@ -569,7 +702,14 @@ function restock(run: Run, rng: Rng): void {
     const clear = run.snakes.every((s) => !s.alive || dist(headOf(s), at) > 3)
       && run.hedges.every((hedge) => hedge.every((p) => dist(p, at) > 1))
     if (!clear) continue
-    const who = ROSTER[rng.int(0, ROSTER.length - 1)]
+    /*
+     * From this garden's own roster, not from all of them.
+     *
+     * It drew from the whole lot, so the opening garden — two grass snakes, on
+     * purpose — refilled itself with puff adders and black mambas the moment
+     * one died. A careful snake was lasting four seconds.
+     */
+    const who = pickRival(run.garden, rng.int(0, 99), rng)
     run.snakes.push(newSnake(run.nextId++, who, at, rng.next() * Math.PI * 2))
     return
   }
@@ -611,9 +751,11 @@ function brainOf(run: Run, grid: Grid, self: Snake, rng: Rng): number {
   const want = (angle: number): number => {
     const look = { x: head.x + Math.cos(angle) * care, y: head.y + Math.sin(angle) * care }
     let good = 0
-    for (const p of run.pellets) {
+    for (const p of run.prey) {
       const gap = Math.hypot(p.x - look.x, p.y - look.y)
-      if (gap < 3) good += (p.worth * (3 - gap)) / 3
+      // Worth what it feeds, so a rival will cross the forest for a rabbit and
+      // not bother turning its head for an ant.
+      if (gap < 3) good += (CREATURES[p.kind].feeds * (p.big ? 2 : 1) * (3 - gap)) / 3
     }
     /*
      * And the player, if it is that sort of snake: cutting across a nose is
@@ -666,7 +808,7 @@ export function step(run: Run, input: Input, dt: number): Run {
   const next: Run = {
     ...run,
     snakes: run.snakes.map((s) => ({ ...s, body: s.body.map((p) => ({ ...p })), held: { ...s.held } })),
-    pellets: run.pellets.map((p) => ({ ...p })),
+    prey: run.prey.map((p) => ({ ...p })),
     drops: run.drops.map((d) => ({ ...d })),
     events: [],
     seed: (run.seed * 1103515245 + 12345) >>> 0,
@@ -721,17 +863,83 @@ export function step(run: Run, input: Input, dt: number): Run {
       steer(s, s.want, dt)
     }
 
-    let pace = SPEED
+    let pace = SPEED * KINDS[s.kind].speed
     if (!mine && frosted) pace *= FROST_SCALE
     if (mine) {
       const free = s.held.dash !== undefined
-      if (free) pace = DASH_SPEED
+      if (free) pace = DASH_SPEED * KINDS[s.kind].speed
       else if (input.dash && s.length > LEAST_LENGTH + 0.3) {
-        pace = DASH_SPEED
+        pace = DASH_SPEED * KINDS[s.kind].speed
         s.length = Math.max(LEAST_LENGTH, s.length - DASH_COST * dt)
       }
     }
     advance(s, pace * dt)
+  }
+
+  // --- the creatures, getting on with it --------------------------------------
+  /*
+   * Everything alive notices a snake and goes the other way, and the more a
+   * thing is worth the better it is at it. An ant does not look up. A rabbit is
+   * gone before you have finished deciding.
+   *
+   * The fright has a tail on it — `scare` keeps it running for a moment after
+   * it last saw anything — because a creature that bolts the instant you look
+   * at it and stops the instant you blink is a twitching dot, not an animal.
+   */
+  for (const p of next.prey) {
+    if (p.big) continue
+    const sort = CREATURES[p.kind]
+    if (sort.notice > 0) {
+      let near: Point | null = null
+      let close = sort.notice
+      for (const s of next.snakes) {
+        if (!s.alive) continue
+        const head = headOf(s)
+        const gap = Math.hypot(head.x - p.x, head.y - p.y)
+        if (gap < close) { close = gap; near = head }
+      }
+      if (near) {
+        p.heading = Math.atan2(p.y - near.y, p.x - near.x)
+        p.scare = 1.1
+      }
+    }
+    if (p.scare <= 0) continue
+    p.scare -= dt
+
+    /*
+     * A frog hops: it goes in bursts with a pause between them, which is both
+     * what a frog does and the reason a frog is catchable at all when it is
+     * nearly as quick as a rat.
+     */
+    p.hop += dt
+    const going = sort.hops ? (p.hop % 0.75) < 0.3 : true
+    if (going) {
+      const pace = sort.flees * (sort.hops ? 2.1 : 1)
+      p.x += Math.cos(p.heading) * pace * dt
+      p.y += Math.sin(p.heading) * pace * dt
+    }
+
+    // Down a hole if one is handy, which is what they are for.
+    const hole = next.burrows.find((b) => Math.hypot(b.x - p.x, b.y - p.y) < BURROW_R)
+    if (hole) { p.scare = 0; p.x = hole.x; p.y = hole.y }
+
+    // And they stay in the forest.
+    const out = Math.hypot(p.x, p.y)
+    if (out > next.arena * 0.97) {
+      p.x = (p.x / out) * next.arena * 0.97
+      p.y = (p.y / out) * next.arena * 0.97
+      p.heading += Math.PI
+    }
+  }
+
+  // --- burrows ----------------------------------------------------------------
+  for (const b of next.burrows) {
+    const over = next.snakes.some((s) => s.alive && dist(headOf(s), b) < BURROW_R)
+    if (b.used === 0 && over) b.used = HIDE_FOR + HIDE_AGAIN
+    else if (b.used > 0) b.used = Math.max(0, b.used - dt)
+  }
+  if (you.alive && hiding(next, you) && !next.events.includes('hide')) {
+    next.events.push('hide')
   }
 
   // --- eating ----------------------------------------------------------------
@@ -740,11 +948,18 @@ export function step(run: Run, input: Input, dt: number): Run {
     const head = headOf(s)
     const reach = girthOf(s) + 0.12
     const was = s.length
-    next.pellets = next.pellets.filter((p) => {
-      if (Math.hypot(p.x - head.x, p.y - head.y) > reach) return true
-      s.length += PELLET_FEEDS * p.worth
-      s.score += PELLET_SCORE * p.worth
-      if (s.id === you.id) { next.events.push('eat'); next.ate += 1 }
+    next.prey = next.prey.filter((p) => {
+      if (Math.hypot(p.x - head.x, p.y - head.y) > reach + CREATURES[p.kind].size) return true
+      const meal = CREATURES[p.kind]
+      // What is left of a snake is worth double and does not run, which is why
+      // it is worth going after one.
+      s.length += meal.feeds * (p.big ? 2 : 1)
+      s.score += meal.score * (p.big ? 2 : 1)
+      if (s.id === you.id) {
+        next.events.push(p.kind === 'rabbit' || p.kind === 'rat' ? 'catch' : 'eat')
+        next.ate += 1
+        if (!p.big) next.caughtKind = p.kind
+      }
       return false
     })
     /*
@@ -761,7 +976,7 @@ export function step(run: Run, input: Input, dt: number): Run {
   // changes how the garden behaves rather than how you do.
   if (you.alive && you.held.lure !== undefined) {
     const head = headOf(you)
-    for (const p of next.pellets) {
+    for (const p of next.prey) {
       const gap = Math.hypot(p.x - head.x, p.y - head.y)
       if (gap > LURE_REACH || gap < 1e-6) continue
       const by = (LURE_PULL * dt) / gap
@@ -785,9 +1000,8 @@ export function step(run: Run, input: Input, dt: number): Run {
     const at = scatter(rng)
     next.drops.push({ id: next.nextId++, x: at.x, y: at.y, kind: POWERS[rng.int(0, POWERS.length - 1)], bob: rng.next() })
   }
-  while (next.pellets.filter((p) => !p.big).length < next.food) {
-    const at = scatter(rng)
-    next.pellets.push({ id: next.nextId++, x: at.x, y: at.y, worth: 1, big: false })
+  while (next.prey.filter((p) => !p.big).length < next.food) {
+    next.prey.push(newPrey(next, scatter(rng, next.arena), rng))
   }
 
   // --- rings -----------------------------------------------------------------
@@ -868,16 +1082,74 @@ export function step(run: Run, input: Input, dt: number): Run {
      * top of the frame — a grid a frame out of date is a snake dying of a body
      * that has already moved on, and the other way round.
      */
+    // Down a hole is safe. It is the only thing that saves a small snake from
+    // a big one, since a big one is usually a faster one as well.
+    if (hiding(next, s)) continue
+
+    /*
+     * Meeting somebody, which is no longer simply fatal.
+     *
+     * "Snakes can fight. You find a weaker snake, attack. You find a stronger
+     * snake, run." So a head on a body is a bite, and who dies depends on who
+     * is stronger: length times how hard the kind bites. Within a margin
+     * neither can hurt the other and they slide past, which is what two snakes
+     * of a size actually do.
+     *
+     * The ring is the other way through, and deliberately: it is the only move
+     * that beats something stronger than you. Muscle or cunning, pick one.
+     */
     const reach = girthOf(s) * 0.5
-    const hit = next.snakes.some((other) => {
-      if (!other.alive || other.id === s.id) return false
+    for (const other of next.snakes) {
+      if (!other.alive || other.id === s.id) continue
+      /*
+       * Down a hole, or still settling in.
+       *
+       * The ghost check used to be on the attacker only — a snake that had
+       * just come back could not hurt anybody, and anybody could eat it. So
+       * the two and a half seconds meant to be a grace were two and a half
+       * seconds of being a free meal, which is why a life in the last garden
+       * lasted two seconds.
+       */
+      if (hiding(next, other) || other.held.ghost !== undefined) continue
       const span = reach + girthOf(other) * 0.5
-      return bodyOf(other).some(
+      const met = bodyOf(other).some(
         (bead) => Math.abs(bead.x - head.x) < span && Math.abs(bead.y - head.y) < span
           && Math.hypot(bead.x - head.x, bead.y - head.y) < span,
       )
-    })
-    if (hit) dead.push(s)
+      if (!met) continue
+      const won = fight(s, other)
+      if (won > 0) {
+        if (!dead.includes(other)) dead.push(other)
+        if (s.id === you.id) {
+          /*
+           * A bite counts the same as a ring.
+           *
+           * The garden that asks you to see somebody off used to count only
+           * rings, which made it the one goal the forest's own rule — find a
+           * smaller snake, bite it — could not satisfy. You could spend a
+           * minute winning fights and the counter would sit at nought.
+           */
+          next.caught += 1
+          s.score += Math.round(other.length * 30)
+          next.events.push('bite')
+          next.said = {
+            words: `BIT ${other.who?.name.toUpperCase() ?? 'IT'}`,
+            tint: '#8ad48a',
+            life: 2,
+          }
+        }
+      } else if (won < 0) {
+        if (!dead.includes(s)) dead.push(s)
+        if (s.id === you.id) {
+          next.said = {
+            words: `${other.who?.name.toUpperCase() ?? 'IT'} WAS STRONGER`,
+            tint: '#e05a4a',
+            life: 2.2,
+          }
+        }
+      }
+      // A standoff is nothing happening, which is the point of it.
+    }
   }
   for (const s of dead) {
     s.alive = false
@@ -940,7 +1212,7 @@ export function respawn(run: Run): Run {
     const clear = bodies.every((beads) => beads.every((b) => dist(b, at) > 3))
       && run.hedges.every((hedge) => hedge.every((p) => dist(p, at) > 1.2))
     if (!clear) continue
-    const you = newSnake(run.nextId, null, at, rng.next() * Math.PI * 2)
+    const you = newSnake(run.nextId, null, at, rng.next() * Math.PI * 2, run.mine, openingLength(run.level))
     you.score = run.snakes[0]?.score ?? 0
     // A moment to get your bearings, drawn as a snake you can see through.
     you.held = { ghost: SETTLING }
@@ -965,7 +1237,7 @@ export function respawn(run: Run): Run {
       events: [],
     }
   }
-  const you = newSnake(run.nextId, null, { x: 0, y: 0 }, 0)
+  const you = newSnake(run.nextId, null, { x: 0, y: 0 }, 0, run.mine, openingLength(run.level))
   you.score = run.snakes[0]?.score ?? 0
   you.held = { ghost: SETTLING }
   return {
@@ -978,7 +1250,8 @@ export function respawn(run: Run): Run {
 
 /** On to the next garden, keeping the score and nothing else. */
 export function nextGarden(run: Run): Run {
-  const on = newRun(run.level + 1, run.seed + 1)
+  // Same snake, new forest: the species you picked is yours for the run.
+  const on = newRun(run.level + 1, run.seed + 1, { mine: run.mine })
   on.snakes[0].score = run.snakes[0]?.score ?? 0
   return on
 }

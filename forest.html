@@ -1,0 +1,118 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>forest bench</title></head>
+<body style="margin:0;background:#0b1410">
+<div id="pad"></div>
+<script type="module">
+import '/src/index.css'
+import { newRun, step, FIXED } from '/src/snake/run.ts'
+import { drawRun } from '/src/snake/draw.ts'
+import { CREATURES, PREY, SPECIES, KINDS } from '/src/snake/level.ts'
+import { SCENES } from '/src/intro/scenes.ts'
+
+const pad = document.getElementById('pad')
+
+// Six panels: each species as the player, so every pattern gets looked at.
+for (const [i, kind] of SPECIES.entries()) {
+  const tag = document.createElement('p')
+  tag.style.cssText = 'color:#e8ebf5;font:12px ui-monospace;margin:8px'
+  pad.appendChild(tag)
+  const c = document.createElement('canvas')
+  c.width = 760; c.height = 420
+  c.style.cssText = 'display:block;margin:0 8px 12px'
+  pad.appendChild(c)
+  const ctx = c.getContext('2d')
+  let run = newRun(6, 11 + i, { mine: kind })
+  // Grow a bit so there is something to compare against, and run the forest
+  // long enough that things are fleeing and hopping.
+  run.snakes[0].length = 9
+  for (let t = 0; t < 6; t += FIXED) run = step(run, { x: Math.cos(t), y: Math.sin(t * 0.7), dash: false }, FIXED)
+  drawRun(ctx, run, { w: c.width, h: c.height, clock: 3.2 })
+  // Say whether the player survived the six seconds, so an empty-looking panel
+  // is never mistaken for a drawing bug.
+  tag.textContent = `you are the ${KINDS[kind].name} — ${KINDS[kind].latin}` +
+    ` — ${run.snakes[0].alive ? `alive, ${run.snakes[0].length.toFixed(1)} long` : 'DEAD'}`
+}
+
+// And the four creatures at three zooms, which is the thing the game itself
+// will not show me: a rabbit is 27 pixels across on a short snake and 11 on a
+// long one, and it has to be a rabbit at both.
+for (const across of [1400, 620, 330]) {
+  const tag = document.createElement('p')
+  tag.style.cssText = 'color:#e8ebf5;font:12px ui-monospace;margin:8px'
+  const run0 = newRun(1, 5, { rivals: 0, food: 0, charms: 0, hedges: 0, burrows: 0 })
+  tag.textContent = `the four creatures at ${across}px across — ` +
+    PREY.map((k) => `${CREATURES[k].name} ${(CREATURES[k].size * (across / 7)).toFixed(0)}px`).join(', ')
+  pad.appendChild(tag)
+  const c = document.createElement('canvas')
+  c.width = across; c.height = Math.round(across * 0.42)
+  c.style.cssText = 'display:block;margin:0 8px 12px;max-width:100%'
+  pad.appendChild(c)
+  const ctx = c.getContext('2d')
+  let run = newRun(1, 5, { rivals: 0, food: 0, charms: 0, hedges: 0, burrows: 0 })
+  // The player sits at the origin and the camera follows it, so the creatures
+  // are laid out around the origin in garden units.
+  run = { ...run, prey: PREY.map((k, i) => ({
+    id: 20 + i, x: -2.4 + i * 1.6, y: 0.9, kind: k, heading: 0.35, scare: i % 2, hop: 0.5, big: false,
+  })).concat([{ id: 30, x: 1.8, y: -1.2, kind: 'rat', heading: 1, scare: 0, hop: 0, big: true }]) }
+  drawRun(ctx, run, { w: c.width, h: c.height, clock: 2.1 })
+}
+
+// Each pattern on its own, big. The camera always centres on the head, so the
+// snake is curled back on itself to keep the whole of it on the canvas.
+{
+  const tag = document.createElement('p')
+  tag.style.cssText = 'color:#e8ebf5;font:12px ui-monospace;margin:8px'
+  tag.textContent = 'the five patterns, close up'
+  pad.appendChild(tag)
+  const row = document.createElement('div')
+  row.id = 'patterns'
+  row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin:0 8px'
+  pad.appendChild(row)
+  for (const kind of SPECIES) {
+    const box = document.createElement('div')
+    const lab = document.createElement('p')
+    lab.style.cssText = 'color:#e8ebf5;font:bold 12px ui-monospace;margin:2px'
+    lab.textContent = KINDS[kind].name
+    box.appendChild(lab)
+    const c = document.createElement('canvas')
+    c.width = 440; c.height = 440
+    box.appendChild(c)
+    row.appendChild(box)
+    const ctx = c.getContext('2d')
+    const run = newRun(1, 3, { rivals: 0, food: 0, charms: 0, hedges: 0, burrows: 0, mine: kind })
+    const you = run.snakes[0]
+    you.length = 11
+    const beads = Math.round(11 / 0.14)
+    // A loose spiral away from the head, which fits eleven units of snake into
+    // a view about seven across without any of it leaving the canvas.
+    you.body = Array.from({ length: beads }, (_, j) => {
+      const a = j * 0.052
+      const rad = 0.35 + j * 0.0255
+      return { x: Math.cos(a) * rad, y: Math.sin(a) * rad }
+    })
+    you.heading = -Math.PI / 2
+    drawRun(ctx, run, { w: c.width, h: c.height, clock: 2 })
+  }
+}
+
+// The cutscene's card, at phone shape and at desktop shape.
+{
+  const tag = document.createElement('p')
+  tag.style.cssText = 'color:#e8ebf5;font:12px ui-monospace;margin:8px'
+  tag.textContent = 'the forest card, as the cutscene draws it'
+  pad.appendChild(tag)
+  const row = document.createElement('div')
+  row.id = 'card'
+  row.style.cssText = 'display:flex;gap:8px;margin:0 8px'
+  pad.appendChild(row)
+  for (const [w, h] of [[390, 620], [720, 420]]) {
+    const c = document.createElement('canvas')
+    c.width = w; c.height = h
+    row.appendChild(c)
+    SCENES.forest({ ctx: c.getContext('2d'), w, h, t: 1, clock: 6.2 })
+  }
+}
+
+window.__ready = true
+</script>
+</body></html>

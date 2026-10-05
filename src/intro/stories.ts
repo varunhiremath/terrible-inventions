@@ -122,27 +122,28 @@ export const STORIES: Record<string, Story> = {
   /*
    * The garden.
    *
-   * The one beat that has to land is the ring, because it is the only move in
-   * here nobody will find on their own: every other snake game ever made kills
-   * you for touching yourself, and this one does not — it gives you what you
-   * looped over. Said twice, in two different ways, and shown over a snake
-   * long enough to do it.
+   * Two things have to land. The first is the ring, because it is the only
+   * move in here nobody will find on their own: every other snake game ever
+   * made kills you for touching yourself, and this one does not. The second is
+   * the arrow over a rival's head — green means you are the bigger animal and
+   * red means you are not — because every fight in the forest is decided
+   * before it starts and the arrow is where it says so.
    */
   snake: {
     id: 'snake',
     title: 'THE GARDEN',
     beats: [
-      { seconds: 4.2, scene: 'garden', voice: 'narrator', line: 'A garden, others in it, and all of you hungry.' },
-      { seconds: 3.0, scene: 'garden', voice: 'papa', line: 'I grew them! They grow! Everything grows!' },
+      { seconds: 3.6, scene: 'garden', voice: 'narrator', line: 'A forest, and everything in it is hungry.' },
+      { seconds: 3.8, scene: 'garden', voice: 'papa', line: 'I only planted the hedges! The rest moved in!' },
       { seconds: 3.8, scene: 'garden', voice: 'narrator', line: 'Hold anywhere and drag. That is the whole control.' },
-      { seconds: 4.2, scene: 'garden', voice: 'narrator', line: 'Eat, and you get longer. Longer is the whole idea.' },
-      { seconds: 3.8, scene: 'garden', voice: 'narrator', line: 'Touch somebody else and you are finished.' },
-      { seconds: 4.4, scene: 'garden', voice: 'narrator', line: 'Loop onto your own tail and the loop shuts instead.' },
-      { seconds: 5.0, scene: 'garden', voice: 'narrator', line: 'What is inside is yours. The loop always costs you the tail.' },
-      { seconds: 4.4, scene: 'garden', voice: 'narrator', line: 'Each garden asks for one thing. The top says what.' },
-      { seconds: 3.6, scene: 'garden', voice: 'narrator', line: 'The charms are worth a detour.' },
-      { seconds: 4.2, scene: 'garden', voice: 'narrator', line: 'Later gardens have thorns in them. Mind those.' },
-      { seconds: 3.4, scene: 'garden', voice: 'papa', line: 'Go on then. Mind Rust. Off you go.' },
+      { seconds: 5.1, scene: 'forest', voice: 'narrator', line: 'Ants, frogs, rats and rabbits. The harder to catch, the better.' },
+      { seconds: 4.2, scene: 'forest', voice: 'narrator', line: 'Eat, and you get longer. Longer is the whole idea.' },
+      { seconds: 4.4, scene: 'garden', voice: 'narrator', line: 'Green arrow over a snake: you are bigger. Bite it.' },
+      { seconds: 4.6, scene: 'garden', voice: 'narrator', line: 'Red arrow: it is bigger. Run, or hide down a hole.' },
+      { seconds: 4.2, scene: 'garden', voice: 'narrator', line: 'Loop onto your own tail and the loop shuts instead.' },
+      { seconds: 4.2, scene: 'garden', voice: 'narrator', line: 'That takes anybody, however big. It costs you the tail.' },
+      { seconds: 4.2, scene: 'garden', voice: 'narrator', line: 'Each forest asks for one thing. The top says what.' },
+      { seconds: 2.6, scene: 'garden', voice: 'papa', line: 'Go on then. Mind Bramble.' },
     ],
   },
 

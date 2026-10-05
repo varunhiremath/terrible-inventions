@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ARENA, BEAD, NEW_LENGTH, PELLET_FEEDS, POWER_LASTS, SPEED, TURN } from './level'
+import { ARENA, BEAD, CREATURES, NEW_LENGTH, POWER_LASTS, SPEED, TURN } from './level'
 import {
   FIXED, LOUDEST, NO_INPUT, bodyOf, dist, headOf, inside, newRun, respawn, ringArea, step,
   type Input, type Run, type SnakeEvent,
@@ -87,11 +87,16 @@ describe('a snake', () => {
     run = {
       ...run,
       snakes: [{ ...run.snakes[0], heading: 0 }],
-      pellets: [{ id: 99, x: head.x + 0.3, y: head.y, worth: 1, big: false }],
+      // An ant, which is the one creature that does not run away — so this
+      // stays a test about eating rather than about chasing.
+      prey: [{
+        id: 99, x: head.x + 0.3, y: head.y, kind: 'ant' as const,
+        heading: 0, scare: 0, hop: 0, big: false,
+      }],
     }
     const after = fly(run, NO_INPUT, 0.5)
-    expect(after.pellets).toHaveLength(0)
-    expect(after.snakes[0].length).toBeCloseTo(NEW_LENGTH + PELLET_FEEDS, 2)
+    expect(after.prey).toHaveLength(0)
+    expect(after.snakes[0].length).toBeCloseTo(NEW_LENGTH + CREATURES.ant.feeds, 2)
     expect(bodyOf(after.snakes[0]).length).toBeGreaterThan(bodyOf(run.snakes[0]).length)
   })
 
@@ -219,7 +224,7 @@ describe('closing a ring', () => {
       ],
     }
     const after = step(run, NO_INPUT, FIXED)
-    expect(after.pellets.filter((p) => p.big).length).toBeGreaterThan(3)
+    expect(after.prey.filter((p) => p.big).length).toBeGreaterThan(3)
   })
 })
 
@@ -366,6 +371,17 @@ describe('the noises', () => {
       }
     }
 
+    // And a head down a hole, which is the only thing that saves a small snake
+    // from a big one and which a pilot steering at rivals never does.
+    {
+      let run = newRun(5, 2, { goal: 'last', want: 1e6 })
+      const hole = run.burrows[0]
+      if (hole) {
+        run.snakes[0].body = run.snakes[0].body.map(() => ({ x: hole.x, y: hole.y }))
+        for (let t = 0; t < 0.5; t += FIXED) { run = step(run, NO_INPUT, FIXED); watch(run) }
+      }
+    }
+
     // And a garden cleared, which needs a goal somebody can reach.
     {
       let run = newRun(1, 5, { goal: 'last', want: 2 })
@@ -377,7 +393,8 @@ describe('the noises', () => {
     }
 
     for (const e of raised) expect(LOUDEST, `${e} is not in the order`).toContain(e)
-    expect([...raised].sort()).toEqual([...LOUDEST].sort())
+    const missing = LOUDEST.filter((e) => !raised.has(e))
+    expect(missing, `never raised: ${missing.join(' ')}`).toEqual([])
   }, 30_000)
 
   it('says nothing more once the round is over', () => {

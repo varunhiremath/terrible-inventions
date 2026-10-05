@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ARENA } from './level'
+import { ARENA, CREATURES } from './level'
 import { FIXED, bodyOf, headOf, newRun, respawn, step, type Input, type Run } from './run'
 
 /** Keeps off the wall, keeps off everybody, otherwise eats. */
@@ -23,9 +23,13 @@ function careful(run: Run): Input {
   const good = (angle: number): number => {
     const look = { x: head.x + Math.cos(angle) * 2, y: head.y + Math.sin(angle) * 2 }
     let sum = 0
-    for (const p of run.pellets) {
+    for (const p of run.prey) {
       const gap = Math.hypot(p.x - look.x, p.y - look.y)
-      if (gap < 4) sum += (p.worth * (4 - gap)) / 4
+      // By what it feeds. It was `p.worth`, which the creatures do not have —
+      // so every direction scored NaN, no direction ever beat another, and the
+      // pilot stopped steering and drove into the wall. Fifty-two of its
+      // sixty-two deaths were the edge of the garden.
+      if (gap < 4) sum += (CREATURES[p.kind].feeds * (p.big ? 2 : 1) * (4 - gap)) / 4
     }
     return sum
   }
@@ -101,6 +105,7 @@ describe('how hard it is', () => {
     const { lived } = trying
     const mean = lived.reduce((a, b) => a + b, 0) / lived.length
     console.log(`  careful: ${lived.length} lives, ${mean.toFixed(0)}s each, ${trying.quick.length} under 2s`)
+    console.log(`  what got them: ${JSON.stringify(trying.why)}`)
     expect(mean, 'a careful snake is being eaten alive').toBeGreaterThan(12)
   })
 

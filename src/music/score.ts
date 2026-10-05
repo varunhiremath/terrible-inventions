@@ -2179,6 +2179,54 @@ export const CHIME: Track = {
   ],
 }
 
+/**
+ * Something caught that had a chance of getting away.
+ *
+ * The nibble is for an ant that never looked up; this is for a rat or a rabbit
+ * you actually had to chase, so it is longer, it rises, and it has a thump
+ * under it. A forest where every meal sounds the same is a forest where there
+ * is no reason to go after the hard ones.
+ */
+export const SCURRY: Track = {
+  name: 'Scurry',
+  beatsPerMinute: 200,
+  parts: [
+    { wave: 'pulse', duty: 0.5, gain: 0.085, sustain: 0.45, pattern: 'D5 .  G5 .  E5 .  ' },
+    { wave: 'triangle', gain: 0.06, sustain: 0.6, pattern: 'G3 .  .  .  .  .  ' },
+  ],
+}
+
+/**
+ * A fight won.
+ *
+ * Firm rather than nasty: two strikes and a rise, no crunch. He is nine and
+ * he minds about the other snake, so this is the sound of standing your ground
+ * and not the sound of something being killed.
+ */
+export const FANG: Track = {
+  name: 'Fang',
+  beatsPerMinute: 210,
+  parts: [
+    { wave: 'pulse', duty: 0.25, gain: 0.075, sustain: 0.3, pattern: 'B4 -  B4 .  G5 .  ' },
+    { wave: 'triangle', gain: 0.07, sustain: 0.5, pattern: 'G2 .  .  .  D3 .  ' },
+  ],
+}
+
+/**
+ * Down a hole, out of reach.
+ *
+ * Falling and soft, the one cue in the garden that is a relief rather than a
+ * reward: the snake you were running from is still up there.
+ */
+export const BURROW: Track = {
+  name: 'Burrow',
+  beatsPerMinute: 220,
+  parts: [
+    { wave: 'triangle', gain: 0.075, sustain: 0.7, pattern: 'D5 .  B4 .  G4 .  .  .  ' },
+    { wave: 'strings', gain: 0.04, sustain: 1, pattern: 'G3 .  .  .  .  .  .  .  ' },
+  ],
+}
+
 export const GARDEN_CUES = {
   nibble: NIBBLE,
   swell: SWELL,
@@ -2189,6 +2237,9 @@ export const GARDEN_CUES = {
   fade: FADE,
   chime: CHIME,
   slip: SLIP,
+  scurry: SCURRY,
+  fang: FANG,
+  burrow: BURROW,
 } as const
 
 

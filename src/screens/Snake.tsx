@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  ARENA, GARDENS, GOAL_GOT, GOAL_SAYS, POWER_SAYS, POWERS, gardenFor, type Power,
+  ARENA, CREATURES, GARDENS, GOAL_GOT, GOAL_SAYS, KINDS, POWER_SAYS, POWERS, PREY, SPECIES,
+  gardenFor, type Power, type Species,
 } from '../snake/level'
 import {
   FIXED, LOUDEST, newRun, nextGarden, respawn, step,
   type Input, type Run, type SnakeEvent, type Status,
 } from '../snake/run'
 import { STILL, aimOf, aimOfKeys, knobOf, stickReach, type Aim, type Stick } from '../snake/controls'
-import { INK, drawHeld, drawRun, type View } from '../snake/draw'
+import { INK, drawHeld, drawRun, drawSwatch, type View } from '../snake/draw'
 import { playCue, setHeat } from '../music/player'
 import type { CueName } from '../music/score'
 import { createPacer } from '../arcade/pacing'
@@ -29,8 +30,59 @@ import { Interlude } from './Interlude'
 
 const MAX_CATCHUP = 0.25
 
+/** A trait as pips, because 1.45 means nothing and three pips means a lot. */
+const pips = (n: number): number => Math.max(1, Math.min(4, Math.round(n * 2.6)))
+
+/**
+ * A row of pips, drawn rather than typed.
+ *
+ * The first version used star characters, which came out as asterisks in a
+ * monospace font that had no star in it — a rating nobody could read, which is
+ * the whole fault it was there to fix.
+ */
+function Pips({ n, tint }: { n: number; tint: string }) {
+  return (
+    <span className="inline-flex gap-[2px] align-middle">
+      {[0, 1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className="h-[5px] w-[5px] rounded-full"
+          style={{ background: i < n ? tint : 'rgba(255,255,255,0.14)' }}
+        />
+      ))}
+    </span>
+  )
+}
+
+/**
+ * The real snake, drawn with the game's own code.
+ *
+ * A coloured dot would do the job of telling the five apart, but the patterns
+ * are what he has to recognise at speed in the forest — so the thing he picks
+ * from is the thing he will be looking at.
+ */
+function Swatch({ kind }: { kind: Species }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = ref.current
+    if (!canvas) return
+    const dpr = Math.min(2.5, window.devicePixelRatio || 1)
+    canvas.width = Math.round(62 * dpr)
+    canvas.height = Math.round(26 * dpr)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, 62, 26)
+    drawSwatch(ctx, kind, 31, 13, 52, 13)
+  }, [kind])
+  return <canvas ref={ref} className="h-[26px] w-[62px] shrink-0" />
+}
+
 const NOISE: Record<SnakeEvent, CueName> = {
   eat: 'nibble',
+  catch: 'scurry',
+  bite: 'fang',
+  hide: 'burrow',
   grow: 'swell',
   power: 'charm',
   ring: 'loop',
@@ -70,12 +122,25 @@ export function Snake() {
   const go = useStore((s) => s.go)
   const kit = useStore((s) => s.save.workshop)
 
+  const mine = useRef<Species>('grass')
+  // Mirrors `picking` for the animation loop, which closes over its own state
+  // once and would otherwise run the forest underneath the panel.
+  const frozen = useRef(true)
   const best = useRef(0)
   const [hud, setHud] = useState<Hud>({
     length: 0, score: 0, lives: 3, lived: 0, best: 0, caught: 0, status: 'playing', held: {},
     level: 1, goal: '', got: '', gotAt: 0, want: 0,
   })
   const [asking, setAsking] = useState(false)
+  /*
+   * Which snake you are, asked before the first garden.
+   *
+   * It is the one choice in the game and it changes how it plays — a mamba
+   * outruns everything and loses most fights, an adder wins most fights and
+   * cannot get away from anything. Asked once per visit, not once per life:
+   * being made to choose again every time you die is a punishment.
+   */
+  const [picking, setPicking] = useState(true)
 
   useEffect(() => { spare.current = spareLives({ workshop: kit }) }, [kit])
 
@@ -97,7 +162,7 @@ export function Snake() {
     observer.observe(wrap)
 
     if (!runRef.current) {
-      runRef.current = newRun(1, Math.floor(Math.random() * 10000) + 1)
+      runRef.current = newRun(1, Math.floor(Math.random() * 10000) + 1, { mine: mine.current })
       lives.current = 3 + spare.current
     }
 
@@ -132,11 +197,13 @@ export function Snake() {
         // Events are read inside the step, not off the state the frame ends
         // on: a frame holds several steps and each clears the last one's.
         const heard: SnakeEvent[] = []
-        const { next } = pacer.advance(run, elapsed, (s) => {
-          const after = step(s, input, FIXED)
-          if (after.events.length > 0) heard.push(...after.events)
-          return after
-        })
+        const { next } = frozen.current
+          ? { next: run }
+          : pacer.advance(run, elapsed, (s) => {
+            const after = step(s, input, FIXED)
+            if (after.events.length > 0) heard.push(...after.events)
+            return after
+          })
         runRef.current = next
 
         if (heard.length > 0) {
@@ -227,7 +294,7 @@ export function Snake() {
   }
 
   const down = (e: React.PointerEvent) => {
-    if (asking || hud.status !== 'playing') return
+    if (asking || picking || hud.status !== 'playing') return
     const at = wrapAt(e)
     stick.current = { fromX: at.x, fromY: at.y, x: at.x, y: at.y, id: e.pointerId }
     // Captured, so a thumb that slides off the edge keeps steering. The matching
@@ -272,10 +339,10 @@ export function Snake() {
     if (lives.current > 0) carryOn()
   }
 
-  /** Start the garden he is in again, keeping the garden. */
+  /** Start the garden he is in again, keeping the garden and the snake. */
   const again = () => {
     const was = runRef.current?.level ?? 1
-    runRef.current = newRun(was, Math.floor(Math.random() * 10000) + 1)
+    runRef.current = newRun(was, Math.floor(Math.random() * 10000) + 1, { mine: mine.current })
     lives.current = 3 + spare.current
     setAsking(false)
     best.current = 0
@@ -292,6 +359,15 @@ export function Snake() {
     if (!run) return
     runRef.current = nextGarden(run)
     setHud((h) => ({ ...h, status: 'playing', level: h.level + 1, got: '', gotAt: 0 }))
+  }
+
+  const choose = (kind: Species) => {
+    mine.current = kind
+    runRef.current = newRun(1, Math.floor(Math.random() * 10000) + 1, { mine: kind })
+    lives.current = 3 + spare.current
+    best.current = 0
+    frozen.current = false
+    setPicking(false)
   }
 
   const lost = hud.status === 'lost'
@@ -325,6 +401,63 @@ export function Snake() {
         onPointerCancel={up}
       >
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
+
+        {picking && (
+          <div
+            className="absolute inset-0 z-40 flex items-center justify-center overflow-y-auto bg-ink/95 p-3"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="block-panel w-full max-w-md p-4">
+              <p className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-bolt">
+                Which snake are you?
+              </p>
+              <p className="mt-1 font-mono text-[0.68rem] leading-relaxed text-dim">
+                Hunt the forest to grow. A snake smaller than you is
+                <span className="text-sprout"> {'\u25bc'} food</span>; a bigger one is
+                <span className="text-rust"> {'\u25b2'} trouble</span> — run, or drop down a hole
+                until it goes.
+              </p>
+              <div className="mt-3 flex flex-col gap-2">
+                {SPECIES.map((kind) => {
+                  const it = KINDS[kind]
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() => choose(kind)}
+                      className="flex items-center gap-3 rounded-lg border border-chalk/10 bg-chalk/5 p-2.5 text-left active:bg-chalk/15"
+                    >
+                      <Swatch kind={kind} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-mono text-[0.78rem] font-bold text-chalk">
+                          {it.name}
+                        </span>
+                        <span className="block font-mono text-[0.6rem] italic text-dim/70">
+                          {it.latin}
+                        </span>
+                        <span className="mt-0.5 block font-mono text-[0.62rem] leading-snug text-dim">
+                          {it.says}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-right font-mono text-[0.58rem] leading-tight text-dim/80">
+                        <span className="flex items-center justify-end gap-1">
+                          speed <Pips n={pips(it.speed)} tint="#8fd6a0" />
+                        </span>
+                        <span className="mt-1 flex items-center justify-end gap-1">
+                          bite <Pips n={pips(it.bite)} tint="#f0b07f" />
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-3 font-mono text-[0.6rem] leading-relaxed text-dim/70">
+                In the grass: {PREY.map((k) => `${CREATURES[k].name} +${CREATURES[k].score}`).join(' \u00b7 ')}.
+                The little ones barely notice you. The big ones are gone the moment they do.
+              </p>
+            </div>
+          </div>
+        )}
 
         {asking && (
           <Interlude
@@ -383,7 +516,7 @@ export function Snake() {
 
       <div className="shrink-0 px-4 pb-3 pt-1">
         <p className="text-center font-mono text-[0.65rem] uppercase tracking-widest text-dim/60">
-          grow · ring the others · do not touch them
+          hunt to grow · {'\u25bc'} bite it · {'\u25b2'} run or hide · ring anybody
         </p>
       </div>
     </div>

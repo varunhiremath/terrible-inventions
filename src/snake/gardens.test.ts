@@ -227,7 +227,7 @@ describe('the garden it is played in', () => {
       const run = newRun(level, 2)
       expect(run.arena).toBe(gardenFor(level).arena)
       // Everything scattered in it is inside it.
-      for (const p of run.pellets) expect(Math.hypot(p.x, p.y)).toBeLessThan(run.arena)
+      for (const p of run.prey) expect(Math.hypot(p.x, p.y)).toBeLessThan(run.arena)
       for (const d of run.drops) expect(Math.hypot(d.x, d.y)).toBeLessThan(run.arena)
       for (const s of run.snakes) {
         expect(Math.hypot(headOf(s).x, headOf(s).y)).toBeLessThan(run.arena)
