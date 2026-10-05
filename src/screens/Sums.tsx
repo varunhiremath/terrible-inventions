@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { LIVES, TO_CLEAR, gotOut } from '../sums/level'
+import { HUNT_SAYS, LIVES, TO_CLEAR, gotOut, huntFor } from '../sums/level'
 import {
   FIXED, LOUDEST, grab, newRun, nextLevel, reach, release, step, tryAgain,
   type FloodEvent, type Run, type Status,
@@ -270,7 +270,11 @@ export function Sums() {
           {String(hud.score).padStart(6, '0')}
         </p>
         <p className="ml-auto font-mono text-[0.68rem] tabular-nums text-dim">
-          chamber {hud.level} · {hud.left} to go · best {String(best.current).padStart(5, '0')}
+          chamber {hud.level} ·{' '}
+          <span className="font-bold" style={{ color: HUNT_SAYS[huntFor(hud.level)].tint }}>
+            {HUNT_SAYS[huntFor(hud.level)].name}
+          </span>{' '}
+          · {hud.left} to go · best {String(best.current).padStart(5, '0')}
         </p>
         <p className="font-mono text-xs tabular-nums text-bolt">{'●'.repeat(Math.max(0, hud.lives))}</p>
       </div>
@@ -308,7 +312,12 @@ export function Sums() {
                     : `${hud.lives} ${hud.lives === 1 ? 'go' : 'goes'} left.`}
               </p>
               <div className="mt-4 flex flex-col gap-2">
-                {saved && <Btn onClick={onwards} tone="go">On to chamber {hud.level + 1}</Btn>}
+                {saved && (
+                  <Btn onClick={onwards} tone="go">
+                    {/* What the next one wants, said before he is in it. */}
+                    Chamber {hud.level + 1}: {HUNT_SAYS[huntFor(hud.level + 1)].name.toLowerCase()}
+                  </Btn>
+                )}
                 {soaked && <Btn onClick={carryOn} tone="go">Try again</Btn>}
                 {soaked && <Btn onClick={() => setAsking(true)}>Answer one for a spare</Btn>}
                 {over && <Btn onClick={again} tone="go">Start again</Btn>}

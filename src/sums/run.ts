@@ -13,12 +13,14 @@
  * is just dragging back the way you came.
  */
 import {
-  CELLS, COLS, DRAIN_PER_BLOCK, LEAST_FINDS, LIVES, MOST_COMBO, PLANTED, RISE, RISE_MOST,
-  RISE_PER_LEVEL, ROWS, SURGE, TO_CLEAR, WORTH, at, bandFor, colOf, filler, rowOf,
-  soulFor, writeFind, type Band, type Soul,
+  CELLS, COLS, DRAIN_PER_BLOCK, LEAST_FINDS, LIVES, MOST_COMBO, OFF_HUNT, PLANTED, RISE,
+  RISE_MOST, RISE_PER_LEVEL, ROWS, SURGE, TO_CLEAR, WORTH, at, bandFor, colOf, filler, huntFor,
+  rowOf, soulFor, writeFind, type Band, type Hunt, type Soul,
 } from './level'
 import { makeRng, type Rng } from '../engine/rng'
-import { LEAST_FIND, readLine, sayLine, type Find, type FindKind, type Token } from './find'
+import {
+  EQ, IS_SEQUENCE, LEAST_FIND, readLine, sayLine, type Find, type FindKind, type Token,
+} from './find'
 
 export const FIXED = 1 / 60
 
@@ -49,12 +51,16 @@ export interface Said {
   line: string
   length: number
   worth: number
+  /** Whether this was the kind the chamber asked for, for the drawing to say. */
+  asked: boolean
   life: number
 }
 
 export interface Run {
   level: number
   band: Band
+  /** Which question this chamber is asking: sums, or sequences. */
+  hunt: Hunt
   soul: Soul
   cells: Cell[]
   /** The block the finger went down on, and the one it is on now. */
@@ -80,6 +86,19 @@ export interface Run {
 // --- building a board --------------------------------------------------------
 
 /** Where a find of this length could be written, as a list of runs of cells. */
+/**
+ * The other way round, if there is one.
+ *
+ * An equation mirrors about its equals sign: `70 ÷ 7 = 10` becomes
+ * `10 = 70 ÷ 7`, which is the same claim written the other way about. Anything
+ * without an equals sign is a run of numbers, and those reverse outright.
+ */
+export function flipped(tokens: readonly Token[]): Token[] | null {
+  const at = tokens.findIndex((t) => t.kind === 'eq')
+  if (at < 0) return [...tokens].reverse()
+  return [...tokens.slice(at + 1), EQ, ...tokens.slice(0, at)]
+}
+
 function roomFor(want: number): number[][] {
   const out: number[][] = []
   for (let row = 0; row < ROWS; row++) {
@@ -104,8 +123,11 @@ function roomFor(want: number): number[][] {
  * is a board where every find is a whole row, which is both easier and duller
  * than it sounds.
  */
-function pickKind(band: Band, rng: Rng): FindKind {
-  if (rng.next() < 0.45 || band.runs.length === 0) return 'sum'
+function pickKind(band: Band, rng: Rng, hunt: Hunt): FindKind {
+  // A sums chamber plants sums and a sequences chamber plants sequences. The
+  // fallback is a sum, for the opening band, whose only sequence is counting
+  // up — it still has one, so this only bites if a band ever has none.
+  if (hunt === 'sums' || band.runs.length === 0) return 'sum'
   return rng.pick(band.runs)
 }
 
@@ -126,20 +148,49 @@ function wantedLength(kind: FindKind, band: Band, rng: Rng): number {
  * player can be stuck on at the first glance.
  */
 function plant(
-  cells: Cell[], band: Band, rng: Rng, nextId: () => number, taken?: Set<number>,
+  cells: Cell[], band: Band, rng: Rng, hunt: Hunt, nextId: () => number, taken?: Set<number>,
 ): boolean {
   for (let go = 0; go < 14; go++) {
-    const kind = pickKind(band, rng)
+    const kind = pickKind(band, rng, hunt)
     const want = wantedLength(kind, band, rng)
     const tokens = writeFind(kind, band, want, rng)
     if (!tokens) continue
+    /*
+     * Never write over a find that is already down.
+     *
+     * This used to fall back to writing anywhere when nothing clear was left,
+     * which is how a board planted with six answers could be handed over
+     * holding one: each later find stamped a block out of an earlier one, and
+     * a sum with somebody else's equals sign through it is not a sum. Now a
+     * find that will not fit is simply not planted, and the caller tries again
+     * with another kind and another length — some of which are shorter and do
+     * fit.
+     */
     const all = roomFor(tokens.length)
-    const clear = taken ? all.filter((run) => run.every((c) => !taken.has(c))) : all
-    const room = clear.length > 0 ? clear : all
+    const room = taken ? all.filter((run) => run.every((c) => !taken.has(c))) : all
     if (room.length === 0) continue
     const where = rng.pick(room)
     if (taken) for (const cell of where) taken.add(cell)
-    const written = rng.next() < 0.5 ? tokens : [...tokens].reverse()
+    /*
+     * Written backwards half the time — but only when backwards is still true.
+     *
+     * This reversed the token list outright, and for a sequence that is fine
+     * (a run of doubles read the other way is a run of halves). For an
+     * equation it is a disaster: `70 ÷ 7 = 10` reversed is `10 = 7 ÷ 70`,
+     * which is false, and the same goes for every take-away and every power.
+     * Roughly half of every planted sum that used −, ÷ or ^ was a wrong
+     * answer printed on the board — which is most of the reason the boards
+     * were hard to find anything on, and it was invisible because a false
+     * equation looks exactly like a true one until you do the arithmetic.
+     *
+     * An equation is mirrored about its equals sign instead, which swaps the
+     * sides and leaves each side's own order alone. And whichever way round it
+     * ends up, it is read back before it is written down: nothing is planted
+     * that the game cannot then find.
+     */
+    const other = flipped(tokens)
+    const written = other && rng.next() < 0.5 && readLine(other) ? other : tokens
+    if (!readLine(written)) continue
     for (const [i, cell] of where.entries()) {
       cells[cell] = { token: written[i], lift: cells[cell]?.lift ?? 0, shake: 0, id: nextId() }
     }
@@ -150,24 +201,33 @@ function plant(
 
 export function newRun(level = 1, rating = 1000, lives = LIVES, score = 0, seed = 1): Run {
   const band = bandFor(rating, level)
+  const hunt = huntFor(level)
   const rng = makeRng(seed * 2654435761 + level)
   let id = 0
   const next = () => (id += 1)
   const cells: Cell[] = Array.from({ length: CELLS }, () => ({
-    token: filler(band, rng), lift: 0, shake: 0, id: next(),
+    token: filler(band, rng, hunt), lift: 0, shake: 0, id: next(),
   }))
   const taken = new Set<number>()
-  for (let i = 0; i < PLANTED; i++) plant(cells, band, rng, next, taken)
-  // And then checked, rather than assumed: planting four does not mean four
+  for (let i = 0; i < PLANTED; i++) plant(cells, band, rng, hunt, next, taken)
+  // And then checked, rather than assumed: planting six does not mean six
   // survive, and the board that is handed over is the one that has to hold the
   // promise.
-  for (let go = 0; go < 20 && findsOn(cells, LEAST_FINDS).length < LEAST_FINDS; go++) {
-    if (!plant(cells, band, rng, next, taken)) break
+  /*
+   * `continue`, not `break`.
+   *
+   * One failed plant is a find that did not fit where it was offered, not a
+   * board that cannot hold another one — and giving up on the first failure
+   * let a deep chamber open with two answers on it instead of four.
+   */
+  for (let go = 0; go < 40 && wanted(cells, hunt).length < LEAST_FINDS; go++) {
+    plant(cells, band, rng, hunt, next, taken)
   }
 
   return {
     level,
     band,
+    hunt,
     soul: soulFor(level),
     cells,
     anchor: null,
@@ -230,6 +290,43 @@ export function findsOn(cells: Cell[], most = Infinity): { cells: number[]; find
 }
 
 /**
+ * The finds of the kind this chamber is asking for.
+ *
+ * The promise has to be about these and not about finds in general: a board
+ * holding four sequences in a chamber that asked for sums keeps the old
+ * promise and is still a board he cannot do the thing he was told to do.
+ */
+export const wanted = (cells: Cell[], hunt: Hunt): { cells: number[]; find: Find }[] =>
+  distinctly(findsOn(cells).filter((it) => IS_SEQUENCE[it.find.kind] === (hunt === 'runs')))
+
+/**
+ * Separate answers, not separate readings of the same answer.
+ *
+ * `findsOn` returns every run of blocks that reads as something, and one
+ * planted find yields a pile of them: a seven-long sequence contains four
+ * four-long ones, three five-long ones and two six-long ones inside it, all
+ * true, all the same answer. So counting raw finds said a sequences board held
+ * fourteen things to find when it held two or three — and the promise that
+ * there is always something findable was being kept with a number that meant
+ * nothing.
+ *
+ * Longest first, and anything overlapping one already counted is the same
+ * answer seen again.
+ */
+export function distinctly(
+  found: { cells: number[]; find: Find }[],
+): { cells: number[]; find: Find }[] {
+  const out: { cells: number[]; find: Find }[] = []
+  const used = new Set<number>()
+  for (const it of [...found].sort((a, b) => b.cells.length - a.cells.length)) {
+    if (it.cells.some((c) => used.has(c))) continue
+    for (const c of it.cells) used.add(c)
+    out.push(it)
+  }
+  return out
+}
+
+/**
  * Make sure there is something to find.
  *
  * The one promise this game makes, and the refills are where it gets lost: a
@@ -237,12 +334,18 @@ export function findsOn(cells: Cell[], most = Infinity): { cells: number[]; find
  * with no legal move and no way of knowing it is not their fault.
  */
 function keepPromise(run: Run, rng: Rng): boolean {
-  if (findsOn(run.cells, LEAST_FINDS).length >= LEAST_FINDS) return false
+  if (wanted(run.cells, run.hunt).length >= LEAST_FINDS) return false
   let id = run.nextId
   const next = () => (id += 1)
   let planted = false
-  while (findsOn(run.cells, LEAST_FINDS).length < LEAST_FINDS) {
-    if (!plant(run.cells, run.band, rng, next)) break
+  /*
+   * The blocks the answers already on the board are written in, so topping up
+   * mid-chamber cannot take one away to make room for another — which would
+   * leave the count where it started and loop.
+   */
+  const taken = new Set<number>(wanted(run.cells, run.hunt).flatMap((it) => it.cells))
+  for (let go = 0; go < 40 && wanted(run.cells, run.hunt).length < LEAST_FINDS; go++) {
+    if (!plant(run.cells, run.band, rng, run.hunt, next, taken)) continue
     planted = true
   }
   run.nextId = id + 1
@@ -370,7 +473,7 @@ function collapse(run: Run, gone: number[], rng: Rng): void {
         // the order they will land rather than dropping them in on top of
         // each other.
         run.cells[at(col, row)] = {
-          token: filler(run.band, rng),
+          token: filler(run.band, rng, run.hunt),
           lift: fresh,
           shake: 0,
           id: run.nextId++,
@@ -418,9 +521,25 @@ export function release(run: Run): Run {
   const rng = makeRng(next.seed)
   const gone = blastOf(picked)
   next.streak = Math.min(MOST_COMBO, next.streak + 1)
-  const worth = worthOf(find.length, next.streak)
+  /*
+   * Was this what the chamber asked for?
+   *
+   * If it was not — a sequence spotted in a chamber of sums — it still
+   * crushes, it still drains the water, it still keeps the run of right
+   * answers going, and it scores less. That is the whole penalty, and it is
+   * deliberately the whole penalty: correct arithmetic is never a miss here.
+   */
+  const asked = IS_SEQUENCE[find.kind] === (next.hunt === 'runs')
+  const worth = Math.round(worthOf(find.length, next.streak) * (asked ? 1 : OFF_HUNT))
   next.score += worth
-  next.said = { says: find.says, line: sayLine(picked.map((i) => run.cells[i].token)), length: find.length, worth, life: 2.6 }
+  next.said = {
+    says: find.says,
+    line: sayLine(picked.map((i) => run.cells[i].token)),
+    length: find.length,
+    worth,
+    asked,
+    life: 2.6,
+  }
 
   collapse(next, gone, rng)
 

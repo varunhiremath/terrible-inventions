@@ -210,18 +210,82 @@ export function writeFind(
  * which it did, in the first cut, and made the whole board readable at a
  * glance without doing any arithmetic.
  */
-export function filler(band: Band, rng: Rng): Token {
+export function filler(band: Band, rng: Rng, hunt: Hunt = 'sums'): Token {
   const roll = rng.next()
+  /*
+   * A sequences chamber has no equals signs anywhere on it, and no operators
+   * either — nothing but numbers.
+   *
+   * Which is the clearest way of saying what the chamber wants, because it is
+   * said by the board rather than by a label: a wall of plain numbers is a
+   * wall you read as runs. Put one equals sign on it and the eye starts
+   * looking for sums again.
+   */
+  if (hunt === 'runs') return num(rng.int(1, band.most))
   if (roll < 0.17) return op(rng.pick(band.ops))
   if (roll < 0.24) return EQ
   return num(rng.int(1, band.most))
 }
 
-/** How many finds are written into a fresh board. */
-export const PLANTED = 4
+/**
+ * What this chamber is asking for.
+ *
+ * A board used to hold equations and sequences at once, with no way of telling
+ * which you were meant to be looking for — so scanning it meant holding both
+ * questions in your head at the same time ("does this line work out?" *and*
+ * "is this run going up by sevens?"), which is twice the work and half as
+ * clear. One chamber, one question.
+ */
+export type Hunt = 'sums' | 'runs'
+
+/**
+ * Chambers alternate, and the first one is sums.
+ *
+ * Sums first because they are the thing anybody can have a go at: a line
+ * either works out or it does not, and you can check it block by block. A
+ * sequence has to be recognised before it can be checked, which is a harder
+ * thing and a worse place to start.
+ */
+export const huntFor = (level: number): Hunt => (level % 2 === 1 ? 'sums' : 'runs')
+
+export const HUNT_SAYS: Record<Hunt, { name: string; wants: string; like: string; tint: string }> = {
+  sums: {
+    name: 'SUMS',
+    wants: 'Find lines that work out.',
+    like: 'like  3 + 4 = 7',
+    tint: '#7fd4f0',
+  },
+  runs: {
+    name: 'SEQUENCES',
+    wants: 'Find runs of numbers that follow a rule.',
+    like: 'like  2  4  8  16',
+    tint: '#f0c27f',
+  },
+}
+
+/**
+ * How many finds are written into a fresh board.
+ *
+ * Six rather than four. Four was enough to keep the promise and not enough to
+ * make the board feel findable: with two of them guaranteed, a board could sit
+ * there with exactly two answers on it while the water came up, and hunting
+ * for the only sum in sixty-three blocks is a puzzle rather than a game.
+ */
+export const PLANTED = 6
 
 /** The promise: there is always at least this many findable things. */
-export const LEAST_FINDS = 2
+export const LEAST_FINDS = 4
+
+/**
+ * What a find of the kind this chamber did *not* ask for is worth.
+ *
+ * Not nothing, and not a miss. Spotting a Fibonacci run in a chamber of sums
+ * is good arithmetic and good eyes, and telling somebody that correct maths is
+ * wrong is the sort of thing that makes them stop looking. So it crushes, it
+ * scores, and it goes without the chamber's bonus — which is the whole of the
+ * difference.
+ */
+export const OFF_HUNT = 0.6
 
 // --- the water ---------------------------------------------------------------
 

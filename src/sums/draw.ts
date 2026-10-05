@@ -9,7 +9,7 @@
  * an equals — which helps the eye find the shape of a line and gives nothing
  * away, because whether `2 + 3 = 5` is true is not a fact about its blocks.
  */
-import { COLS, ROWS, colOf, rowOf, type Soul } from './level'
+import { COLS, HUNT_SAYS, ROWS, colOf, rowOf, type Soul } from './level'
 import type { Token } from './find'
 import { blastOf, type Run } from './run'
 
@@ -470,17 +470,30 @@ function drawBanner(ctx: Ctx, run: Run, x: number, y: number, w: number, s: numb
 
   const said = run.said
   if (!said) {
-    // Nothing found and nothing being dragged: say what to do, quietly.
-    ctx.font = `600 ${s * 0.2}px ${FACE}`
-    ctx.fillStyle = 'rgba(138,145,171,0.5)'
-    ctx.fillText('drag a line that is true', middle, y + s * 0.3)
+    /*
+     * Nothing found and nothing being dragged, so this is the line that is on
+     * screen most of the time — which makes it the right place to say what the
+     * chamber is asking for, rather than a general instruction nobody needs
+     * twice. It carries the example too, because "find a sequence" means
+     * nothing on its own and "like 2 4 8 16" means all of it.
+     */
+    const asking = HUNT_SAYS[run.hunt]
+    ctx.font = `700 ${s * 0.21}px ${FACE}`
+    ctx.fillStyle = asking.tint
+    ctx.fillText(asking.wants, middle, y + s * 0.18)
+    ctx.font = `600 ${s * 0.18}px ${FACE}`
+    ctx.fillStyle = 'rgba(138,145,171,0.55)'
+    ctx.fillText(asking.like, middle, y + s * 0.45)
     ctx.restore()
     return
   }
 
   ctx.globalAlpha = Math.min(1, said.life / 0.5)
   ctx.font = `700 ${s * 0.26}px ${FACE}`
-  ctx.fillStyle = INK.good
+  // A find of the kind the chamber did not ask for is still a find and still
+  // says so; it just does not get the green. That is the whole of how "quietly"
+  // is drawn — no cross, no telling-off, a smaller number and a calmer colour.
+  ctx.fillStyle = said.asked ? INK.good : INK.dim
   ctx.fillText(said.says, middle, y + s * 0.18)
   ctx.font = `600 ${s * 0.19}px ${FACE}`
   ctx.fillStyle = INK.dim
