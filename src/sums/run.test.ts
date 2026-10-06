@@ -41,7 +41,9 @@ describe('a board', () => {
           .toBeGreaterThanOrEqual(LEAST_FINDS)
       }
     }
-  })
+    // Four hundred and eighty boards, and a shared machine is slower than this
+    // one: it is a big sweep on purpose and is given room to be one.
+  }, 20_000)
 
   it('keeps the promise through a long game, not just on a fresh board', () => {
     // The refills are where a promise like this gets lost.
@@ -55,7 +57,7 @@ describe('a board', () => {
         run = { ...run, left: TO_CLEAR, status: 'playing', water: 0 }
       }
     }
-  })
+  }, 20_000)
 
   it('does not give the planted finds away by the size of their numbers', () => {
     /*

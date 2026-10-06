@@ -245,7 +245,25 @@ function sprinkle(cells: Cell[], band: Band, rng: Rng, spare: ReadonlySet<number
   }
 }
 
+/**
+ * Worked out once for each length and kept.
+ *
+ * Where a find of a given length can go does not depend on anything but the
+ * length, and this was being built from scratch on every attempt — about four
+ * hundred times a board, each time allocating fifty little arrays. It is the
+ * same fifty every time.
+ */
+const roomBy = new Map<number, number[][]>()
+
 function roomFor(want: number): number[][] {
+  const had = roomBy.get(want)
+  if (had) return had
+  const made = roomsFor(want)
+  roomBy.set(want, made)
+  return made
+}
+
+function roomsFor(want: number): number[][] {
   const out: number[][] = []
   for (let row = 0; row < ROWS; row++) {
     for (let start = 0; start + want <= COLS; start++) {
@@ -421,8 +439,17 @@ export function newRun(level = 1, rating = 1000, lives = LIVES, score = 0, seed 
    * three. Laid first they crowded out the real answers instead. So the floor
    * is secured first and everything after it is shared out.
    */
-  for (let go = 0; go < 24 && wanted(cells, hunt).length < LEAST_FINDS + 1; go++) {
-    plant(cells, band, rng, hunt, next, taken)
+  /*
+   * Counted again only when something has actually been written.
+   *
+   * Counting what is findable means reading every window of the board, which
+   * is four hundred lines; doing it in the condition of a loop that mostly
+   * fails to place anything meant doing it for nothing most of the time, and
+   * a slow machine timed out building boards because of it.
+   */
+  let have = wanted(cells, hunt).length
+  for (let go = 0; go < 24 && have < LEAST_FINDS + 1; go++) {
+    if (plant(cells, band, rng, hunt, next, taken)) have = wanted(cells, hunt).length
   }
   for (let i = 0; i < PLANTED; i++) {
     plant(cells, band, rng, hunt, next, taken, hunt === 'sums' && i % 2 === 0)
@@ -435,8 +462,9 @@ export function newRun(level = 1, rating = 1000, lives = LIVES, score = 0, seed 
    * board that cannot hold another one — and giving up on the first failure
    * let a deep chamber open with two answers on it instead of four.
    */
-  for (let go = 0; go < 40 && wanted(cells, hunt).length < LEAST_FINDS; go++) {
-    plant(cells, band, rng, hunt, next, taken)
+  have = wanted(cells, hunt).length
+  for (let go = 0; go < 40 && have < LEAST_FINDS; go++) {
+    if (plant(cells, band, rng, hunt, next, taken)) have = wanted(cells, hunt).length
   }
   /*
    * The operators go on last, into whatever is left.
@@ -496,9 +524,30 @@ export const riseFor = (level: number): number =>
  * every row and column, which is about nine hundred reads — only ever done
  * when the board changes, never in a frame.
  */
-export function findsOn(cells: Cell[], most = Infinity): { cells: number[]; find: Find }[] {
+export function findsOn(
+  cells: Cell[], most = Infinity, hunt?: Hunt,
+): { cells: number[]; find: Find }[] {
   const out: { cells: number[]; find: Find }[] = []
   const look = (run: number[]) => {
+    /*
+     * A quick look before the real one.
+     *
+     * Working out what is findable means reading every window of the board,
+     * four hundred of them, and it is done several times while a board is laid
+     * out. Counting the equals signs in a window throws most of them away for
+     * almost nothing: a sum has exactly one, and a run of numbers has none and
+     * nothing else either.
+     */
+    if (hunt) {
+      let eqs = 0
+      let signs = 0
+      for (const i of run) {
+        const kind = cells[i].token.kind
+        if (kind === 'eq') eqs++
+        else if (kind === 'op') signs++
+      }
+      if (hunt === 'sums' ? eqs !== 1 : eqs + signs > 0) return
+    }
     const find = readLine(run.map((i) => cells[i].token))
     if (find) out.push({ cells: run, find })
   }
@@ -527,7 +576,9 @@ export function findsOn(cells: Cell[], most = Infinity): { cells: number[]; find
  * promise and is still a board he cannot do the thing he was told to do.
  */
 export const wanted = (cells: Cell[], hunt: Hunt): { cells: number[]; find: Find }[] =>
-  distinctly(findsOn(cells).filter((it) => IS_SEQUENCE[it.find.kind] === (hunt === 'runs')))
+  distinctly(findsOn(cells, Infinity, hunt).filter(
+    (it) => IS_SEQUENCE[it.find.kind] === (hunt === 'runs'),
+  ))
 
 /**
  * Separate answers, not separate readings of the same answer.
@@ -593,9 +644,11 @@ function keepPromise(run: Run, rng: Rng): boolean {
    * leave the count where it started and loop.
    */
   const taken = new Set<number>(wanted(run.cells, run.hunt).flatMap((it) => it.cells))
-  for (let go = 0; go < 40 && wanted(run.cells, run.hunt).length < LEAST_FINDS; go++) {
+  let have = wanted(run.cells, run.hunt).length
+  for (let go = 0; go < 40 && have < LEAST_FINDS; go++) {
     if (!plant(run.cells, run.band, rng, run.hunt, next, taken)) continue
     planted = true
+    have = wanted(run.cells, run.hunt).length
   }
   run.nextId = id + 1
   return planted
