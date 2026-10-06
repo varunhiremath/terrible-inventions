@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { HUNT_SAYS, OFF_HUNT, bandFor, huntFor, writeFind, type Hunt } from './level'
+import { COLS, HUNT_SAYS, OFF_HUNT, ROWS, bandFor, huntFor, writeFind, type Hunt } from './level'
 import { IS_SEQUENCE, readLine, sayLine } from './find'
 import { makeRng } from '../engine/rng'
 import {
-  distinctly, findsOn, flipped, grab, newRun, reach, release, wanted, type Run,
+  distinctly, findsOn, flipped, grab, newRun, reach, release, step, wanted, type Run,
 } from './run'
 
 /**
@@ -132,17 +132,27 @@ describe('what is written on the board', () => {
     /*
      * A seven-long sequence contains four four-long ones inside it, all true
      * and all the same answer. Counting those made a board of two runs look
-     * like a board of fourteen finds, and the promise was being kept with a
-     * number that meant nothing.
+     * like a board of fourteen finds.
+     *
+     * Two finds crossing each other are a different matter: one running across
+     * and one running down, sharing the one number they have in common, are
+     * two answers the way two words crossing in a crossword are two words.
+     * Treating those as one made a board holding six look like a board holding
+     * four, and made letting finds cross look like a change for the worse.
      */
     const run = newRun(2, 1000, 3, 0, 5)
     const raw = findsOn(run.cells).length
-    const real = distinctly(findsOn(run.cells)).length
-    expect(raw).toBeGreaterThan(real)
     const kept = distinctly(findsOn(run.cells))
+    expect(raw).toBeGreaterThan(kept.length)
+
+    const across = (cells: number[]) => cells.every((c) => Math.floor(c / COLS) === Math.floor(cells[0] / COLS))
     for (const [i, a] of kept.entries()) {
       for (const b of kept.slice(i + 1)) {
-        expect(a.cells.some((c) => b.cells.includes(c)), 'two answers share a block').toBe(false)
+        const shared = a.cells.filter((c) => b.cells.includes(c))
+        if (shared.length === 0) continue
+        expect(across(a.cells), 'two answers along the same line were both kept')
+          .not.toBe(across(b.cells))
+        expect(shared.length, 'two answers crossing should share one block, not several').toBe(1)
       }
     }
   })
@@ -175,4 +185,151 @@ describe('finding the other kind', () => {
     expect(OFF_HUNT).toBeLessThan(1)
     expect(OFF_HUNT, 'so little it may as well be a miss').toBeGreaterThan(0.4)
   })
+})
+
+/**
+ * Nothing on the board that is not arithmetic.
+ *
+ * Reported from play: "sometimes I see 2-3 operators continuously in a line
+ * e.g. *+= which is invalid". Measured before anything was changed: across a
+ * hundred and sixty boards there were 1258 signs sitting on the outer edge
+ * with nothing beyond them, 1125 signs touching another sign, and rows reading
+ * `11 + + 39 = 5 8`.
+ *
+ * Swept over boards that have been played rather than only fresh ones, because
+ * that is where it came from: every find crushed drops the blocks above it and
+ * fills the top with new ones, and a block arriving from above knows nothing
+ * about what it has landed next to.
+ */
+describe('the board makes sense everywhere', () => {
+  const isSign = (t: { kind: string }) => t.kind === 'op' || t.kind === 'eq'
+  const colOf = (i: number) => i % COLS
+  const rowOf = (i: number) => Math.floor(i / COLS)
+  const at = (c: number, r: number) => r * COLS + c
+
+  /** Boards from every band, each played for a few seconds. */
+  const boards = () => {
+    const out: ReturnType<typeof newRun>[] = []
+    for (const level of [1, 3, 7, 11, 15, 19]) {
+      for (let seed = 1; seed <= 12; seed++) {
+        let run = newRun(level, 1000, 3, 0, seed)
+        for (let t = 0; t < 5; t += 1 / 60) run = step(run, 1 / 60)
+        out.push(run)
+      }
+    }
+    return out
+  }
+
+  it('never puts an operator against another operator', () => {
+    for (const run of boards()) {
+      for (let i = 0; i < COLS * ROWS; i++) {
+        if (!isSign(run.cells[i].token)) continue
+        const c = colOf(i)
+        const r = rowOf(i)
+        const say = (j: number) =>
+          `${sayLine([run.cells[i].token])} and ${sayLine([run.cells[j].token])} are touching`
+        if (c + 1 < COLS) {
+          expect(isSign(run.cells[at(c + 1, r)].token), say(at(c + 1, r))).toBe(false)
+        }
+        if (r + 1 < ROWS) {
+          expect(isSign(run.cells[at(c, r + 1)].token), say(at(c, r + 1))).toBe(false)
+        }
+      }
+    }
+  }, 60_000)
+
+  it('never puts an operator on the edge or in a corner', () => {
+    // An operator on the outer ring has nothing on one side of it, so no line
+    // through it can be read.
+    for (const run of boards()) {
+      for (let i = 0; i < COLS * ROWS; i++) {
+        if (!isSign(run.cells[i].token)) continue
+        expect(colOf(i), 'an operator on the left or right edge').toBeGreaterThan(0)
+        expect(colOf(i)).toBeLessThan(COLS - 1)
+        expect(rowOf(i), 'an operator on the top or bottom edge').toBeGreaterThan(0)
+        expect(rowOf(i)).toBeLessThan(ROWS - 1)
+      }
+    }
+  }, 60_000)
+
+  it('gives every operator a number on all four sides', () => {
+    // Which is the rule the two above are really two halves of, and the whole
+    // of what makes a line readable whichever way you read it.
+    for (const run of boards()) {
+      for (let i = 0; i < COLS * ROWS; i++) {
+        if (!isSign(run.cells[i].token)) continue
+        const c = colOf(i)
+        const r = rowOf(i)
+        for (const j of [at(c - 1, r), at(c + 1, r), at(c, r - 1), at(c, r + 1)]) {
+          expect(run.cells[j]?.token.kind, 'an operator without a number beside it').toBe('num')
+        }
+      }
+    }
+  }, 60_000)
+
+  it('puts at most one equals sign in any row', () => {
+    /*
+     * So that reading a row is reading one claim, right or wrong, rather than
+     * a chain of them.
+     *
+     * This was enforced and made no difference at all, for a reason worth
+     * writing down: a find was mirrored *after* the legal places for it had
+     * been worked out, and mirroring an equation moves its equals sign to a
+     * different block — so the sign was checked in one place and written in
+     * another. It only started working when the orientation was settled first.
+     *
+     * Rows and not columns. One to a column as well was tried and measured:
+     * there are seven columns, so it caps the whole board at seven equals
+     * signs, and the real equations took every one — leaving no room for the
+     * wrong sums that stop an equals sign being an answer in itself. A row is
+     * seven blocks and is how the eye reads; a column is nine, longer than any
+     * find, and nobody reads one as a single claim.
+     */
+    for (const run of boards()) {
+      for (let r = 0; r < ROWS; r++) {
+        const eq = Array.from({ length: COLS }, (_, c) => run.cells[at(c, r)].token)
+          .filter((t) => t.kind === 'eq').length
+        expect(eq, `row ${r} has ${eq} equals signs`).toBeLessThan(2)
+      }
+    }
+  }, 60_000)
+
+  it('does not let the equals sign be the answer by itself', () => {
+    /*
+     * The trap this whole change walked into. Operators only go where they are
+     * legal now, which leaves far less room for them, and that made nearly
+     * every equals sign on the board part of a true equation — so dragging
+     * round any equals sign would have been a winning move without doing a
+     * sum. Wrong equations are laid down on purpose to stop that.
+     */
+    let signs = 0
+    let telling = 0
+    for (const run of boards()) {
+      const inFinds = new Set(distinctly(findsOn(run.cells)).flatMap((f) => f.cells))
+      for (let i = 0; i < COLS * ROWS; i++) {
+        if (run.cells[i].token.kind !== 'eq') continue
+        signs++
+        if (inFinds.has(i)) telling++
+      }
+    }
+    expect(signs, 'no equals signs to judge').toBeGreaterThan(100)
+    const tell = telling / signs
+    expect(tell, `${(tell * 100).toFixed(0)}% of equals signs sit in a true equation`)
+      .toBeLessThan(0.9)
+  }, 60_000)
+
+  it('still holds plenty to find, with all of that true', () => {
+    // The rules above cost answers, and the answer to that was letting finds
+    // cross one another. Without it a board held four; with it, six.
+    for (const level of [1, 3, 7, 11]) {
+      const counts: number[] = []
+      for (let seed = 1; seed <= 25; seed++) {
+        counts.push(wanted(newRun(level, 1000, 3, 0, seed).cells, huntFor(level)).length)
+      }
+      const worst = Math.min(...counts)
+      const mean = counts.reduce((a, b) => a + b, 0) / counts.length
+      expect(worst, `chamber ${level} can open with only ${worst}`).toBeGreaterThanOrEqual(4)
+      expect(mean, `chamber ${level} averages ${mean.toFixed(1)}`).toBeGreaterThanOrEqual(5)
+    }
+  }, 60_000)
 })

@@ -14,12 +14,13 @@
  */
 import {
   CELLS, COLS, DRAIN_PER_BLOCK, LEAST_FINDS, LIVES, MOST_COMBO, OFF_HUNT, PLANTED, RISE,
-  RISE_MOST, RISE_PER_LEVEL, ROWS, SURGE, TO_CLEAR, WORTH, at, bandFor, colOf, filler, huntFor,
-  rowOf, soulFor, writeFind, type Band, type Hunt, type Soul,
+  RISE_MOST, RISE_PER_LEVEL, ROWS, SIGN_SHARE, SURGE, TO_CLEAR, WORTH, aSign, at, bandFor,
+  colOf,
+  filler, huntFor, rowOf, soulFor, writeFind, type Band, type Hunt, type Soul,
 } from './level'
 import { makeRng, type Rng } from '../engine/rng'
 import {
-  EQ, IS_SEQUENCE, LEAST_FIND, readLine, sayLine, type Find, type FindKind, type Token,
+  EQ, IS_SEQUENCE, LEAST_FIND, num, op, readLine, sayLine, type Find, type FindKind, type Token,
 } from './find'
 
 export const FIXED = 1 / 60
@@ -99,6 +100,151 @@ export function flipped(tokens: readonly Token[]): Token[] | null {
   return [...tokens.slice(at + 1), EQ, ...tokens.slice(0, at)]
 }
 
+// --- where an operator is allowed to be -------------------------------------
+
+/**
+ * The rule the board is built to, and repaired to.
+ *
+ * Every operator and every equals sign has a number above it, below it, to its
+ * left and to its right. Nothing else is allowed. That one rule gives all
+ * three of the things that were asked for: no two signs touching, no sign on
+ * the edge or in a corner, and so no line that reads as nonsense — whichever
+ * way you read across the board you get number, sign, number, sign, number.
+ *
+ * What it cannot give is every whole row and column reading as one complete
+ * equation, and that is not a matter of effort: for every row to read
+ * `n op n op n` the signs have to sit on alternating columns of every row, and
+ * for every column to do the same they have to sit on alternating rows of
+ * every column. Those two demands disagree about the block at row nought,
+ * column one, and about half the board after it. So a line is always
+ * well-formed, and a line is an equation when it happens to carry an equals
+ * sign — right or wrong, which is the game.
+ */
+const isSign = (t: Token): boolean => t.kind === 'op' || t.kind === 'eq'
+
+/** The outer ring, where a sign would have nothing on one side of it. */
+const onEdge = (i: number): boolean =>
+  colOf(i) === 0 || colOf(i) === COLS - 1 || rowOf(i) === 0 || rowOf(i) === ROWS - 1
+
+const beside = (i: number): number[] => {
+  const c = colOf(i)
+  const r = rowOf(i)
+  const out: number[] = []
+  if (c > 0) out.push(at(c - 1, r))
+  if (c < COLS - 1) out.push(at(c + 1, r))
+  if (r > 0) out.push(at(c, r - 1))
+  if (r < ROWS - 1) out.push(at(c, r + 1))
+  return out
+}
+
+/**
+ * Whether an equals sign may stand here: one to a row.
+ *
+ * Without it, two equations crossing the same row each put an equals in it and
+ * the row read `38 42 = 9 28 = 2` — every block of which is fine and neither
+ * of which can be taken away, because both belong to a real answer somebody
+ * could be about to find. So it is settled when they are laid out.
+ *
+ * The row and not the column, which was tried and measured and cost more than
+ * it was worth. There are seven columns, so one equals sign to a column caps
+ * the whole board at seven of them — and the real equations used every one,
+ * leaving no room for the wrong sums that stop the equals sign being the
+ * answer in itself. A row is seven blocks and is the way the eye reads; a
+ * column is nine and longer than any find, so nobody reads one as a single
+ * claim anyway.
+ */
+function eqFits(cells: Cell[], i: number, mine: ReadonlySet<number> = new Set()): boolean {
+  const r = rowOf(i)
+  for (let k = 0; k < COLS; k++) {
+    const j = at(k, r)
+    if (j !== i && !mine.has(j) && cells[j].token.kind === 'eq') return false
+  }
+  return true
+}
+
+/** Whether a sign may stand here, given what is already on the board. */
+function signFits(cells: Cell[], i: number, mine: ReadonlySet<number> = new Set()): boolean {
+  if (onEdge(i)) return false
+  return beside(i).every((j) => mine.has(j) || !isSign(cells[j].token))
+}
+
+/**
+ * Put right anything that breaks the rule.
+ *
+ * Needed as well as the care taken when laying blocks out, because the board
+ * does not stay as it was laid out: every find crushed drops the blocks above
+ * it down a place and fills the top with new ones, and a new block knows
+ * nothing about what it has landed next to. Most of the nonsense that was
+ * reported came from there rather than from the opening board.
+ *
+ * Blocks that are part of something findable are left alone — putting a board
+ * right must never take away the thing the player was about to spot.
+ */
+export function tidy(cells: Cell[], band: Band, rng: Rng, hunt: Hunt): void {
+  if (hunt === 'runs') {
+    // A sequences chamber has no signs at all, so there is nothing to arrange.
+    for (let i = 0; i < CELLS; i++) {
+      if (isSign(cells[i].token)) cells[i] = { ...cells[i], token: filler(band, rng, hunt) }
+    }
+    return
+  }
+  const safe = new Set(wanted(cells, hunt).flatMap((it) => it.cells))
+  for (let i = 0; i < CELLS; i++) {
+    if (!isSign(cells[i].token) || safe.has(i)) continue
+    if (signFits(cells, i)) continue
+    cells[i] = { ...cells[i], token: filler(band, rng, hunt) }
+  }
+  /*
+   * And at most one equals sign to a row and to a column, so that reading the
+   * whole of one is reading one claim rather than a chain of them. The spare
+   * becomes an operator rather than a number: the shape of the board stays as
+   * it was and only the claim goes.
+   */
+  for (const line of lines()) {
+    let seen = false
+    for (const i of line) {
+      if (cells[i].token.kind !== 'eq') continue
+      if (!seen) { seen = true; continue }
+      if (safe.has(i)) continue
+      cells[i] = { ...cells[i], token: op(rng.pick(band.ops)) }
+    }
+  }
+}
+
+/** Whether two blocks say exactly the same thing. */
+function same(a: Token | undefined, b: Token): boolean {
+  if (!a) return false
+  if (a.kind !== b.kind) return false
+  if (a.kind === 'num' && b.kind === 'num') return a.n === b.n
+  if (a.kind === 'op' && b.kind === 'op') return a.op === b.op
+  return a.kind === 'eq'
+}
+
+/** Every row and every column, as lists of blocks. */
+function lines(): number[][] {
+  const out: number[][] = []
+  for (let r = 0; r < ROWS; r++) out.push(Array.from({ length: COLS }, (_, c) => at(c, r)))
+  for (let c = 0; c < COLS; c++) out.push(Array.from({ length: ROWS }, (_, r) => at(c, r)))
+  return out
+}
+
+/** Lay operators over a board of numbers, wherever the rule allows one. */
+function sprinkle(cells: Cell[], band: Band, rng: Rng, spare: ReadonlySet<number>): void {
+  const order = Array.from({ length: CELLS }, (_, i) => i)
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rng.next() * (i + 1))
+    ;[order[i], order[j]] = [order[j], order[i]]
+  }
+  for (const i of order) {
+    if (!spare.has(i)) continue
+    if (rng.next() > SIGN_SHARE) continue
+    if (!signFits(cells, i)) continue
+    const sign = aSign(band, rng)
+    if (sign.kind === 'eq' && !eqFits(cells, i)) continue
+    cells[i] = { ...cells[i], token: sign }
+  }
+}
+
 function roomFor(want: number): number[][] {
   const out: number[][] = []
   for (let row = 0; row < ROWS; row++) {
@@ -147,10 +293,39 @@ function wantedLength(kind: FindKind, band: Band, rng: Rng): number {
  * each other, and the board could come out with one — which is a board a
  * player can be stuck on at the first glance.
  */
+/**
+ * Bend a find until it is wrong, without changing its shape.
+ *
+ * One number moved by a little, so `7 × 6 = 42` becomes `7 × 6 = 43` — still a
+ * sum, still laid out like every other sum on the board, and false.
+ */
+function bend(tokens: readonly Token[], rng: Rng): Token[] | null {
+  const spots = tokens.map((t, i) => (t.kind === 'num' ? i : -1)).filter((i) => i >= 0)
+  for (let go = 0; go < 12; go++) {
+    const where = rng.pick(spots)
+    const was = tokens[where]
+    if (was.kind !== 'num') continue
+    const by = rng.pick([-3, -2, -1, 1, 2, 3])
+    if (was.n + by < 1) continue
+    const bent = [...tokens]
+    bent[where] = num(was.n + by)
+    if (!readLine(bent)) return bent
+  }
+  return null
+}
+
 function plant(
   cells: Cell[], band: Band, rng: Rng, hunt: Hunt, nextId: () => number, taken?: Set<number>,
+  wrong = false,
 ): boolean {
-  for (let go = 0; go < 14; go++) {
+  /*
+   * Plenty of tries. A find has to miss every block already spoken for, keep
+   * its operators off the edge and away from other operators, and put its
+   * equals sign in a row and a column that have not got one — which is a lot
+   * to satisfy by throwing darts, and fourteen throws was not enough once all
+   * of it was true at once.
+   */
+  for (let go = 0; go < 24; go++) {
     const kind = pickKind(band, rng, hunt)
     const want = wantedLength(kind, band, rng)
     const tokens = writeFind(kind, band, want, rng)
@@ -166,31 +341,59 @@ function plant(
      * with another kind and another length — some of which are shorter and do
      * fit.
      */
-    const all = roomFor(tokens.length)
-    const room = taken ? all.filter((run) => run.every((c) => !taken.has(c))) : all
+    /*
+     * Which way round it goes is settled first, before anywhere is chosen.
+     *
+     * It used to be settled last, after the legal places had been worked out
+     * — and mirroring an equation moves its equals sign to a different block,
+     * so the sign was checked in one place and written in another. Which is
+     * why one equals sign to a row, carefully enforced, made no difference to
+     * the number of rows with two of them.
+     */
+    const other = flipped(tokens)
+    const right = other && rng.next() < 0.5 && readLine(other) ? other : tokens
+    if (!readLine(right)) continue
+    /*
+     * A decoy: the same thing, one number out.
+     *
+     * Needed because of what the rest of this does. Once operators only go
+     * where they are legal there is far less room for them, and every equals
+     * sign on the board was part of a true equation 98 times out of 100 — so
+     * the game stopped being arithmetic and became "find the equals sign and
+     * drag round it". A board wants wrong sums on it as much as right ones.
+     */
+    const written = wrong ? bend(right, rng) : right
+    if (!written) continue
+
+    const all = roomFor(written.length)
+    /*
+     * Finds may cross, where they agree.
+     *
+     * A block already spoken for can be shared when both finds want the very
+     * same thing written in it — which in practice means two equations
+     * crossing at a number they happen to have in common, the way words cross
+     * in a crossword. It costs nothing and it is the difference between a
+     * board that holds four answers and one that holds six, because every
+     * other rule here is about keeping finds apart.
+     */
+    const free = taken
+      ? all.filter((run) => run.every((c, k) => !taken.has(c) || same(cells[c].token, written[k])))
+      : all
+    /*
+     * And it has to land somewhere its own operators are legal — off the edge,
+     * and not up against a sign already on the board. A find's own signs are
+     * two apart, so they never argue with each other.
+     */
+    const room = free.filter((where) => {
+      const mine = new Set(where)
+      return where.every((cell, k) => {
+        if (written[k].kind === 'eq' && !eqFits(cells, cell, mine)) return false
+        return !isSign(written[k]) || signFits(cells, cell, mine)
+      })
+    })
     if (room.length === 0) continue
     const where = rng.pick(room)
     if (taken) for (const cell of where) taken.add(cell)
-    /*
-     * Written backwards half the time — but only when backwards is still true.
-     *
-     * This reversed the token list outright, and for a sequence that is fine
-     * (a run of doubles read the other way is a run of halves). For an
-     * equation it is a disaster: `70 ÷ 7 = 10` reversed is `10 = 7 ÷ 70`,
-     * which is false, and the same goes for every take-away and every power.
-     * Roughly half of every planted sum that used −, ÷ or ^ was a wrong
-     * answer printed on the board — which is most of the reason the boards
-     * were hard to find anything on, and it was invisible because a false
-     * equation looks exactly like a true one until you do the arithmetic.
-     *
-     * An equation is mirrored about its equals sign instead, which swaps the
-     * sides and leaves each side's own order alone. And whichever way round it
-     * ends up, it is read back before it is written down: nothing is planted
-     * that the game cannot then find.
-     */
-    const other = flipped(tokens)
-    const written = other && rng.next() < 0.5 && readLine(other) ? other : tokens
-    if (!readLine(written)) continue
     for (const [i, cell] of where.entries()) {
       cells[cell] = { token: written[i], lift: cells[cell]?.lift ?? 0, shake: 0, id: nextId() }
     }
@@ -209,10 +412,22 @@ export function newRun(level = 1, rating = 1000, lives = LIVES, score = 0, seed 
     token: filler(band, rng, hunt), lift: 0, shake: 0, id: next(),
   }))
   const taken = new Set<number>()
-  for (let i = 0; i < PLANTED; i++) plant(cells, band, rng, hunt, next, taken)
-  // And then checked, rather than assumed: planting six does not mean six
-  // survive, and the board that is handed over is the one that has to hold the
-  // promise.
+  /*
+   * The right ones first, up to the promise, then right and wrong together.
+   *
+   * Order matters because the board fills up: sixty-three blocks hold about
+   * eight finds of five blocks each, and after that nothing else goes on. Wrong
+   * sums laid last never landed at all — nought out of five on two boards in
+   * three. Laid first they crowded out the real answers instead. So the floor
+   * is secured first and everything after it is shared out.
+   */
+  for (let go = 0; go < 24 && wanted(cells, hunt).length < LEAST_FINDS + 1; go++) {
+    plant(cells, band, rng, hunt, next, taken)
+  }
+  for (let i = 0; i < PLANTED; i++) {
+    plant(cells, band, rng, hunt, next, taken, hunt === 'sums' && i % 2 === 0)
+  }
+
   /*
    * `continue`, not `break`.
    *
@@ -223,6 +438,21 @@ export function newRun(level = 1, rating = 1000, lives = LIVES, score = 0, seed 
   for (let go = 0; go < 40 && wanted(cells, hunt).length < LEAST_FINDS; go++) {
     plant(cells, band, rng, hunt, next, taken)
   }
+  /*
+   * The operators go on last, into whatever is left.
+   *
+   * They used to be rolled per block before anything else, which is why the
+   * board could hand you `11 + + 39 = 5 8`: a block cannot tell whether it is
+   * allowed to be an operator without looking at its neighbours, and nothing
+   * was looking.
+   */
+  if (hunt === 'sums') {
+    const spare = new Set(
+      Array.from({ length: CELLS }, (_, i) => i).filter((i) => !taken.has(i)),
+    )
+    sprinkle(cells, band, rng, spare)
+  }
+  tidy(cells, band, rng, hunt)
 
   return {
     level,
@@ -317,14 +547,33 @@ export function distinctly(
   found: { cells: number[]; find: Find }[],
 ): { cells: number[]; find: Find }[] {
   const out: { cells: number[]; find: Find }[] = []
-  const used = new Set<number>()
   for (const it of [...found].sort((a, b) => b.cells.length - a.cells.length)) {
-    if (it.cells.some((c) => used.has(c))) continue
-    for (const c of it.cells) used.add(c)
+    /*
+     * Two finds are the same answer only when they lie along the same line.
+     *
+     * Overlapping was the test at first, and it is wrong in a way that only
+     * showed up when finds were allowed to cross: an equation running across
+     * and an equation running down, sharing the one number they have in
+     * common, are two answers and not one — the way two words crossing in a
+     * crossword are two words. Counting them as one made a board that held
+     * six look like a board that held four, and made crossing look like a
+     * change for the worse when it was a change for the better.
+     */
+    const mineRow = sameRow(it.cells)
+    if (out.some((kept) => sameRow(kept.cells) === mineRow
+      && onSameLine(kept.cells, it.cells, mineRow)
+      && it.cells.some((c) => kept.cells.includes(c)))) continue
     out.push(it)
   }
   return out
 }
+
+/** Whether a find runs across rather than down. */
+const sameRow = (cells: number[]): boolean => cells.every((c) => rowOf(c) === rowOf(cells[0]))
+
+/** Whether two finds of the same direction sit on the very same line. */
+const onSameLine = (a: number[], b: number[], across: boolean): boolean =>
+  across ? rowOf(a[0]) === rowOf(b[0]) : colOf(a[0]) === colOf(b[0])
 
 /**
  * Make sure there is something to find.
@@ -456,8 +705,10 @@ export const worthOf = (length: number, streak: number): number =>
  * the two. The first cut asked the board where a block was *while* rewriting
  * the board, which is a question with no answer once the first one has moved.
  */
-function collapse(run: Run, gone: number[], rng: Rng): void {
+/** Drops what is above the gap, fills the top, and says which blocks are new. */
+function collapse(run: Run, gone: number[], rng: Rng): Set<number> {
   const dead = new Set(gone)
+  const made = new Set<number>()
   for (let col = 0; col < COLS; col++) {
     const kept: { cell: Cell; from: number }[] = []
     for (let row = ROWS - 1; row >= 0; row--) {
@@ -478,9 +729,11 @@ function collapse(run: Run, gone: number[], rng: Rng): void {
           shake: 0,
           id: run.nextId++,
         }
+        made.add(at(col, row))
       }
     }
   }
+  return made
 }
 
 /** The finger coming up: the moment a selection is judged. */
@@ -541,7 +794,7 @@ export function release(run: Run): Run {
     life: 2.6,
   }
 
-  collapse(next, gone, rng)
+  const made = collapse(next, gone, rng)
 
   next.water = Math.max(0, next.water - gone.length * DRAIN_PER_BLOCK)
   next.left = Math.max(0, next.left - gone.length)
@@ -556,7 +809,16 @@ export function release(run: Run): Run {
   next.events.push(find.length >= 7 ? 'big' : 'crush')
   if (next.streak > 1) next.events.push('combo')
   if (next.water === 0) next.events.push('drain')
+  /*
+   * New blocks arrive as plain numbers, and then the ones that are allowed to
+   * be operators are picked out — the same way the opening board is built, and
+   * for the same reason. Refills are where most of the nonsense came from: a
+   * block dropped in from the top knows nothing about what it has landed next
+   * to.
+   */
+  if (next.hunt === 'sums') sprinkle(next.cells, next.band, rng, made)
   if (keepPromise(next, rng)) next.events.push('planted')
+  tidy(next.cells, next.band, rng, next.hunt)
 
   if (next.left === 0) {
     next.status = 'saved'

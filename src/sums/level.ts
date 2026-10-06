@@ -211,21 +211,30 @@ export function writeFind(
  * glance without doing any arithmetic.
  */
 export function filler(band: Band, rng: Rng, hunt: Hunt = 'sums'): Token {
-  const roll = rng.next()
-  /*
-   * A sequences chamber has no equals signs anywhere on it, and no operators
-   * either — nothing but numbers.
-   *
-   * Which is the clearest way of saying what the chamber wants, because it is
-   * said by the board rather than by a label: a wall of plain numbers is a
-   * wall you read as runs. Put one equals sign on it and the eye starts
-   * looking for sums again.
-   */
-  if (hunt === 'runs') return num(rng.int(1, band.most))
-  if (roll < 0.17) return op(rng.pick(band.ops))
-  if (roll < 0.24) return EQ
+  // Kept for the board's plain blocks. A sequences chamber is nothing but
+  // these; a sums chamber gets its operators laid on afterwards, by hand,
+  // because where an operator may go is not a thing you can decide one block
+  // at a time. See `sprinkle` in `run.ts`.
+  void hunt
   return num(rng.int(1, band.most))
 }
+
+/** An operator or an equals sign, for the blocks that are allowed one. */
+export function aSign(band: Band, rng: Rng): Token {
+  return rng.next() < 0.6 ? EQ : op(rng.pick(band.ops))
+}
+
+/**
+ * How many of the blocks that could hold an operator actually hold one.
+ *
+ * Lower than it was. A quarter of every block on the board used to be an
+ * operator or an equals sign, dropped in one block at a time with no thought
+ * for its neighbours, which is how `11 + + 39 = 5 8` got onto the board —
+ * measured at seven clumps and seven edge-signs per board. Operators now only
+ * go where they have a number on all four sides, and there is simply less room
+ * for them once that is true.
+ */
+export const SIGN_SHARE = 0.6
 
 /**
  * What this chamber is asking for.
@@ -271,7 +280,32 @@ export const HUNT_SAYS: Record<Hunt, { name: string; wants: string; like: string
  * there with exactly two answers on it while the water came up, and hunting
  * for the only sum in sixty-three blocks is a puzzle rather than a game.
  */
-export const PLANTED = 6
+/**
+ * How many finds are written into a fresh board.
+ *
+ * Nine attempted, of which five or six survive: every rule about where a find
+ * may go — off the edge, clear of other operators, one equals sign to a row
+ * and one to a column — turns some attempts down, and finds may now cross each
+ * other where they agree, so attempting more is cheap and lands more.
+ */
+/**
+ * How many finds are laid down once the promise of four is already met, and
+ * half of them are wrong on purpose.
+ *
+ * Measured, after the operators were put in order: with signs only where they
+ * are legal there is far less room for them, and 98 of every 100 equals signs
+ * ended up inside a true equation — so the game would have stopped being
+ * arithmetic and become "find the equals sign and drag round it", which is the
+ * same fault the hints had. Wrong sums bring that to about four in five.
+ *
+ * It does not go lower without going below the promised number of right ones,
+ * and that is a limit of the board rather than of the trying: sixty-three
+ * blocks hold about six statements of five blocks each, and every one that is
+ * wrong is one that is not right.
+ */
+export const PLANTED = 8
+
+
 
 /** The promise: there is always at least this many findable things. */
 export const LEAST_FINDS = 4

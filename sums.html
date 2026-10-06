@@ -4,17 +4,19 @@
 <div id="pad" style="display:flex;gap:8px;flex-wrap:wrap"></div>
 <script type="module">
 import '/src/index.css'
-import { newRun } from '/src/sums/run.ts'
+import { newRun, step } from '/src/sums/run.ts'
 import { drawRun } from '/src/sums/draw.ts'
 
 const pad = document.getElementById('pad')
-for (const level of [1, 2, 11, 12]) {
+for (const level of [1, 11]) {
   const box = document.createElement('div')
   const c = document.createElement('canvas')
   c.width = 420; c.height = 760
   box.appendChild(c)
   pad.appendChild(box)
-  const run = newRun(level, 1300, 3, 0, 7)
+  let run = newRun(level, 1300, 3, 0, 7)
+  // Played for a few seconds, since refills are where the nonsense came from.
+  for (let t = 0; t < 6; t += 1 / 60) run = step(run, 1 / 60)
   drawRun(c.getContext('2d'), run, { w: c.width, h: c.height, clock: 1.2 })
 }
 window.__ready = true
