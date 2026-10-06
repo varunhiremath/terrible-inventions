@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  BLOWN, CREATURES, GARDENS, GOAL_GOT, GOAL_SAYS, HIDE_FOR, KINDS, NEW_LENGTH, PREY,
+  BLOWN, CREATURES, DASH_FOR, GARDENS, GOAL_GOT, GOAL_SAYS, HIDE_FOR, KINDS, NEW_LENGTH, PREY,
   PREY_COUNT, ROSTER, SPECIES, SPEED, SPRINT, STANDOFF, gardenFor, openingLength,
 } from './level'
 import {
@@ -717,5 +717,105 @@ describe('the shape of the forest', () => {
     for (const s of run.snakes.slice(1)) {
       expect(s.alive, `${s.who?.name} died on the fence`).toBe(true)
     }
+  })
+})
+
+/**
+ * Hunting has to pay.
+ *
+ * Reported from play: "I ate plenty but I keep shrinking rather than growing."
+ * It was the sprint. It was paid for in length, at 1.4 a second, which was a
+ * fair price when the only reason to sprint was to get away from a bigger
+ * snake — and stopped being fair the moment the creatures were made to run
+ * properly, because then the game started asking you to chase. Measured over a
+ * minute of hunting: eating brought in 12.8 and the sprinting done to catch it
+ * took 13.3.
+ */
+describe('the sprint', () => {
+  /** A hunter. `keen` holds the sprint down while closing on something. */
+  const hunt = (run: Run, keen: boolean) => {
+    const you = run.snakes[0]
+    const head = headOf(you)
+    let best = -Infinity
+    let want = you.heading
+    let near = Infinity
+    for (const p of run.prey) {
+      const gap = Math.hypot(p.x - head.x, p.y - head.y)
+      near = Math.min(near, gap)
+      const worth = (CREATURES[p.kind].feeds * (p.big ? 2 : 1)) / (0.4 + gap)
+      if (worth > best) { best = worth; want = Math.atan2(p.y - head.y, p.x - head.x) }
+    }
+    return { x: Math.cos(want), y: Math.sin(want), dash: keen && near < 3.5 }
+  }
+
+  const minute = (keen: boolean): number => {
+    let grew = 0
+    for (let seed = 1; seed <= 6; seed++) {
+      let run = newRun(1, seed, { rivals: 0, goal: 'last', want: 1e6 })
+      const was = run.snakes[0].length
+      for (let t = 0; t < 60; t += FIXED) run = step(run, hunt(run, keen), FIXED)
+      grew += run.snakes[0].length - was
+    }
+    return grew / 6
+  }
+
+  it('leaves a snake longer than it started, chase or no chase', () => {
+    const steady = minute(false)
+    const chasing = minute(true)
+    expect(steady, `a steady hunter went ${steady.toFixed(1)} in a minute`).toBeGreaterThan(4)
+    expect(chasing, `a chasing hunter went ${chasing.toFixed(1)} in a minute`).toBeGreaterThan(4)
+  }, 60_000)
+
+  it('is worth using: it brings in more food than plodding does', () => {
+    /*
+     * Measured on food rather than on net length, which is the honest way
+     * round. A chasing hunter catches far more and gives a little of it back
+     * in loops closed by accident while turning hard at speed — that is the
+     * ring rule working, not the sprint failing. What was broken was that
+     * chasing left you *shorter than you started*, which it no longer does.
+     */
+    const caught = (keen: boolean): number => {
+      let ate = 0
+      for (let seed = 1; seed <= 6; seed++) {
+        let run = newRun(1, seed, { rivals: 0, goal: 'last', want: 1e6 })
+        for (let t = 0; t < 60; t += FIXED) run = step(run, hunt(run, keen), FIXED)
+        ate += run.ate
+      }
+      return ate / 6
+    }
+    const plodding = caught(false)
+    const chasing = caught(true)
+    expect(chasing, `chasing caught ${chasing.toFixed(0)}, plodding caught ${plodding.toFixed(0)}`)
+      .toBeGreaterThan(plodding * 1.2)
+  }, 60_000)
+
+  it('runs out while it is held, and comes back when it is not', () => {
+    let run = newRun(1, 2, { rivals: 0, food: 0, charms: 0, hedges: 0, burrows: 0, goal: 'last', want: 1e6 })
+    expect(run.snakes[0].puff).toBe(DASH_FOR)
+    for (let t = 0; t < DASH_FOR + 0.3; t += FIXED) {
+      run = step(run, { x: 1, y: 0, dash: true }, FIXED)
+    }
+    expect(run.snakes[0].puff, 'the sprint never ran out').toBe(0)
+    for (let t = 0; t < 4; t += FIXED) run = step(run, { x: 1, y: 0, dash: false }, FIXED)
+    expect(run.snakes[0].puff, 'it never came back').toBe(DASH_FOR)
+  })
+
+  it('costs no length at all, which is the whole of the fix', () => {
+    let run = newRun(1, 2, { rivals: 0, food: 0, charms: 0, hedges: 0, burrows: 0, goal: 'last', want: 1e6 })
+    const was = run.snakes[0].length
+    for (let t = 0; t < DASH_FOR; t += FIXED) run = step(run, { x: 1, y: 0, dash: true }, FIXED)
+    expect(run.snakes[0].length, 'sprinting still eats the snake').toBeCloseTo(was, 5)
+  })
+
+  it('actually gets you somewhere faster', () => {
+    // The control: if the sprint did nothing, everything above would pass and
+    // the charm would be worthless.
+    const far = (dash: boolean) => {
+      let run = newRun(1, 2, { rivals: 0, food: 0, charms: 0, hedges: 0, burrows: 0, goal: 'last', want: 1e6 })
+      const from = headOf(run.snakes[0])
+      for (let t = 0; t < DASH_FOR; t += FIXED) run = step(run, { x: 1, y: 0, dash }, FIXED)
+      return dist(from, headOf(run.snakes[0]))
+    }
+    expect(far(true)).toBeGreaterThan(far(false) * 1.3)
   })
 })

@@ -6,9 +6,12 @@
  * and dragging from it steers. A stick that appears where the thumb lands
  * beats one painted in a fixed spot, because a thumb cannot see.
  *
- * Pushing it right over also dashes, so there is nothing else to press. The
- * dash costs length, which is the only reason it is safe to give away for
- * free on the same control as the steering.
+ * Pushing it right over also sprints, so there is nothing else to press. The
+ * sprint runs out while it is held and comes back when it is not, which is
+ * what makes it safe to give away free on the same control as the steering —
+ * a thumb that shoves the stick over without meaning to loses a second and a
+ * half of sprint and nothing else. It used to be paid for in length, and that
+ * turned out to be a bill the player could not see himself being handed.
  */
 
 export interface Stick {

@@ -8,10 +8,11 @@
  * them are things you can see in a screenshot after the fact.
  */
 import {
-  ARENA, BEAD, DASH_COST, DASH_SPEED, FROST_SCALE, GIRTH, HEDGE_BEADS, HEDGE_GIRTH, HEDGE_STEP,
+  ARENA, BEAD, DASH_SPEED, FROST_SCALE, GIRTH, HEDGE_BEADS, HEDGE_GIRTH, HEDGE_STEP,
   LEAST_LENGTH, LURE_PULL, LURE_REACH, gardenFor, type Garden,
   NECK, NEW_LENGTH, PREY_COUNT, PICKUP, POWER_LASTS,
-  BLOWN, CREATURES, KINDS, LEAVING, PREY, POWERS, PREY_TURN, RECOVER, REMAINS, ROSTER,
+  BLOWN, CREATURES, DASH_BACK, DASH_FOR, KINDS, LEAVING, PREY, POWERS, PREY_TURN, RECOVER,
+  REMAINS, ROSTER,
   SETTLING, SPEED, SPRINT, STANDOFF, TURN, openingLength,
   BURROW_R, HIDE_AGAIN, HIDE_FOR,
   type Power, type PreyKind, type Rival, type Species,
@@ -71,6 +72,8 @@ export interface Snake {
    */
   want: number
   thinkIn: number
+  /** Seconds of sprint left. Spent by dashing, and it comes back by itself. */
+  puff: number
   /**
    * Down a hole: where, and how long is left of it.
    *
@@ -282,7 +285,7 @@ export function newSnake(
     id, who, kind: who?.kind ?? kind, body, heading,
     length: len,
     alive: true, score: 0, held: {},
-    flash: 0, want: heading, thinkIn: 0, down: null,
+    flash: 0, want: heading, thinkIn: 0, down: null, puff: DASH_FOR,
   }
 }
 
@@ -923,11 +926,17 @@ export function step(run: Run, input: Input, dt: number): Run {
     let pace = SPEED * KINDS[s.kind].speed
     if (!mine && frosted) pace *= FROST_SCALE
     if (mine) {
+      // The charm gives a sprint that never runs out; otherwise it is on the
+      // puff, which empties while you hold it and fills while you do not.
       const free = s.held.dash !== undefined
-      if (free) pace = DASH_SPEED * KINDS[s.kind].speed
-      else if (input.dash && s.length > LEAST_LENGTH + 0.3) {
+      if (free) {
         pace = DASH_SPEED * KINDS[s.kind].speed
-        s.length = Math.max(LEAST_LENGTH, s.length - DASH_COST * dt)
+        s.puff = DASH_FOR
+      } else if (input.dash && s.puff > 0) {
+        pace = DASH_SPEED * KINDS[s.kind].speed
+        s.puff = Math.max(0, s.puff - dt)
+      } else {
+        s.puff = Math.min(DASH_FOR, s.puff + DASH_BACK * dt)
       }
     }
     advance(s, pace * dt)

@@ -10,8 +10,8 @@
  * steer by, and the moment the camera pulls back too far the pellets vanish.
  */
 import {
-  BURROW_R, CREATURES, GIRTH, HEDGE_GIRTH, HIDE_AGAIN, HIDE_FOR, KINDS, POWERS, POWER_INK,
-  PICKUP, type Power, type Species,
+  BURROW_R, CREATURES, DASH_FOR, GIRTH, HEDGE_GIRTH, HIDE_AGAIN, HIDE_FOR, KINDS, POWERS,
+  POWER_INK, PICKUP, type Power, type Species,
 } from './level'
 import { bodyOf, fight, girthOf, headOf, type Point, type Run, type Snake } from './run'
 import type { PreyKind } from './level'
@@ -1055,6 +1055,34 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
   drawDark(ctx, cam, view, run.arena)
   drawMap(ctx, run, view)
   drawSaid(ctx, run, view)
+}
+
+/**
+ * How much sprint is left, as a bar.
+ *
+ * It has to be on the screen somewhere. The sprint used to be paid for in
+ * length, which at least you could see happening to your own snake; now it is
+ * paid for with a thing that runs out, and a limit nobody can see is a limit
+ * that feels like the game sticking.
+ */
+export function drawPuff(ctx: Ctx, run: Run, x: number, y: number, w: number): void {
+  const you = run.snakes[0]
+  if (!you) return
+  const full = you.held.dash !== undefined
+  const left = full ? 1 : Math.max(0, Math.min(1, you.puff / DASH_FOR))
+  const h = Math.max(3, w * 0.035)
+  ctx.save()
+  ctx.fillStyle = 'rgba(255,255,255,0.13)'
+  ctx.beginPath()
+  ctx.roundRect(x, y, w, h, h / 2)
+  ctx.fill()
+  // Gold while there is sprint to spend, dim while it is coming back, and a
+  // steady glow while a charm is making it endless.
+  ctx.fillStyle = full ? '#ffe08a' : left > 0.2 ? '#ffc84a' : '#8a6b2a'
+  ctx.beginPath()
+  ctx.roundRect(x, y, Math.max(h, w * left), h, h / 2)
+  ctx.fill()
+  ctx.restore()
 }
 
 /** The powers in hand, as a row of charms with the time left on each. */

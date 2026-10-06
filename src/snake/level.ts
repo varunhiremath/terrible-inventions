@@ -40,8 +40,28 @@ export const TURN = 2.6
 
 /** A boost, while the stick is pushed right over or the button is held. */
 export const DASH_SPEED = 4.3
-/** What a dash costs, in length a second. Nothing is free. */
-export const DASH_COST = 1.4
+
+/**
+ * The sprint runs out instead of costing you your body.
+ *
+ * It used to be paid for in length, at 1.4 a second, and that was a fair price
+ * back when the only reason to sprint was to get away from a bigger snake. It
+ * stopped being fair the moment the creatures were made to run properly: the
+ * good prey is faster than a snake, so the game now asks you to chase, and
+ * then charged you for chasing.
+ *
+ * Measured over a minute of hunting: eating brought in 12.8 and the sprinting
+ * done to catch it took 13.3 — so a player who chased everything ate plenty
+ * and got shorter, which is exactly what was reported. The sprint was not even
+ * buying much food; it won about one extra unit for that thirteen.
+ *
+ * So it works the way a rabbit's does now, which is the same rule the player
+ * can already watch happening to the rabbits: go flat out, run out of puff,
+ * get it back by not sprinting. Nothing is free — what it costs is that you
+ * cannot do it again for a moment.
+ */
+export const DASH_FOR = 1.6
+export const DASH_BACK = 0.55
 
 /** How far apart the beads of a body are, and how fat one is. */
 export const BEAD = 0.14
@@ -321,7 +341,7 @@ export const POWER_LASTS: Record<Power, number> = {
 }
 
 export const POWER_SAYS: Record<Power, { name: string; says: string }> = {
-  dash: { name: 'Quick', says: 'Faster, and the dash costs nothing.' },
+  dash: { name: 'Quick', says: 'Sprint as long as you like. It never runs out.' },
   ghost: { name: 'Ghost', says: 'Straight through anybody. Including yourself.' },
   lure: { name: 'Lure', says: 'Food comes to you.' },
   frost: { name: 'Frost', says: 'Everybody else slows right down.' },

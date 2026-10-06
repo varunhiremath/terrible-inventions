@@ -8,7 +8,7 @@ import {
   type Input, type Run, type SnakeEvent, type Status,
 } from '../snake/run'
 import { STILL, aimOf, aimOfKeys, knobOf, stickReach, type Aim, type Stick } from '../snake/controls'
-import { INK, drawHeld, drawRun, drawSwatch, type View } from '../snake/draw'
+import { INK, drawHeld, drawPuff, drawRun, drawSwatch, type View } from '../snake/draw'
 import { playCue, setHeat } from '../music/player'
 import type { CueName } from '../music/score'
 import { createPacer } from '../arcade/pacing'
@@ -273,6 +273,7 @@ export function Snake() {
           ctx.restore()
         }
 
+        drawPuff(ctx, next, w * 0.06, h * 0.885, w * 0.3)
         drawHeld(ctx, next, w * 0.06, h * 0.93, Math.max(10, Math.min(w, h) * 0.028))
       }
 
