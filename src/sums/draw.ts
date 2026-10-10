@@ -9,7 +9,7 @@
  * an equals — which helps the eye find the shape of a line and gives nothing
  * away, because whether `2 + 3 = 5` is true is not a fact about its blocks.
  */
-import { COLS, HUNT_SAYS, ROWS, colOf, rowOf, type Soul } from './level'
+import { COLS, HUNT_SAYS, ROWS, colOf, perilFor, rowOf, type Soul } from './level'
 import type { Token } from './find'
 import { blastOf, type Run } from './run'
 
@@ -202,23 +202,30 @@ function drawChamber(ctx: Ctx, run: Run, x: number, y: number, s: number, clock:
     Math.min(1, run.water / 0.9), clock,
   )
 
-  // The water, with a surface that moves.
+  /*
+   * Whatever he is in this chamber, with a surface that moves.
+   *
+   * The same rising shape for all four, drawn in that peril's colours and at
+   * that peril's liveliness — flames jump about and go fast, sand barely moves
+   * at all, which is what makes sand the frightening one.
+   */
+  const peril = perilFor(run.level)
   const top = floor - gh * run.water
   if (run.water > 0.001) {
     const grad = ctx.createLinearGradient(0, top, 0, floor)
-    grad.addColorStop(0, INK.waterLit)
-    grad.addColorStop(1, INK.water)
+    grad.addColorStop(0, peril.top)
+    grad.addColorStop(1, peril.deep)
     ctx.globalAlpha = 0.62
     ctx.fillStyle = grad
     ctx.beginPath()
     ctx.moveTo(gx, top)
-    const swell = s * 0.055
+    const swell = s * 0.055 * peril.swell
     for (let i = 0; i <= 24; i++) {
       const t = i / 24
       const px = gx + gw * t
       const py = top
-        + Math.sin(clock * 2.2 + t * 7) * swell
-        + Math.sin(clock * 3.7 + t * 13) * swell * 0.4
+        + Math.sin(clock * 2.2 * peril.churn + t * 7) * swell
+        + Math.sin(clock * 3.7 * peril.churn + t * 13) * swell * 0.4
       ctx.lineTo(px, py)
     }
     ctx.lineTo(gx + gw, floor)
@@ -262,7 +269,7 @@ function drawChamber(ctx: Ctx, run: Run, x: number, y: number, s: number, clock:
   const px = gx + gw * 0.82
   ctx.fillStyle = INK.stoneLit
   ctx.fillRect(px - s * 0.14, y - s * 0.02, s * 0.28, pad + s * 0.1)
-  ctx.strokeStyle = INK.waterLit
+  ctx.strokeStyle = peril.top
   ctx.lineWidth = Math.max(1, s * 0.05)
   ctx.globalAlpha = 0.5 + 0.3 * Math.sin(clock * 9)
   ctx.beginPath()
@@ -274,7 +281,7 @@ function drawChamber(ctx: Ctx, run: Run, x: number, y: number, s: number, clock:
   // And the drain, which runs while the banner from the last find is still up
   // — so the water going somewhere is visibly the find's doing.
   const drain = run.said !== null && run.said.life > 0.4
-  ctx.fillStyle = drain ? INK.waterLit : INK.stoneLit
+  ctx.fillStyle = drain ? peril.top : INK.stoneLit
   ctx.fillRect(gx + gw * 0.1, floor - s * 0.08, s * 0.4, s * 0.1)
 }
 
@@ -405,6 +412,38 @@ function drawCell(
   ctx.fillStyle = cell.token.kind === 'eq' ? '#141822' : INK.chalk
   ctx.fillText(words, x + w / 2, y + h / 2)
   ctx.globalAlpha = 1
+
+  /*
+   * A spark, drawn round the block rather than over it.
+   *
+   * It has to be unmissable from across the room and it must not get in the
+   * way of the number, because the number is still the thing being read — the
+   * spark rides on an ordinary block and the sum it is part of is an ordinary
+   * sum. So: a turning ring of light outside the block, and a warm glow behind
+   * the digits.
+   */
+  if (cell.spark) {
+    ctx.save()
+    ctx.translate(x + w / 2, y + h / 2)
+    const beat = 0.75 + 0.25 * Math.sin(clock * 5)
+    ctx.globalAlpha = 0.33 * beat
+    ctx.fillStyle = '#ffd166'
+    ctx.beginPath()
+    ctx.arc(0, 0, w * 0.46, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = beat
+    ctx.strokeStyle = '#ffd166'
+    ctx.lineWidth = Math.max(1.5, s * 0.045)
+    ctx.rotate(clock * 1.6)
+    // Four short arcs rather than a circle, so it reads as turning.
+    for (let k = 0; k < 4; k++) {
+      ctx.beginPath()
+      ctx.arc(0, 0, w * 0.56, k * Math.PI / 2, k * Math.PI / 2 + 0.75)
+      ctx.stroke()
+    }
+    ctx.restore()
+    ctx.globalAlpha = 1
+  }
 }
 
 /**

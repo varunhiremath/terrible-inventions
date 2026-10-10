@@ -359,7 +359,7 @@ const TILES: Tile[] = [
   },
   {
     id: 'sums',
-    title: 'Papa Drowning!',
+    title: 'Papa in Trouble!',
     blurb: 'Drag a line that is true. He is in the tank.',
     tint: '#070b14',
     emblem(ctx, w, h) {

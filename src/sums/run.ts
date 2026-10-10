@@ -14,7 +14,9 @@
  */
 import {
   CELLS, COLS, DRAIN_PER_BLOCK, LEAST_FINDS, LIVES, MOST_COMBO, OFF_HUNT, PLANTED, RISE,
-  RISE_MOST, RISE_PER_LEVEL, ROWS, SIGN_SHARE, SURGE, TO_CLEAR, WORTH, aSign, at, bandFor,
+  RISE_MOST, RISE_PER_LEVEL, ROWS, SIGN_SHARE, SPARK_AT, SPARK_DRAIN, SPARK_WORTH, STARTS_AT,
+  NEVER_BELOW, SURGE,
+  TO_CLEAR, WORTH, aSign, at, bandFor,
   colOf,
   filler, huntFor, rowOf, soulFor, writeFind, type Band, type Hunt, type Soul,
 } from './level'
@@ -27,16 +29,18 @@ export const FIXED = 1 / 60
 
 export type FloodEvent =
   | 'grab' | 'stretch' | 'crush' | 'big' | 'combo' | 'miss' | 'drain' | 'saved' | 'soaked'
-  | 'over' | 'settle' | 'planted'
+  | 'over' | 'settle' | 'planted' | 'spark' | 'blast' | 'both'
 
 /** Loudest first, so a frame with several things in it makes one noise. */
 export const LOUDEST: readonly FloodEvent[] = [
-  'over', 'saved', 'soaked', 'big', 'combo', 'crush', 'miss', 'planted', 'drain', 'grab',
-  'stretch', 'settle',
+  'over', 'saved', 'soaked', 'both', 'blast', 'big', 'combo', 'spark', 'crush', 'miss', 'planted',
+  'drain', 'grab', 'stretch', 'settle',
 ]
 
 export interface Cell {
   token: Token
+  /** A spark riding on this block. See `SPARK_AT` for what one does. */
+  spark?: boolean
   /** How far above its place it still is, in rows. Nought is settled. */
   lift: number
   /** Counts down after a selection that was not a find, so it can shake. */
@@ -237,6 +241,9 @@ function sprinkle(cells: Cell[], band: Band, rng: Rng, spare: ReadonlySet<number
   }
   for (const i of order) {
     if (!spare.has(i)) continue
+    // Never onto a spark: a spark rides on a number, and one sitting on an
+    // operator would be a block that is both the sum and the prize.
+    if (cells[i].spark) continue
     if (rng.next() > SIGN_SHARE) continue
     if (!signFits(cells, i)) continue
     const sign = aSign(band, rng)
@@ -394,9 +401,22 @@ function plant(
      * board that holds four answers and one that holds six, because every
      * other rule here is about keeping finds apart.
      */
-    const free = taken
-      ? all.filter((run) => run.every((c, k) => !taken.has(c) || same(cells[c].token, written[k])))
-      : all
+    /*
+     * A find may run through a spark, and that is the point of one.
+     *
+     * The first cut forbade it, to stop a find planted on top of a spark
+     * wiping it out — and that also stopped the game ever laying a find that
+     * used one. Measured over nine finds a chamber: the spark was taken into a
+     * find exactly never, so the whole thing was decoration.
+     *
+     * So a placement may cover a spark as long as the block it writes there is
+     * a number, and the spark is kept when it is written. A spark sits on a
+     * number and is offered up inside the next sum that crosses it.
+     */
+    const free = all.filter((run) => run.every((c, k) => {
+      if (cells[c]?.spark && written[k].kind !== 'num') return false
+      return !taken || !taken.has(c) || same(cells[c].token, written[k])
+    }))
     /*
      * And it has to land somewhere its own operators are legal — off the edge,
      * and not up against a sign already on the board. A find's own signs are
@@ -410,10 +430,26 @@ function plant(
       })
     })
     if (room.length === 0) continue
-    const where = rng.pick(room)
+    /*
+     * Where there is a spark, lay the find through it.
+     *
+     * Left to chance a spark was taken into a find about once a chamber, which
+     * is not a rhythm, it is an accident. The board should be *offering* the
+     * thing — here is a sum, and it happens to run straight through the spark
+     * you left yourself. That is the moment the whole idea is for.
+     */
+    const over = room.filter((run) => run.some((c) => cells[c]?.spark))
+    const where = rng.pick(over.length > 0 && rng.next() < 0.75 ? over : room)
     if (taken) for (const cell of where) taken.add(cell)
     for (const [i, cell] of where.entries()) {
-      cells[cell] = { token: written[i], lift: cells[cell]?.lift ?? 0, shake: 0, id: nextId() }
+      cells[cell] = {
+        token: written[i],
+        lift: cells[cell]?.lift ?? 0,
+        shake: 0,
+        id: nextId(),
+        // Kept: a find laid over a spark uses it, it does not rub it out.
+        ...(cells[cell]?.spark ? { spark: true } : {}),
+      }
     }
     return true
   }
@@ -493,7 +529,7 @@ export function newRun(level = 1, rating = 1000, lives = LIVES, score = 0, seed 
     picked: [],
     reading: null,
     said: null,
-    water: 0,
+    water: STARTS_AT,
     left: TO_CLEAR,
     lives,
     score,
@@ -719,9 +755,28 @@ export function reach(run: Run, cell: number): Run {
  * prize in the game could only ever be won downwards, which is a rule nobody
  * would guess and half a game nobody would find.
  */
-export function blastOf(picked: number[]): number[] {
+export function blastOf(picked: number[], cells?: Cell[]): number[] {
   const hit = new Set<number>(picked)
   const flat = picked.length > 1 && rowOf(picked[0]) === rowOf(picked[1])
+
+  /*
+   * Sparks first, because they are the big part.
+   *
+   * One takes the row and the column it stands in. Two or more taken together
+   * take the rows and columns either side as well — which is the moment worth
+   * playing for, and the reason to leave a spark lying about rather than
+   * spending it the first time a find runs past it.
+   */
+  const sparks = cells ? picked.filter((i) => cells[i].spark) : []
+  const spread = sparks.length > 1 ? 1 : 0
+  for (const i of sparks) {
+    for (let d = -spread; d <= spread; d++) {
+      const row = rowOf(i) + d
+      const col = colOf(i) + d
+      if (row >= 0 && row < ROWS) for (let c = 0; c < COLS; c++) hit.add(at(c, row))
+      if (col >= 0 && col < COLS) for (let r = 0; r < ROWS; r++) hit.add(at(col, r))
+    }
+  }
 
   if (picked.length >= 5) {
     for (const cell of picked) {
@@ -825,7 +880,8 @@ export function release(run: Run): Run {
   }
 
   const rng = makeRng(next.seed)
-  const gone = blastOf(picked)
+  const sparks = picked.filter((i) => next.cells[i].spark).length
+  const gone = blastOf(picked, next.cells)
   next.streak = Math.min(MOST_COMBO, next.streak + 1)
   /*
    * Was this what the chamber asked for?
@@ -836,7 +892,9 @@ export function release(run: Run): Run {
    * deliberately the whole penalty: correct arithmetic is never a miss here.
    */
   const asked = IS_SEQUENCE[find.kind] === (next.hunt === 'runs')
-  const worth = Math.round(worthOf(find.length, next.streak) * (asked ? 1 : OFF_HUNT))
+  const worth = Math.round(
+    worthOf(find.length, next.streak) * (asked ? 1 : OFF_HUNT) * (sparks ? SPARK_WORTH ** sparks : 1),
+  )
   next.score += worth
   next.said = {
     says: find.says,
@@ -847,9 +905,31 @@ export function release(run: Run): Run {
     life: 2.6,
   }
 
+  // Where the find's middle was, so a spark is left in the thick of it rather
+  // than wherever the drag happened to finish.
+  const middle = picked[Math.floor(picked.length / 2)]
   const made = collapse(next, gone, rng)
 
-  next.water = Math.max(0, next.water - gone.length * DRAIN_PER_BLOCK)
+  /*
+   * A long find leaves a spark behind.
+   *
+   * It goes on whatever block has fallen into the middle of where the find
+   * was — so it rides on an ordinary number and the board stays as readable
+   * as it was. Not after a spark has just gone off, or a spark would make
+   * another spark for ever.
+   */
+  if (find.length >= SPARK_AT && sparks === 0) {
+    // On a number, whatever happened to fall into that place — a spark must
+    // never sit on an operator, or the block is both the sum and the prize.
+    const under = next.cells[middle]
+    const token = under.token.kind === 'num' ? under.token : filler(next.band, rng, next.hunt)
+    next.cells[middle] = { ...under, token, spark: true }
+    next.events.push('spark')
+  }
+
+  next.water = Math.max(
+    NEVER_BELOW, next.water - gone.length * DRAIN_PER_BLOCK * (sparks ? SPARK_DRAIN : 1),
+  )
   next.left = Math.max(0, next.left - gone.length)
   /*
    * 'big' means the biggest prize, not merely a long find.
@@ -859,9 +939,24 @@ export function release(run: Run): Run {
    * the length that takes the whole row and column, so that is what gets the
    * noise.
    */
-  next.events.push(find.length >= 7 ? 'big' : 'crush')
+  next.events.push(sparks > 1 ? 'both' : sparks > 0 ? 'blast' : find.length >= 7 ? 'big' : 'crush')
+  if (sparks > 0) {
+    next.said = {
+      ...next.said,
+      says: sparks > 1 ? 'two sparks!' : 'a spark!',
+      line: sparks > 1 ? 'the whole lot goes' : 'the row and the column go',
+    }
+  }
   if (next.streak > 1) next.events.push('combo')
-  if (next.water === 0) next.events.push('drain')
+  /*
+   * Pushed as low as it goes.
+   *
+   * It used to be nought, which cannot happen now that the tank has a floor —
+   * so the noise for having beaten the water right back would simply never
+   * have sounded again, and the only thing that noticed was a test that plays
+   * the game and collects what comes out of it.
+   */
+  if (next.water <= NEVER_BELOW) next.events.push('drain')
   /*
    * New blocks arrive as plain numbers, and then the ones that are allowed to
    * be operators are picked out — the same way the opening board is built, and

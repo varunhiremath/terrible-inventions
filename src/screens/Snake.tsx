@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  ARENA, CREATURES, GARDENS, GOAL_GOT, GOAL_SAYS, KINDS, POWER_SAYS, POWERS, PREY, SPECIES,
+  ARENA, CREATURES, GARDENS, GOAL_GOT, GOAL_SAYS, KINDS, POWERS, PREY, SPECIES,
   gardenFor, type Power, type Species,
 } from '../snake/level'
 import {
@@ -528,4 +528,3 @@ export function Snake() {
 
 /** Exported for the front door's tile, which draws the real thing. */
 export const GARDEN_EDGE = ARENA
-void POWER_SAYS

@@ -1,23 +1,38 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>chambers bench</title></head>
 <body style="margin:0;background:#05060a">
-<div id="pad" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+<div id="pad" style="display:flex;gap:6px;flex-wrap:wrap"></div>
 <script type="module">
 import '/src/index.css'
-import { newRun, step } from '/src/sums/run.ts'
+import { newRun, step, wanted, grab, reach, release } from '/src/sums/run.ts'
 import { drawRun } from '/src/sums/draw.ts'
-
+import { huntFor, perilFor } from '/src/sums/level.ts'
 const pad = document.getElementById('pad')
-for (const level of [1, 11]) {
+// One chamber of each peril, each played until it has sparks on the board.
+for (const level of [1, 2, 3, 4]) {
   const box = document.createElement('div')
+  const tag = document.createElement('p')
+  tag.style.cssText = 'color:#e8ebf5;font:12px ui-monospace;margin:4px'
+  box.appendChild(tag)
   const c = document.createElement('canvas')
-  c.width = 420; c.height = 760
+  c.width = 400; c.height = 740
   box.appendChild(c)
   pad.appendChild(box)
-  let run = newRun(level, 1300, 3, 0, 7)
-  // Played for a few seconds, since refills are where the nonsense came from.
-  for (let t = 0; t < 6; t += 1 / 60) run = step(run, 1 / 60)
-  drawRun(c.getContext('2d'), run, { w: c.width, h: c.height, clock: 1.2 })
+  let run = newRun(level, 1200, 3, 0, 5)
+  run = { ...run, water: 0.45 }
+  // Play a few finds so sparks appear.
+  for (let go = 0; go < 4; go++) {
+    const found = wanted(run.cells, huntFor(level))[0]
+    if (!found) break
+    let on = grab(run, found.cells[0])
+    for (const cell of found.cells.slice(1)) on = reach(on, cell)
+    run = release(on)
+    for (let t = 0; t < 2.2; t += 1 / 60) run = step(run, 1 / 60)
+  }
+  run = { ...run, water: 0.45 }
+  const sparks = run.cells.filter((x) => x.spark).length
+  tag.textContent = `chamber ${level}: ${perilFor(level).says} — ${sparks} sparks`
+  drawRun(c.getContext('2d'), run, { w: c.width, h: c.height, clock: 2.2 })
 }
 window.__ready = true
 </script>

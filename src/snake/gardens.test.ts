@@ -212,7 +212,8 @@ describe('the ring, explained', () => {
   })
 
   it('stops saying it after a couple of seconds', () => {
-    let run = newRun(1, 3, { rivals: 0, food: 0, hedges: 0, goal: 'last', want: 1e6 })
+    // No charms: picking one up says its name now, which is another banner.
+    let run = newRun(1, 3, { rivals: 0, food: 0, charms: 0, hedges: 0, goal: 'last', want: 1e6 })
     run = { ...run, said: { words: 'RINGED ONE!', tint: '#8ad48a', life: 2.2 } }
     for (let t = 0; t < 1; t += FIXED) run = step(run, still, FIXED)
     expect(run.said, 'gone before it could be read').not.toBe(null)

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { makeRng } from '../engine/rng'
 import {
   BANDS, CELLS, COLS, DRAIN_PER_BLOCK, LEAST_FINDS, LIVES, ROWS, SURGE,
-  TO_CLEAR, at, bandFor, colOf, rowOf, writeFind,
+  TO_CLEAR, at, bandFor, colOf, rowOf, writeFind, NEVER_BELOW, STARTS_AT,
 } from './level'
 import { LEAST_FIND, readLine } from './find'
 import {
@@ -159,8 +159,11 @@ describe('letting go', () => {
       const found = firstFind(run)
       if (!found) continue
       const after = take(run, found.cells)
-      const gone = blastOf(found.cells).length
-      expect(after.water, `seed ${seed}`).toBeCloseTo(0.8 - gone * DRAIN_PER_BLOCK, 5)
+      const gone = blastOf(found.cells, run.cells).length
+      // Floored: the tank never drains away entirely now, so a big find takes
+      // the level down to the floor rather than past it.
+      expect(after.water, `seed ${seed}`)
+        .toBeCloseTo(Math.max(NEVER_BELOW, 0.8 - gone * DRAIN_PER_BLOCK), 5)
       expect(after.left).toBe(TO_CLEAR - gone)
       expect(after.score).toBeGreaterThan(0)
       expect(after.said?.length).toBe(found.cells.length)
@@ -255,7 +258,9 @@ describe('letting go', () => {
 
 describe('the water', () => {
   it('comes up on its own and faster every chamber, up to a limit', () => {
-    expect(step(newRun(1), 1).water).toBeCloseTo(riseFor(1))
+    // From empty, because the tank opens part full now and this is about the
+    // rate it climbs, not where it starts.
+    expect(step({ ...newRun(1), water: 0 }, 1).water).toBeCloseTo(riseFor(1))
     expect(riseFor(10)).toBeGreaterThan(riseFor(1))
     expect(riseFor(400)).toBe(riseFor(200))
   })
@@ -335,7 +340,8 @@ describe('a finished run', () => {
     expect(again.status).toBe('playing')
     expect(again.score).toBe(1700)
     expect(again.lives).toBe(2)
-    expect(again.water).toBe(0)
+    // A fresh chamber opens with him already in it.
+    expect(again.water).toBe(STARTS_AT)
     expect(again.left).toBe(TO_CLEAR)
   })
 })
@@ -380,6 +386,27 @@ describe('the noises', () => {
     if (found) watch(take(won, found.cells))
 
     for (const e of raised) expect(LOUDEST, `${e} is not in the order`).toContain(e)
+    /*
+     * And two sparks taken together, set up rather than waited for.
+     *
+     * It is the best thing that happens in this game and it never once
+     * happened by chance in twenty-five rounds of playing, which is the same
+     * trap the garden's fighting noise fell into: a noise that only sounds
+     * when the dice fall right is not tested by hoping they fall right again.
+     */
+    {
+      let run = newRun(1, 1200, 2, 0, 3)
+      const found = firstFind(run)
+      if (found) {
+        for (const cell of found.cells) {
+          run.cells[cell] = { ...run.cells[cell], spark: true }
+        }
+        let on = grab(run, found.cells[0])
+        for (const cell of found.cells.slice(1)) on = reach(on, cell)
+        watch(release(on))
+      }
+    }
+
     expect([...raised].sort()).toEqual([...LOUDEST].sort())
   }, 60_000)
 

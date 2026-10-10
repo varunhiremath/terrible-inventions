@@ -124,7 +124,15 @@ describe('how hard it is', () => {
     const last = late.lived.length === 0 ? 60 : meanOf(late.lived)
     console.log(`  garden 1: ${first.toFixed(0)}s a life · garden 12: ${last.toFixed(0)}s a life`)
     expect(last, 'the twelfth garden is no harder than the first').toBeLessThan(first)
-  }, 60_000)
+    /*
+     * Three minutes, not one.
+     *
+     * It takes longer than it used to for the happiest of reasons: a careful
+     * pilot now survives the whole sixty seconds of the first garden, so the
+     * run plays out in full instead of ending early. A test that measures how
+     * long somebody lives gets slower when they stop dying.
+     */
+  }, 180_000)
 
   it('does not kill anybody in the first second of a life', () => {
     /*

@@ -10,7 +10,7 @@
 import {
   ARENA, BEAD, DASH_SPEED, FROST_SCALE, GIRTH, HEDGE_BEADS, HEDGE_GIRTH, HEDGE_STEP,
   LEAST_LENGTH, LURE_PULL, LURE_REACH, gardenFor, type Garden,
-  NECK, NEW_LENGTH, PREY_COUNT, PICKUP, POWER_LASTS,
+  NECK, NEW_LENGTH, PREY_COUNT, PICKUP, POWER_INK, POWER_LASTS, POWER_SAYS,
   BLOWN, CREATURES, DASH_BACK, DASH_FOR, KINDS, LEAVING, PREY, POWERS, PREY_TURN, RECOVER,
   REMAINS, ROSTER,
   SETTLING, SPEED, SPRINT, STANDOFF, TURN, openingLength,
@@ -142,6 +142,8 @@ export interface Burrow {
 /** A word across the screen about what just happened, and how long it has left. */
 export interface Said {
   words: string
+  /** A smaller line under it, for when the words need explaining. */
+  note?: string
   tint: string
   life: number
 }
@@ -1124,7 +1126,25 @@ export function step(run: Run, input: Input, dt: number): Run {
     next.drops = next.drops.filter((d) => {
       if (Math.hypot(d.x - head.x, d.y - head.y) > PICKUP) return true
       s.held[d.kind] = POWER_LASTS[d.kind]
-      if (s.id === you.id) next.events.push('power')
+      if (s.id === you.id) {
+        next.events.push('power')
+        /*
+         * Say what it was.
+         *
+         * The charms had names and a line each explaining them, written down
+         * and shown to nobody — the import was there with a `void` on it to
+         * keep the compiler quiet. Same complaint as the brick game's charms,
+         * which were a row of small coloured glyphs until they started naming
+         * themselves as they were caught.
+         */
+        const said = POWER_SAYS[d.kind]
+        next.said = {
+          words: said.name.toUpperCase(),
+          note: said.says,
+          tint: POWER_INK[d.kind],
+          life: 2.6,
+        }
+      }
       return false
     })
   }

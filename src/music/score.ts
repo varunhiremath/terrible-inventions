@@ -2511,6 +2511,34 @@ export const FRESH: Track = {
   parts: [{ wave: 'bell', gain: 0.045, sustain: 0.9, pattern: 'E5 A5 C6 ' }],
 }
 
+/** A spark left behind: a small bright ping, so you notice it arrive. */
+export const SPARK: Track = {
+  name: 'Spark',
+  beatsPerMinute: 230,
+  parts: [{ wave: 'bell', gain: 0.07, sustain: 0.8, pattern: 'E5 .  A5 .  ' }],
+}
+
+/** One going off, which takes a row and a column with it. */
+export const SPARK_OFF: Track = {
+  name: 'Spark off',
+  beatsPerMinute: 190,
+  parts: [
+    { wave: 'bell', gain: 0.085, sustain: 1, pattern: 'A4 .  E5 .  A5 .  ' },
+    { wave: 'triangle', gain: 0.075, sustain: 0.7, pattern: 'A2 .  .  .  E3 .  ' },
+  ],
+}
+
+/** Two at once, which is the best thing that happens in this game. */
+export const BOTH: Track = {
+  name: 'Both',
+  beatsPerMinute: 180,
+  parts: [
+    { wave: 'bell', gain: 0.09, sustain: 1, pattern: 'A4 C5 E5 A5 .  .  C6 .  ' },
+    { wave: 'pulse', duty: 0.5, gain: 0.06, sustain: 0.5, pattern: 'A3 .  E4 .  A4 .  .  .  ' },
+    { wave: 'triangle', gain: 0.08, sustain: 1, pattern: 'A2 .  .  .  .  .  .  .  ' },
+  ],
+}
+
 export const FLOOD_CUES = {
   haul: HAUL,
   fresh: FRESH,
@@ -2522,6 +2550,9 @@ export const FLOOD_CUES = {
   under: UNDER,
   allOut: ALL_OUT,
   clack: CLACK,
+  spark: SPARK,
+  sparkOff: SPARK_OFF,
+  bothSparks: BOTH,
 } as const
 
 // --- and the noises a pencil makes -------------------------------------------

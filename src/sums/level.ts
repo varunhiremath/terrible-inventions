@@ -237,6 +237,24 @@ export function aSign(band: Band, rng: Rng): Token {
 export const SIGN_SHARE = 0.6
 
 /**
+ * Sparks: the one thing on the board that is not arithmetic.
+ *
+ * A find of five blocks or more leaves one behind where its middle was. A
+ * spark does nothing by itself and changes nothing about the sum it is sitting
+ * on — it rides on an ordinary number block, so the board stays as readable as
+ * it was. Take it into a find and it goes off, and the whole row and column it
+ * stands in goes with it. Two in one find and the rows and columns either side
+ * go too.
+ *
+ * Which is the part of a matching game that makes somebody lean in: not the
+ * find itself but the thing the find sets up, and then the moment of putting
+ * two of them together on purpose.
+ */
+export const SPARK_AT = 5
+export const SPARK_WORTH = 3
+export const SPARK_DRAIN = 1.8
+
+/**
  * What this chamber is asking for.
  *
  * A board used to hold equations and sequences at once, with no way of telling
@@ -335,9 +353,38 @@ export const OFF_HUNT = 0.6
  * reasoned about — about twenty-five on the first chamber, down to eleven by
  * the tenth, and never under ten however deep it goes.
  */
-export const RISE = 0.009
-export const RISE_PER_LEVEL = 0.0012
-export const RISE_MOST = 0.022
+/**
+ * How much is already in the tank when a chamber opens.
+ *
+ * It used to open empty, and measured over a whole chamber the water sat at
+ * six per cent and peaked at thirteen: Papa stood in a puddle, and the peril
+ * the game is named for was barely on the screen. Every find drained almost
+ * half the tank, so the level slammed to the floor and stayed there.
+ *
+ * Starting it part full costs nothing in difficulty — you still drain faster
+ * than it rises — and it changes what the chamber looks like completely. He is
+ * in it from the first second, and the game is holding it back rather than
+ * waiting for it to begin.
+ */
+export const STARTS_AT = 0.42
+
+/**
+ * And it never drains away entirely.
+ *
+ * A find used to take the level to the floor and leave it there: measured
+ * across a chamber, the water sat at six per cent. So the tank was empty
+ * almost all of the time and the one thing the game is about was invisible.
+ *
+ * The floor costs nothing in difficulty — what can kill you is the top of the
+ * tank, not the bottom — and it means he is always in it. The game stops being
+ * "wait for the water to start" and becomes "hold it down", which is the same
+ * game and reads completely differently.
+ */
+export const NEVER_BELOW = 0.26
+
+export const RISE = 0.005
+export const RISE_PER_LEVEL = 0.0006
+export const RISE_MOST = 0.012
 
 /** What one crushed block takes off the tank. */
 export const DRAIN_PER_BLOCK = 0.022
@@ -353,7 +400,7 @@ export const DRAIN_PER_BLOCK = 0.022
 export const SURGE = 0.012
 
 /** How many blocks have to go before the chamber drains. */
-export const TO_CLEAR = 45
+export const TO_CLEAR = 140
 
 /** Score. Longer finds are worth much more than their length suggests. */
 export const WORTH = 20
@@ -371,6 +418,16 @@ export const LIVES = 3
  *
  * The variety moved to what he says about it on the way out.
  */
+/**
+ * What Papa is in, which changes every chamber.
+ *
+ * The mechanic never changes — a thing rises, and he is got out by finding
+ * sums — so the peril is colour and words rather than new rules. That is
+ * deliberately cheap and it is most of what the chamber feels like: the same
+ * climb reads differently when it is flames instead of water, and a game whose
+ * tenth chamber looks exactly like its first is a game that looks finished
+ * after one.
+ */
 export interface Soul {
   name: string
   coat: string
@@ -385,15 +442,68 @@ export const PAPA: Soul = {
   skin: '#e8b08a',
 }
 
+export interface Peril {
+  /** What is rising, in a word, for the top of the screen. */
+  name: string
+  /** What Papa is doing about it, for the chamber's title. */
+  says: string
+  /** The far side of the stuff, and its surface. */
+  deep: string
+  top: string
+  /** How high the surface rolls, and how fast. */
+  swell: number
+  churn: number
+  /** What he says once he is out of it. */
+  out: readonly string[]
+}
+
+export const PERILS: readonly Peril[] = [
+  {
+    name: 'water',
+    says: 'Papa is drowning',
+    deep: '#1b4f72',
+    top: '#5dade2',
+    swell: 1,
+    churn: 1,
+    out: ['Papa is out, and dripping.', 'Papa is out. He would like a towel.'],
+  },
+  {
+    name: 'fire',
+    says: 'Papa is getting toasted',
+    deep: '#7e2d12',
+    top: '#f0932b',
+    // Flames jump about more than water does, and faster.
+    swell: 2.1,
+    churn: 2.4,
+    out: ['Papa is out, and a bit crispy.', 'Papa is out. He says that explains the smell.'],
+  },
+  {
+    name: 'sand',
+    says: 'Papa is sinking',
+    deep: '#7d6608',
+    top: '#d4ac0d',
+    // Sand barely moves, which is what makes it frightening.
+    swell: 0.3,
+    churn: 0.35,
+    out: ['Papa is out, and full of sand.', 'Papa is out. He will be finding that for weeks.'],
+  },
+  {
+    name: 'jelly',
+    says: 'Papa is stuck',
+    deep: '#145a32',
+    top: '#52be80',
+    swell: 1.4,
+    churn: 0.7,
+    out: ['Papa is out, and sticky.', 'Papa is out. He says it was raspberry.'],
+  },
+]
+
+export const perilFor = (level: number): Peril => PERILS[(level - 1) % PERILS.length]
+
 export const soulFor = (_level: number): Soul => PAPA
 
-/** What he says when he is got out, so a chamber cleared is not one line. */
-export const GOT_OUT: readonly string[] = [
-  'Papa is out, and dripping.',
-  'Papa is out. He says he loosened it.',
-  'Papa is out. He would like a towel.',
-  'Papa is out. He is going to look at that pipe.',
-  'Papa is out. He says he was fine, actually.',
-  'Papa is out. He is not going back in.',
-]
-export const gotOut = (level: number): string => GOT_OUT[(level - 1) % GOT_OUT.length]
+/** What he says when he is got out, which depends on what he was got out of. */
+export const gotOut = (level: number): string => {
+  const peril = perilFor(level)
+  return peril.out[Math.floor((level - 1) / PERILS.length) % peril.out.length]
+}

@@ -1027,6 +1027,14 @@ function drawSaid(ctx: Ctx, run: Run, view: View): void {
   ctx.fillText(said.words, view.w / 2 + size * 0.06, view.h * 0.3 + size * 0.06)
   ctx.fillStyle = said.tint
   ctx.fillText(said.words, view.w / 2, view.h * 0.3)
+  // The smaller line under it, for a charm that needs saying what it does.
+  if (said.note) {
+    ctx.font = `600 ${size * 0.42}px ui-monospace, "SF Mono", Menlo, monospace`
+    ctx.fillStyle = '#05060a'
+    ctx.fillText(said.note, view.w / 2 + size * 0.04, view.h * 0.3 + size * 0.78)
+    ctx.fillStyle = INK.chalk
+    ctx.fillText(said.note, view.w / 2, view.h * 0.3 + size * 0.74)
+  }
   ctx.restore()
 }
 

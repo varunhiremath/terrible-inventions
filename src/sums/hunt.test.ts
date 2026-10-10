@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { COLS, HUNT_SAYS, OFF_HUNT, ROWS, bandFor, huntFor, writeFind, type Hunt } from './level'
+import {
+  COLS, HUNT_SAYS, OFF_HUNT, ROWS, SPARK_AT, bandFor, huntFor, writeFind, type Hunt,
+} from './level'
 import { IS_SEQUENCE, readLine, sayLine } from './find'
 import { makeRng } from '../engine/rng'
 import {
-  distinctly, findsOn, flipped, grab, newRun, reach, release, step, wanted, type Run,
+  blastOf, distinctly, findsOn, flipped, grab, newRun, reach, release, step, wanted, type Run,
 } from './run'
 
 /**
@@ -332,4 +334,113 @@ describe('the board makes sense everywhere', () => {
       expect(mean, `chamber ${level} averages ${mean.toFixed(1)}`).toBeGreaterThanOrEqual(5)
     }
   }, 60_000)
+})
+
+/**
+ * Sparks.
+ *
+ * "Add a special candy to the screen when he finds an equation. Merge multiple
+ * special candies and you crush entire row and column."
+ *
+ * A spark rides on an ordinary number block and changes nothing about the sum
+ * it is in — which matters, because the board was only just put in order and a
+ * special block that broke the arithmetic would undo that.
+ */
+describe('a spark', () => {
+  const take = (run: Run, cells: number[]): Run => {
+    let on = grab(run, cells[0])
+    for (const cell of cells.slice(1)) on = reach(on, cell)
+    return release(on)
+  }
+
+  const anyFind = (run: Run) => wanted(run.cells, huntFor(run.level))[0] ?? findsOn(run.cells, 1)[0]
+
+  it('is left behind by a find of five or more', () => {
+    let left = 0
+    let tried = 0
+    for (let seed = 1; seed <= 20; seed++) {
+      const run = newRun(1, 1000, 3, 0, seed)
+      const found = anyFind(run)
+      if (!found || found.cells.length < SPARK_AT) continue
+      tried++
+      const after = take(run, found.cells)
+      if (after.cells.some((c) => c.spark)) left++
+    }
+    expect(tried, 'no long finds to try').toBeGreaterThan(5)
+    expect(left, `${left} of ${tried} long finds left a spark`).toBe(tried)
+  })
+
+  it('rides on a plain number, so the board still reads as arithmetic', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      let run = newRun(1, 1000, 3, 0, seed)
+      const found = anyFind(run)
+      if (!found || found.cells.length < SPARK_AT) continue
+      run = take(run, found.cells)
+      for (const cell of run.cells) {
+        if (cell.spark) expect(cell.token.kind, 'a spark landed on an operator').toBe('num')
+      }
+    }
+  })
+
+  it('takes its whole row and column when it is crushed', () => {
+    const run = newRun(1, 1000, 3, 0, 4)
+    const found = anyFind(run)
+    expect(found).toBeTruthy()
+    const plain = blastOf(found!.cells, run.cells).length
+    // The same find, with a spark on one of its blocks.
+    const sparked = run.cells.map((c, i) => (i === found!.cells[0] ? { ...c, spark: true } : c))
+    const big = blastOf(found!.cells, sparked).length
+    expect(big, 'the spark took nothing extra').toBeGreaterThan(plain)
+    expect(big).toBeGreaterThanOrEqual(COLS + ROWS - 1)
+  })
+
+  it('takes more when two go off together than the two would on their own', () => {
+    /*
+     * Against the union of what each would take by itself, not against one of
+     * them — which is the test this started as, and it passed with the whole
+     * merging rule taken out. Two sparks in different rows take two rows
+     * whether or not they are doing anything special together, so comparing
+     * two against one proves nothing about the merge.
+     */
+    const run = newRun(1, 1000, 3, 0, 4)
+    const found = anyFind(run)!
+    const first = found.cells[0]
+    const last = found.cells[found.cells.length - 1]
+    const withSpark = (...where: number[]) =>
+      run.cells.map((c, i) => (where.includes(i) ? { ...c, spark: true } : c))
+
+    const apart = new Set([
+      ...blastOf(found.cells, withSpark(first)),
+      ...blastOf(found.cells, withSpark(last)),
+    ])
+    const together = blastOf(found.cells, withSpark(first, last))
+    expect(
+      together.length,
+      `two together took ${together.length}, the two apart ${apart.size}`,
+    ).toBeGreaterThan(apart.size)
+  })
+
+  it('pays more and drains more than the same find without one', () => {
+    const run = newRun(1, 1000, 3, 0, 4)
+    const found = anyFind(run)!
+    const wet = { ...run, water: 0.6 }
+    const plain = take(wet, found.cells)
+    const sparked = take(
+      { ...wet, cells: wet.cells.map((c, i) => (i === found.cells[0] ? { ...c, spark: true } : c)) },
+      found.cells,
+    )
+    expect(sparked.score, 'a spark was worth no more').toBeGreaterThan(plain.score)
+    expect(sparked.water, 'a spark drained no more').toBeLessThan(plain.water)
+  })
+
+  it('does not make another spark out of going off, for ever', () => {
+    const run = newRun(1, 1000, 3, 0, 4)
+    const found = anyFind(run)!
+    const sparked = {
+      ...run,
+      cells: run.cells.map((c, i) => (i === found.cells[0] ? { ...c, spark: true } : c)),
+    }
+    const after = take(sparked, found.cells)
+    expect(after.cells.filter((c) => c.spark).length, 'sparks breeding').toBe(0)
+  })
 })

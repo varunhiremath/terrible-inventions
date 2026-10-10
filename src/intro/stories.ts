@@ -184,7 +184,7 @@ export const STORIES: Record<string, Story> = {
    */
   sums: {
     id: 'sums',
-    title: 'PAPA DROWNING!',
+    title: 'PAPA IN TROUBLE!',
     beats: [
       { seconds: 4.4, scene: 'flood', voice: 'narrator', line: 'A wall of numbers, and Papa in the tank above it.' },
       { seconds: 3.8, scene: 'flood', voice: 'papa', line: 'I was only fixing the pipe! It won!' },

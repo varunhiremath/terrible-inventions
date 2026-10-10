@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { HUNT_SAYS, LIVES, TO_CLEAR, gotOut, huntFor } from '../sums/level'
+import { HUNT_SAYS, LIVES, TO_CLEAR, gotOut, huntFor, perilFor } from '../sums/level'
 import {
   FIXED, LOUDEST, grab, newRun, nextLevel, reach, release, step, tryAgain,
   type FloodEvent, type Run, type Status,
@@ -40,6 +40,9 @@ const NOISE: Record<FloodEvent, CueName> = {
   soaked: 'under',
   over: 'allOut',
   settle: 'clack',
+  spark: 'spark',
+  blast: 'sparkOff',
+  both: 'bothSparks',
 }
 
 interface Hud {
@@ -270,7 +273,7 @@ export function Sums() {
           {String(hud.score).padStart(6, '0')}
         </p>
         <p className="ml-auto font-mono text-[0.68rem] tabular-nums text-dim">
-          chamber {hud.level} ·{' '}
+          {perilFor(hud.level).says} ·{' '}
           <span className="font-bold" style={{ color: HUNT_SAYS[huntFor(hud.level)].tint }}>
             {HUNT_SAYS[huntFor(hud.level)].name}
           </span>{' '}
