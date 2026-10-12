@@ -222,16 +222,17 @@ export function Settings() {
           <p className="text-sm font-bold text-chalk">Relay</p>
           <p className="mt-0.5 text-xs leading-snug text-dim">
             For racing on two devices. They need something in the middle to pass
-            messages between them — run{' '}
-            <span className="text-chalk">node server/relay.mjs</span> on a laptop on
-            the same wifi and it prints the address. See server/README.md.
+            messages between them, and it has to be a locked{' '}
+            <span className="text-chalk">https</span> address — a phone refuses to
+            open a plain <span className="text-chalk">ws://</span> one from here.
+            Deploy the free relay in server/README.md and paste what it prints.
           </p>
           <input
             className={`${field} mt-2.5`}
             value={relay}
             onChange={(e) => setRelayText(e.target.value)}
             onBlur={() => setRelay(relay)}
-            placeholder="ws://192.168.1.24:8787"
+            placeholder="https://…workers.dev"
             aria-label="Relay address"
           />
         </div>

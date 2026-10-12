@@ -7,8 +7,10 @@
  * ten-or-so per cent of networks that refuse to let two browsers talk directly
  * — and something has to sit in the middle to introduce them anyway. Since it
  * has to be there, it may as well carry the messages. A round trip through a
- * laptop in the same room is a couple of milliseconds; through a Cloudflare
- * edge it is a few tens. A race is playable at either.
+ * Cloudflare edge is a few tens of milliseconds, which a race is playable at.
+ *
+ * It has to be a relay reached over wss, too, and not one on the wifi: see
+ * `cannotDial` below for the rule that decides that, which is not ours.
  *
  * The relay has two seats to a room and no idea what any of it means. Whoever
  * takes the first seat runs the race. See `server/README.md`.
@@ -59,8 +61,39 @@ export function relayUrl(typed: string, code: string): string | null {
   let base = text
   if (base.startsWith('https://')) base = `wss://${base.slice('https://'.length)}`
   else if (base.startsWith('http://')) base = `ws://${base.slice('http://'.length)}`
-  else if (!base.startsWith('ws://') && !base.startsWith('wss://')) base = `ws://${base}`
+  else if (!base.startsWith('ws://') && !base.startsWith('wss://')) {
+    // No scheme on the front, so pick the one that can actually work: locked,
+    // unless it is this very device, which cannot be reached over https and
+    // does not need to be. See `cannotDial`.
+    base = `${here(base) ? 'ws' : 'wss'}://${base}`
+  }
   return `${base}/${code.toUpperCase()}`
+}
+
+/** This device, under any of the names it answers to. */
+const here = (address: string): boolean => {
+  const host = address.replace(/^\w+:\/\//, '').split('/')[0].split(':')[0]
+  return host === 'localhost' || host === '127.0.0.1'
+}
+
+/**
+ * Why this address cannot be dialled from here, if it cannot.
+ *
+ * A page served over https is not allowed to open a plain `ws://` socket, and
+ * the browser does not refuse gently: `new WebSocket` throws a SecurityError
+ * before anything is sent. Measured with `scripts/mixed.mjs` — a wifi address
+ * is blocked outright, and `ws://127.0.0.1` is let through, because the browser
+ * counts this device as somewhere nobody can be listening in.
+ *
+ * Which means the relay on a laptop can only ever have worked while the app was
+ * being developed, served over http from that same laptop, and cannot work from
+ * the real site at all. That is worth saying in words to whoever typed the
+ * address, instead of letting it arrive as 'the line went down'.
+ */
+export function cannotDial(url: string, pageProtocol: string): string | null {
+  if (pageProtocol !== 'https:') return null
+  if (!url.startsWith('ws://') || here(url)) return null
+  return 'That address has to start with https or wss. A plain ws:// relay on the wifi is one the phone will not open — see server/README.md.'
 }
 
 export function connect(url: string): Link {
@@ -76,10 +109,15 @@ export function connect(url: string): Link {
     for (const listener of listeners) listener(state)
   }
 
-  try {
-    socket = new WebSocket(url)
-  } catch {
-    move({ at: 'lost', why: 'That relay address does not look like an address.' })
+  const blocked = cannotDial(url, typeof location === 'undefined' ? 'http:' : location.protocol)
+  if (blocked) {
+    state = { at: 'lost', why: blocked }
+  } else {
+    try {
+      socket = new WebSocket(url)
+    } catch {
+      move({ at: 'lost', why: 'That relay address does not look like an address.' })
+    }
   }
 
   if (socket) {

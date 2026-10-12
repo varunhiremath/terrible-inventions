@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { makeCode, relayUrl } from './link'
+import { cannotDial, makeCode, relayUrl } from './link'
 import { between, blend, shareable } from './race'
 import { newRun, step, NO_INPUT } from '../road/run'
 
@@ -18,8 +18,14 @@ describe('the relay address', () => {
     expect(relayUrl('https://relay.example.workers.dev', 'ABCD'))
       .toBe('wss://relay.example.workers.dev/ABCD')
     expect(relayUrl('http://192.168.1.24:8787', 'ABCD')).toBe('ws://192.168.1.24:8787/ABCD')
-    // And an address looks like an address, with no scheme on the front.
-    expect(relayUrl('192.168.1.24:8787', 'ABCD')).toBe('ws://192.168.1.24:8787/ABCD')
+    // And an address looks like an address, with no scheme on the front. The
+    // locked one is the guess, because it is the only one a phone will open —
+    // except for this device, which cannot be reached over https.
+    expect(relayUrl('relay.example.workers.dev', 'ABCD'))
+      .toBe('wss://relay.example.workers.dev/ABCD')
+    expect(relayUrl('192.168.1.24:8787', 'ABCD')).toBe('wss://192.168.1.24:8787/ABCD')
+    expect(relayUrl('localhost:8787', 'ABCD')).toBe('ws://localhost:8787/ABCD')
+    expect(relayUrl('127.0.0.1:8787', 'ABCD')).toBe('ws://127.0.0.1:8787/ABCD')
     // A trailing slash off the end of a copied URL.
     expect(relayUrl('ws://192.168.1.24:8787/', 'ABCD')).toBe('ws://192.168.1.24:8787/ABCD')
     expect(relayUrl('   ', 'ABCD')).toBe(null)
@@ -27,6 +33,26 @@ describe('the relay address', () => {
 
   it('upper-cases the code, because the relay does', () => {
     expect(relayUrl('ws://x:1', 'abcd')).toBe('ws://x:1/ABCD')
+  })
+
+  /*
+   * The one that was shipped broken. The laptop relay speaks ws://, the site is
+   * https, and a browser throws rather than connecting — but the only place this
+   * was ever tried was `scripts/together-check.mjs`, which opens the app over
+   * http on the machine running the relay, the one origin where the rule does
+   * not apply. Measured in `scripts/mixed.mjs`: blocked from the live site,
+   * allowed for 127.0.0.1.
+   */
+  it('says so when the page it is on will not open that address', () => {
+    const why = cannotDial('ws://192.168.1.24:8787/ABCD', 'https:')
+    expect(why).toMatch(/https or wss/)
+    // The same address is fine from a dev server, which is where it works.
+    expect(cannotDial('ws://192.168.1.24:8787/ABCD', 'http:')).toBe(null)
+    // This device is let through either way: nobody can listen in on it.
+    expect(cannotDial('ws://127.0.0.1:8787/ABCD', 'https:')).toBe(null)
+    expect(cannotDial('ws://localhost:8787/ABCD', 'https:')).toBe(null)
+    // And the deployed one, which is the one to use.
+    expect(cannotDial('wss://relay.example.workers.dev/ABCD', 'https:')).toBe(null)
   })
 })
 
