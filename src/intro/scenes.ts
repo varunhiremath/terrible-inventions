@@ -68,6 +68,11 @@ import {
   headOf as crawlHead, newRun as newGarden, respawn as crawlAgain, step as crawlOn,
   type Run as Crawl,
 } from '../snake/run'
+import { betterGate as betterMobGate, weaponFor as mobWeapon } from '../mob/level'
+import {
+  newRun as newMob, serve as serveMob, step as stepMob, type Run as MobRun,
+} from '../mob/run'
+import { drawRun as drawMob } from '../mob/draw'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -752,6 +757,44 @@ function fitting(ctx: Ctx, words: string, want: number, room: number, weight: nu
 
 const CARD_FACE = 'ui-monospace, "SF Mono", Menlo, monospace'
 
+/**
+ * The swarm: a real lane being played, recorded once and read back.
+ *
+ * The same trick as the flood's, and for the same reason: the story is meant to
+ * show the game rather than a drawing of the game, and the only way to be sure
+ * of that is to play it. The bot steers the cart at whichever gate makes more
+ * of the squad it is about to fire, which is also the one thing the story is
+ * trying to teach — so the picture and the words are saying the same thing
+ * without anybody having to keep them in step.
+ */
+let laneFilmed: MobRun[] | null = null
+
+function laneFilm(): MobRun[] {
+  if (laneFilmed) return laneFilmed
+  const frames: MobRun[] = []
+  let run = newMob(3, 99, 0, 60, 7)
+  const slice = 1 / 60
+
+  for (let t = 0; t < 44; t += slice) {
+    let to: number | null = null
+    if (run.gates.length === 2) {
+      const want = betterMobGate(run.gates, mobWeapon(run.hits).squad)
+      const mine = run.blocks.filter((b) => b.x >= want.from && b.x < want.to && b.y > -4)
+      const target = (mine.length > 0 ? mine : run.blocks).reduce<{ x: number; y: number } | null>(
+        (worst, b) => (worst === null || b.y > worst.y ? b : worst),
+        null,
+      )
+      to = target === null ? (want.from + want.to) / 2 : target.x
+    }
+    run = stepMob(run, { to, left: false, right: false }, slice)
+    if (run.status !== 'playing') run = serveMob({ ...run, status: 'lost', lives: 99 })
+    if (Math.round(t / slice) % 6 === 0) frames.push(run)
+  }
+
+  laneFilmed = frames
+  return frames
+}
+
 export const SCENES: Record<string, (stage: Stage) => void> = {
   /**
    * The maze: the real board, the real route, the real characters.
@@ -1115,6 +1158,15 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     const film = floodFilm()
     const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
     drawFlood(ctx, frame, { w, h, clock })
+  },
+
+  /**
+   * The lane, played by somebody who picks the right gate.
+   */
+  lane({ ctx, w, h, clock }) {
+    const film = laneFilm()
+    const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
+    drawMob(ctx, frame, { w, h, clock })
   },
 
   /**

@@ -63,6 +63,24 @@ These are not preferences. Breaking one defeats the point of the project.
 - The opening pause is not decoration — a level that begins mid-chase is unfair rather
   than exciting.
 
+## The swarm
+
+- **The gates are the game, and they are easy to build wrong.** A row is two gates and a
+  shot goes through one of them, so the question is which — and that question has to have
+  an answer that changes. `gateRow` builds a `times` gate against a `plus` gate from their
+  crossover, `plus / (times - 1)`, never from numbers that look reasonable: `×3` against
+  `+3` looks like a walkover and crosses over between a squad of one and a squad of two.
+- **The squad sizes that matter are the ones the guns fire** — one, two, three and five.
+  A crossover at nine is a gate that always wins, because a squad is only ever bigger than
+  five *after* a gate. A test that probed eight and twelve failed a perfectly good row.
+- **`balance.test.ts` is not a performance test, it is the design.** Three bots play:
+  one picks the better gate, one picks the worse, one stands still. If the first two come
+  out level the gates are painted on, which is how this shipped twice before anybody
+  measured it. Keep it.
+- **A wave is cleared by shooting it.** A block that crosses the line costs a life and
+  stays on the board; it used to be removed, which quietly meant you could "clear" a wave
+  by standing still and letting the whole mob walk through you.
+
 ## The shop
 
 - **Maths buys power, never permission.** A harder problem buys a better prize; a wrong

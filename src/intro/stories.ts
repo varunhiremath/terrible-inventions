@@ -199,6 +199,32 @@ export const STORIES: Record<string, Story> = {
     ],
   },
 
+  /*
+   * The swarm.
+   *
+   * The two things that have to land are the two things that are not obvious
+   * from looking at it: that the cart fires by itself, so there is only one
+   * thing to do, and that the gates are a choice rather than scenery. The
+   * crossover gets a beat of its own with the actual numbers in it, because
+   * "pick the better one" is advice and "with one in the squad, plus four
+   * wins" is a rule you can use on the next shot.
+   */
+  mob: {
+    id: 'mob',
+    title: 'THE SWARM',
+    beats: [
+      { seconds: 4.4, scene: 'lane', voice: 'narrator', line: 'A lane, a cart, and the machines {papa} wound up.' },
+      { seconds: 3.8, scene: 'lane', voice: 'papa', line: 'I wound every one of them up myself!' },
+      { seconds: 4.4, scene: 'lane', voice: 'narrator', line: 'Slide to move the cart. It fires on its own.' },
+      { seconds: 4.8, scene: 'lane', voice: 'narrator', line: 'Two gates hang across the lane. You can only use one.' },
+      { seconds: 4.8, scene: 'lane', voice: 'narrator', line: 'Times three, or plus four. Take whichever makes more of you.' },
+      { seconds: 5.2, scene: 'lane', voice: 'narrator', line: 'With one in the squad, plus four wins. With five, times three.' },
+      { seconds: 5.2, scene: 'lane', voice: 'narrator', line: 'Twelve of you against nine of them leaves three, still going up.' },
+      { seconds: 4.0, scene: 'lane', voice: 'narrator', line: 'Red gates take people off you. Go round those.' },
+      { seconds: 3.6, scene: 'lane', voice: 'papa', line: 'They keep coming. That is the entire plan.' },
+    ],
+  },
+
   puzzles: {
     id: 'puzzles',
     title: 'THE NOTEBOOK',
@@ -216,5 +242,12 @@ export const STORIES: Record<string, Story> = {
   },
 }
 
+/*
+ * The order they are offered in, which is the order the games are on the front
+ * screen. The dungeon is not in it any more: that game is off the front screen
+ * for now (see `README.md`), and an intro to a game you cannot get to is a
+ * dead end. Its story stays in here, with the clips that were rendered for it,
+ * so putting the tile back is a one-line change.
+ */
 export const STORY_ORDER =
-  ['arcade', 'dave', 'prince', 'pipes', 'road', 'space', 'snake', 'bricks', 'sums', 'puzzles'] as const
+  ['arcade', 'dave', 'pipes', 'road', 'space', 'snake', 'bricks', 'sums', 'mob', 'puzzles'] as const

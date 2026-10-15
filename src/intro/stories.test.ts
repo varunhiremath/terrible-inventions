@@ -22,7 +22,7 @@ import lengths from '../../public/spoken/index.json'
  * what the old rule was really protecting against.
  */
 const LEVELS = ['maze', 'cave', 'dungeon', 'pipes', 'road', 'space', 'deep', 'garden', 'wall', 'flood',
-  'oneline', 'throughit', 'joined']
+  'lane', 'oneline', 'throughit', 'joined']
 const CARDS = ['question', 'charms', 'forest']
 
 /**

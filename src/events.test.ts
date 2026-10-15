@@ -13,6 +13,7 @@ import { NO_INPUT as NO_KEEP } from './arcade/dungeon/prince'
 import { levelFor as keepLevel } from './arcade/dungeon/levels'
 import { newRun as newFlight, step as stepFlight, NO_INPUT as NO_FLY } from './space/run'
 import { newRun as newDrive, step as stepDrive, NO_INPUT as NO_DRIVE } from './road/run'
+import { LOUDEST as MOB, type MobEvent } from './mob/run'
 
 /**
  * Every event a game can raise has a place in the order of importance.
@@ -46,6 +47,14 @@ describe('the order things are heard in', () => {
 
   it('covers every event the pipes can raise, exactly once', () => {
     sameSet(PIPES, PIPE_EVENTS)
+  })
+
+  it('covers every event the swarm can raise, exactly once', () => {
+    const all: MobEvent[] = [
+      'fire', 'grow', 'shrink', 'hit', 'broke', 'gates', 'through', 'lost', 'cleared', 'armed',
+      'over',
+    ]
+    sameSet(MOB, all)
   })
 
   it('covers every event the space run can raise, exactly once', () => {

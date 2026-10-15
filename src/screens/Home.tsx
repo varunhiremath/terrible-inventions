@@ -18,8 +18,6 @@ import { worldFor } from '../space/level'
 import { useStore } from '../store'
 import { UpdatePill } from '../ui/UpdatePill'
 import type { Screen } from '../store'
-import { drawFigure, type Look } from '../arcade/dungeon/figure'
-import { FLOOR_DEPTH, drawRoom, poseFor } from '../arcade/dungeon/draw'
 import { drawHero, drawLevel as drawPipes, drawSky as drawPipeSky } from '../pipes/draw'
 import { VIEW_TOP } from '../pipes/level'
 import { newBody } from '../pipes/physics'
@@ -31,17 +29,22 @@ import { TILE as MAZE_TILE } from '../arcade/maze/maze'
 import { drawDave, drawFrame, drawLevel as drawCave, drawSky as drawCaveSky } from '../dave/draw'
 import { newDave } from '../dave/physics'
 import {
-  CAVE_FLOOR, CAVE_TUNNEL, KEEP_HALL, KEEP_WALK, MAZE_DOTS, MAZE_LANE, MAZE_STRIP,
-  PIPE_GROUND, PIPE_RUN, PIPE_WALK,
+  CAVE_FLOOR, CAVE_TUNNEL, MAZE_DOTS, MAZE_LANE, MAZE_STRIP, PIPE_GROUND, PIPE_RUN, PIPE_WALK,
 } from '../ui/wipeWorlds'
+import { drawTaste } from '../mob/draw'
 import { fill } from '../config/profile'
 
 /**
  * The front door.
  *
- * Six games, and nothing else on the screen. The app used to open straight
+ * Ten games, and nothing else on the screen. The app used to open straight
  * into the maze, which quietly made that one the game and the other three
  * things you had to know were hidden in the settings.
+ *
+ * The Dungeon is not here any more. It is the one game in the set that was
+ * reported as too buggy to play, and a tile that opens something broken is
+ * worse than no tile: everything behind it still exists, tests and all, so
+ * putting it back is this list plus one line in `App.tsx`. See `README.md`.
  *
  * Each tile draws its own emblem rather than carrying a picture file, in
  * keeping with the rest of this: no assets, nothing to download, and it stays
@@ -60,8 +63,8 @@ interface Tile {
  * The tiles.
  *
  * Each one shows the character you will actually be, drawn with that game's
- * own code wherever there is any — the dungeon's figure and the pipes'
- * apprentice are the same functions the games call. The first version of these
+ * own code wherever there is any — the pipes' apprentice and the swarm's cart
+ * are the same functions the games call. The first version of these
  * was shapes: a rectangle for a person, a triangle for a trophy. It was
  * reported as "I only see some blocks", which was fair.
  *
@@ -69,12 +72,6 @@ interface Tile {
  * rendered in three dimensions and has no flat drawing to reuse. They are
  * Papa and one of his machines: our own, like everything else in here.
  */
-/** What he wears, matching the figure the dungeon draws. */
-const PRINCE_LOOK: Look = {
-  body: '#3f7fc4', legs: '#24406b', trim: '#f0c419', skin: '#e0a878',
-  hair: '#2b1d14', band: '#f0c419', turban: true, coat: true, loose: true, curved: true,
-}
-
 const TILES: Tile[] = [
   {
     id: 'arcade',
@@ -165,42 +162,19 @@ const TILES: Tile[] = [
     },
   },
   {
-    id: 'prince',
-    title: 'The Dungeon',
-    blurb: 'Thirteen floors. One hour. It never stops.',
-    tint: '#151a22',
+    id: 'mob',
+    title: 'The Swarm',
+    blurb: 'Send your crew up the lane. The gates do the rest.',
+    tint: '#101a33',
     /*
-     * The room is the dungeon's own now as well as the figure. It was a
-     * hand-laid pattern of grey rectangles with a torch painted on top, which
-     * is not the stone the game is built from — and the torch the game draws
-     * throws its light differently.
+     * The game's own pieces at the game's own scale: a gate row with the two
+     * numbers on it, a block of machines walking into it, and a squad on its
+     * way up. Drawn by `drawTaste`, which calls the same functions the game
+     * calls — the fault this project has found three separate times is a tile
+     * showing something that is nowhere in the game it opens.
      */
     emblem(ctx, w, h) {
-      // Six columns rather than a whole room of ten: a tile is a glimpse, and
-      // at ten the prince is a speck in the middle of a lot of wall.
-      const size = w / 6
-      const floorHeight = size / 0.78
-      const rows = Math.max(1, Math.min(KEEP_HALL.rows.length, Math.round(h / floorHeight)))
-      const view = { col: 0, row: 0, rows, size, floorHeight, clock: 0 }
-      const band = floorHeight * (rows + FLOOR_DEPTH)
-      ctx.save()
-      ctx.translate(0, (h - band) / 2)
-      ctx.beginPath()
-      ctx.rect(0, 0, w, band)
-      ctx.clip()
-      drawRoom(ctx, KEEP_HALL, view, w, band, true, [])
-      drawFigure(
-        ctx,
-        size * 3.5,
-        floorHeight * (KEEP_WALK.row + 1),
-        size * 1.5,
-        1,
-        poseFor('run', 1, 'none'),
-        PRINCE_LOOK,
-        'warrior',
-        false,
-      )
-      ctx.restore()
+      drawTaste(ctx, w, h, performance.now() / 1000)
     },
   },
   {

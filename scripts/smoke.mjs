@@ -141,9 +141,15 @@ const scoreNow = async () => Number((await hud()).match(/1up (\d+)/i)?.[1] ?? -1
 await page.goto(URL, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1500)
 
+/*
+ * The ten tiles that have to be there. The Dungeon is deliberately not among
+ * them any more — it is off the front screen until its bugs are dealt with —
+ * and Papa Drowning is called Papa in Trouble now, which this list went on
+ * believing for a fortnight because nothing runs it in CI.
+ */
 const GAMES = [
-  'Papa Panic', 'The Caves', 'The Dungeon', 'The Pipes', 'The Road', 'The Long Way Out',
-  'The Garden', 'The Wall', 'Papa Drowning', 'The Notebook',
+  'Papa Panic', 'The Caves', 'The Swarm', 'The Pipes', 'The Road', 'The Long Way Out',
+  'The Garden', 'The Wall', 'Papa in Trouble', 'The Notebook',
 ]
 const homeText = await page.innerText('body')
 for (const game of GAMES) {
@@ -436,28 +442,13 @@ if (await enter('The Caves')) {
   if (/\d+\s*%/.test(daveText)) problems.push('a percentage is being shown in Dave')
 }
 
-// --- the dungeon: an hour on the clock, and it never goes back -------------
-if (await enter('The Dungeon')) {
-  await page.waitForTimeout(1500)
-
-  const dungeonHud = async () => (await page.textContent('header')).replace(/\s+/g, ' ').trim()
-  if (!/level 1\b/i.test(await dungeonHud())) problems.push('the dungeon did not open on level 1')
-  if (!/minutes 60\b/i.test(await dungeonHud())) problems.push('the dungeon did not start with the full hour')
-
-  // Walking: the buttons are laid out the same way Dave's are.
-  const room = await page.locator('canvas').boundingBox()
-  const r = Math.max(24, Math.min(54, Math.min(room.width, room.height) * 0.082))
-  const buttonY = room.y + room.height - r * 0.85 - r
-  await page.mouse.move(room.x + r * 4.1, buttonY)
-  await page.mouse.down()
-  await page.waitForTimeout(1800)
-  await page.mouse.up()
-  await page.waitForTimeout(400)
-
-  // The clock is the whole game: it has to be running down.
-  const minutes = Number((await dungeonHud()).match(/minutes (\d+)/i)?.[1] ?? -1)
-  if (minutes < 0 || minutes > 60) problems.push(`the dungeon clock reads ${minutes}`)
-}
+/*
+ * The dungeon used to be walked through here. It is off the front screen for
+ * now — too many bugs to put in front of anybody — and `enter` counts a
+ * missing tile as a fault, which is right. Everything it tested still exists
+ * under `src/arcade/dungeon/`, tests and all, so this section comes back with
+ * the tile.
+ */
 
 // --- the pipes: momentum, a jump, and the flag at the far end --------------
 if (await enter('The Pipes')) {
@@ -581,11 +572,23 @@ if (await enter('The Long Way Out')) {
   if (await skip.count()) { await skip.first().click(); await page.waitForTimeout(700) }
 
   const grab = async () => (await page.locator('p.font-mono').allTextContents()).join(' ')
-  const before = await grab()
+  const opened = await grab()
+  if (!/garden 1\b/i.test(opened)) problems.push(`the garden did not open on garden 1: ${opened}`)
 
-  const box = await page.locator('canvas').first().boundingBox()
+  /*
+   * Watched through the canvas rather than the top bar.
+   *
+   * This used to read a length out of the HUD and check it had gone up, which
+   * stopped working when the garden became a forest and the bar started
+   * reporting what the forest asks of you instead. It then sat red for weeks,
+   * because nothing runs this file in CI. A snake that moves is a picture that
+   * changes, and that is true however the words at the top are arranged.
+   */
+  const canvas = page.locator('canvas').first()
+  const box = await canvas.boundingBox()
   if (!box) problems.push('the garden has no board')
   else {
+    const still = await canvas.screenshot()
     const cx = box.x + box.width / 2
     const cy = box.y + box.height / 2
     await page.mouse.move(cx, cy)
@@ -598,12 +601,12 @@ if (await enter('The Long Way Out')) {
       await page.waitForTimeout(70)
     }
     await page.mouse.up()
+    await page.waitForTimeout(300)
+    const moved = await canvas.screenshot()
+    if (Buffer.compare(still, moved) === 0) {
+      problems.push('the garden did not change while it was being steered')
+    }
   }
-
-  const after = await grab()
-  const longOf = (text) => Number((text.match(/([\d.]+) long/)?.[1] ?? '0'))
-  if (longOf(after) === 0) problems.push('the garden never reported a length')
-  if (after === before) problems.push('the garden did not change while it was being steered')
 }
 
 // --- the wall ---------------------------------------------------------------
@@ -664,7 +667,7 @@ if (await enter('The Long Way Out')) {
    */
   await page.goto(URL, { waitUntil: 'networkidle' })
   await page.waitForTimeout(500)
-  await page.getByRole('button', { name: /papa drowning/i }).first().click()
+  await page.getByRole('button', { name: /papa in trouble/i }).first().click()
   await page.waitForTimeout(400)
   const skip = page.getByRole('button', { name: /skip/i })
   if (await skip.count()) { await skip.first().click(); await page.waitForTimeout(700) }
@@ -696,6 +699,45 @@ if (await enter('The Long Way Out')) {
     await page.waitForTimeout(300)
   }
 
+}
+
+// --- the swarm: one finger, and the sum has to happen ----------------------
+if (await enter('The Swarm')) {
+  await page.waitForTimeout(1400)
+
+  const swarmHud = async () => (await page.locator('p.font-mono').allTextContents()).join(' ')
+  const left = (text) => Number(text.match(/(\d+) left/)?.[1] ?? -1)
+  const opened = await swarmHud()
+  if (!/wave 1\b/i.test(opened)) problems.push('the swarm did not open on wave 1')
+  if (left(opened) <= 0) problems.push('the swarm opened with nothing to shoot at')
+
+  /*
+   * Slide the cart across the lane and hold it there. The cart fires on its
+   * own, so what is being proved is that a finger on the glass moves it and
+   * that shots are reaching the mob: the count of machines left has to come
+   * down. Everything about the lane is unit tested; none of it proves a touch
+   * arrives.
+   */
+  const lane = await page.locator('canvas').first().boundingBox()
+  if (!lane) problems.push('the swarm has no lane')
+  else {
+    await page.mouse.move(lane.x + lane.width * 0.5, lane.y + lane.height * 0.82)
+    await page.mouse.down()
+    for (const at of [0.25, 0.7, 0.4]) {
+      await page.mouse.move(lane.x + lane.width * at, lane.y + lane.height * 0.82, { steps: 6 })
+      await page.waitForTimeout(1700)
+    }
+    await page.mouse.up()
+    await page.waitForTimeout(400)
+
+    const after = await swarmHud()
+    if (left(after) >= left(opened)) {
+      problems.push(`nothing was shot in the swarm: ${left(opened)} left, then ${left(after)}`)
+    }
+    if (/\d+\s*%/.test(await page.innerText('body'))) {
+      problems.push('a percentage is being shown in the swarm')
+    }
+  }
 }
 
 // --- the notebook -----------------------------------------------------------
@@ -769,4 +811,4 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, went down into the dungeon, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, dragged a line out of the flood, and traced a puzzle')
+console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, dragged a line out of the flood, sent a squad up the lane, and traced a puzzle')

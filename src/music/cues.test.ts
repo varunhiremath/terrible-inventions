@@ -9,6 +9,7 @@ import {
   BRICK_CUES,
   GARDEN_CUES,
   FLOOD_CUES,
+  MOB_CUES,
   NOTEBOOK_CUES,
   SPACE_CUES,
   WIPE_CUES,
@@ -106,6 +107,10 @@ const TICKS: CueName[] = [
   // And being told "not that line", which somebody tracing a figure quickly
   // will hear two or three times in a row.
   'nope',
+  // And the swarm's five. A shot goes off twice a second, every one of them
+  // passes a gate, and a squad of twenty into a row of blocks is three or four
+  // of these in the same tenth of a second.
+  'pop', 'bigger', 'smaller', 'thud', 'crumple',
 ]
 
   it('are short enough to be cues rather than tunes', () => {
@@ -272,7 +277,7 @@ describe('every cue', () => {
      */
     const sets = [
       DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES, GARDEN_CUES,
-      BRICK_CUES, FLOOD_CUES, NOTEBOOK_CUES, WIPE_CUES,
+      BRICK_CUES, FLOOD_CUES, NOTEBOOK_CUES, MOB_CUES, WIPE_CUES,
     ]
     const seen = new Set<string>()
     for (const set of sets) {
@@ -417,6 +422,40 @@ describe('the garden cues', () => {
  * anybody works out which sound it was, so a set that wanders stops belonging
  * to its game.
  */
+/**
+ * F major — F G A Bb C D E — which is the swarm's march, and the one key that
+ * was still going spare.
+ */
+describe('the swarm cues', () => {
+  const MAJOR = [5, 7, 9, 10, 0, 2, 4]
+
+  it('stay in F major', () => {
+    for (const name of Object.keys(MOB_CUES) as CueName[]) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          expect(MAJOR, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain(pitchClass(note.frequency))
+        }
+      }
+    }
+  })
+
+  it('sends a bigger squad up and a smaller one down', () => {
+    // The two cues a player hears most, and the only part of either one that
+    // anybody actually hears is which way it goes.
+    const ends = (name: CueName) => {
+      const notes = readPart(CUES[name].parts[0].pattern)
+      return [notes[0].frequency, notes[notes.length - 1].frequency]
+    }
+    const [upFrom, upTo] = ends('bigger')
+    expect(upTo).toBeGreaterThan(upFrom)
+    const [downFrom, downTo] = ends('smaller')
+    expect(downTo).toBeLessThan(downFrom)
+    const [outFrom, outTo] = ends('routed')
+    expect(outTo).toBeLessThan(outFrom)
+  })
+})
+
 describe('the wall cues', () => {
   const MAJOR = [2, 4, 6, 7, 9, 11, 1]
 

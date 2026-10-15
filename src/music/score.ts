@@ -1973,6 +1973,69 @@ export const NOTEBOOK: Track = {
   ],
 }
 
+// --- the swarm --------------------------------------------------------------
+
+/**
+ * The swarm.
+ *
+ * F major, which is the key nobody had: the dungeon is in D Phrygian dominant,
+ * the pipes in C major, space in E Phrygian, the caves in D minor, the garden
+ * in G major, the wall in D major, the flood in A minor and the notebook in Ab.
+ * A game that sounds like the one next door is the quickest way to make ten
+ * games feel like one game in eight coats of paint.
+ *
+ * A march, because the thing coming at you is marching. Four-square, on the
+ * beat, no swing anywhere in it — and in the major, because the mob is a crowd
+ * of Papa's wind-up crates rather than anything frightening.
+ */
+const SWARM_LEAD = [
+  'F4 .  A4 .  C5 .  A4 . ',
+  'F4 .  C5 .  A4 .  F4 . ',
+  'Bb4 . D5 .  F5 .  D5 . ',
+  'C5 .  E5 .  G5 .  E5 . ',
+  'A4 .  C5 .  F5 .  C5 . ',
+  'D5 .  F5 .  A5 .  F5 . ',
+  'Bb4 . C5 .  D5 .  F5 . ',
+  'C5 .  Bb4 . A4 .  G4 . ',
+].join(' ')
+
+const SWARM_BASS = [
+  'F2 .  C3 .  F2 .  C3 . ',
+  'F2 .  C3 .  F2 .  A2 . ',
+  'Bb2 . F3 .  Bb2 . F3 . ',
+  'C3 .  G3 .  C3 .  G3 . ',
+  'F2 .  C3 .  F2 .  C3 . ',
+  'D3 .  A3 .  D3 .  A3 . ',
+  'Bb2 . F3 .  Bb2 . D3 . ',
+  'C3 .  G3 .  C3 .  Bb2 .',
+].join(' ')
+
+/** One held chord a bar, under the march. */
+const SWARM_BED = [
+  'F3 .  .  .  .  .  .  . ',
+  'F3 .  .  .  .  .  .  . ',
+  'Bb3 . .  .  .  .  .  . ',
+  'C4 .  .  .  .  .  .  . ',
+  'F3 .  .  .  .  .  .  . ',
+  'D4 .  .  .  .  .  .  . ',
+  'Bb3 . .  .  .  .  .  . ',
+  'C4 .  .  .  .  .  .  . ',
+].join(' ')
+
+const SWARM_DRUMS = ('x - x - x - x - '.repeat(7) + 'x - x - x - x x').trim()
+
+export const SWARM: Track = {
+  name: 'The Swarm',
+  beatsPerMinute: 120,
+  hotter: 12,
+  drums: SWARM_DRUMS,
+  parts: [
+    { wave: 'pluck', gain: 0.085, sustain: 0.7, pattern: SWARM_LEAD },
+    { wave: 'pluck', gain: 0.07, sustain: 0.55, pattern: SWARM_BASS },
+    { wave: 'strings', gain: 0.028, sustain: 1, chord: [0, 7], pattern: SWARM_BED },
+  ],
+}
+
 export const TRACKS = {
   chase: CHASE,
   garden: GARDEN,
@@ -1984,6 +2047,7 @@ export const TRACKS = {
   cavern: CAVERN,
   road: ROAD,
   space: SPACE,
+  swarm: SWARM,
 } as const
 export type TrackName = keyof typeof TRACKS
 
@@ -2641,8 +2705,116 @@ export const NOTEBOOK_CUES = {
   reveal: REVEAL,
 } as const
 
+// --- and the noises a lane full of machines makes ----------------------------
+
+/**
+ * The swarm's set, all in F major like its march.
+ *
+ * Five of these fire constantly — a shot goes off twice a second and every one
+ * of them passes a gate — so five of them are two notes long and quiet enough
+ * to be texture rather than events. The other five are the news: a gate row
+ * arriving, one getting past you, a better gun, a wave held, a run over.
+ */
+const POP: Track = {
+  name: 'Pop',
+  beatsPerMinute: 260,
+  parts: [{ wave: 'pulse', duty: 0.25, gain: 0.03, sustain: 0.18, pattern: 'C5 F5 ' }],
+}
+
+/** A squad coming out of a gate bigger than it went in. */
+const BIGGER: Track = {
+  name: 'Bigger',
+  beatsPerMinute: 250,
+  parts: [
+    { wave: 'pluck', gain: 0.05, sustain: 0.5, pattern: 'F5 C6 ' },
+    { wave: 'pulse', duty: 0.5, gain: 0.025, sustain: 0.2, pattern: 'F4 .  ' },
+  ],
+}
+
+/** And smaller, which is the same two notes the other way up. */
+const SMALLER: Track = {
+  name: 'Smaller',
+  beatsPerMinute: 250,
+  parts: [{ wave: 'pluck', gain: 0.045, sustain: 0.45, pattern: 'C5 F4 ' }],
+}
+
+const THUD: Track = {
+  name: 'Thud',
+  beatsPerMinute: 280,
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.04, sustain: 0.2, pattern: 'F3 C3 ' }],
+}
+
+/** A whole block going. */
+const CRUMPLE: Track = {
+  name: 'Crumple',
+  beatsPerMinute: 255,
+  parts: [
+    { wave: 'pluck', gain: 0.055, sustain: 0.55, pattern: 'Bb4 F4 ' },
+    { wave: 'pulse', duty: 0.25, gain: 0.03, sustain: 0.25, pattern: 'Bb2 .  ' },
+  ],
+}
+
+/** A new row of gates swinging into the lane. */
+const SWING: Track = {
+  name: 'Swing',
+  beatsPerMinute: 200,
+  parts: [{ wave: 'bell', gain: 0.04, sustain: 0.6, pattern: 'A4 C5 F5 -  ' }],
+}
+
+/** One of them over the line. */
+const BREACH: Track = {
+  name: 'Breach',
+  beatsPerMinute: 130,
+  parts: [
+    { wave: 'pluck', gain: 0.07, sustain: 0.7, pattern: 'D5 Bb4 F4 ' },
+    { wave: 'pulse', duty: 0.25, gain: 0.04, sustain: 0.5, pattern: 'D3 .   F2 ' },
+  ],
+}
+
+/** A better gun, which is the one bit of good news that is not about the mob. */
+const UPGUN: Track = {
+  name: 'Upgun',
+  beatsPerMinute: 180,
+  parts: [
+    { wave: 'pluck', gain: 0.07, sustain: 0.7, pattern: 'F4 A4 C5 F5 ' },
+    { wave: 'bell', gain: 0.04, sustain: 0.9, pattern: 'F3 .  C4 .  ' },
+  ],
+}
+
+const SWARM_DOWN: Track = {
+  name: 'Wave held',
+  beatsPerMinute: 170,
+  parts: [
+    { wave: 'pluck', gain: 0.075, sustain: 0.75, pattern: 'C5 D5 F5 A5 C6 ' },
+    { wave: 'strings', gain: 0.03, sustain: 1, chord: [0, 7], pattern: 'F3 .  .  .  .  ' },
+  ],
+}
+
+/** And the end of it. */
+const ROUTED: Track = {
+  name: 'Routed',
+  beatsPerMinute: 110,
+  parts: [
+    { wave: 'pluck', gain: 0.07, sustain: 0.8, pattern: 'F4 E4 D4 C4 Bb3 A3 ' },
+    { wave: 'pulse', duty: 0.25, gain: 0.035, sustain: 0.6, pattern: 'F2 .   .  C2 .   .  ' },
+  ],
+}
+
+export const MOB_CUES = {
+  pop: POP,
+  bigger: BIGGER,
+  smaller: SMALLER,
+  thud: THUD,
+  crumple: CRUMPLE,
+  swing: SWING,
+  breach: BREACH,
+  upgun: UPGUN,
+  swarmDown: SWARM_DOWN,
+  routed: ROUTED,
+} as const
+
 export const CUES = {
   ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES, ...SPACE_CUES,
-  ...GARDEN_CUES, ...BRICK_CUES, ...FLOOD_CUES, ...NOTEBOOK_CUES, ...WIPE_CUES,
+  ...GARDEN_CUES, ...BRICK_CUES, ...FLOOD_CUES, ...NOTEBOOK_CUES, ...MOB_CUES, ...WIPE_CUES,
 } as const
 export type CueName = keyof typeof CUES
