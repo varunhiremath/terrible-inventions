@@ -1,0 +1,12 @@
+{
+  "name": "terrible-inventions-relay",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Two seats to a room, so two devices can be in one race. See README.md.",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.149.0"
+  }
+}

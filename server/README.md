@@ -12,63 +12,81 @@ the phone did the waiting, the app would not be allowed to call it (the section
 below the steps says why, and it was measured rather than assumed). So the relay
 goes on the internet, where it is free and where there is nothing to keep awake.
 
-## The one to pick: a Cloudflare Worker
+## Put it up from a browser, with nothing installed
 
-Cloudflare runs small programs for people on its own machines. This one is
-small enough to be free, and not marginally: the free allowance is a hundred
-thousand connections a day and roughly a day's worth of a room being open, and
-a race is two connections and a few minutes. Once it is up there is nothing to
-start and nothing to keep awake, and it works whether the two devices are in
-the same room or in different countries. You do this once, ever.
+This is the one to pick unless you already have a recent Node on a machine you
+like. Cloudflare builds it from GitHub on its own machines, so it does not
+matter what the computer in front of you is — Windows, an ancient Linux box, or
+the phone itself. Nothing is installed, and there is no terminal.
 
-You need a computer with a terminal. About ten minutes.
+Cloudflare runs small programs for people on its own machines, and this one is
+small enough to be free, not marginally: a hundred thousand connections a day
+and roughly a day's worth of a room being open, against a race that costs two
+connections and a few minutes. You do this once, ever.
 
-**1. Node, if the computer hasn't got it.** In a terminal, type `node -v`. If it
-prints a version, skip this. If it says "command not found", get the installer
-from [nodejs.org](https://nodejs.org) and run it, then close the terminal and
-open a new one.
+**1.** Make a free account at
+[dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up). Email and a
+password, no card. If it pushes you to add a website or pick a plan, skip past
+it.
 
-**2. Get this folder onto the computer.**
+**2.** In the dashboard, find **Workers** (it has been called Workers & Pages,
+and sits under Compute), then **Create application**, then **Import a
+repository**. Connect your GitHub account when it asks, and allow it to see
+`terrible-inventions`.
+
+**3.** Before deploying, set three things:
+
+| Field | What to put |
+| --- | --- |
+| Root directory | `server` |
+| Build command | leave it empty |
+| Deploy command | `npm run deploy` |
+
+The root directory is the only one it cannot guess: the relay is this folder,
+not the app in the folder above it. The deploy command is what `server/package.json`
+is there for, and Cloudflare takes the wrangler version from it.
+
+**4.** Deploy. It builds for a minute or two and prints an address like
+`https://terrible-inventions-relay.<something>.workers.dev`. **That address is
+the answer.** Copy it.
+
+**5.** Check it is alive: open that address in any browser. It answers with one
+line — `terrible-inventions relay`. (Building fine and answering nothing means
+it deployed but something is wrong; building at all means the hard part worked.)
+
+**6.** On both phones: **Settings → Relay**, and paste the address in. That is
+the last time anybody needs it; from then on it is the four-letter code, below.
+
+Builds are free within three thousand minutes a month and this one takes about
+one, so the usual thing of accidentally spending money cannot happen here. A
+push to `main` rebuilds it, which costs nothing and changes nothing unless the
+relay itself changes.
+
+## Or from a terminal, if you have a recent Node
+
+Same thing, three commands, no GitHub involved:
 
 ```
 git clone https://github.com/varunhiremath/terrible-inventions.git
 cd terrible-inventions/server
+npm install && npm run deploy
 ```
 
-**3. Make a Cloudflare account** at
-[dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up), if there
-isn't one. Email and a password; no card, and the free plan is the default. If
-it asks you to add a website or pick a plan, skip past it — none of that is
-needed for this.
+The first run asks to open a browser so you can allow it onto your Cloudflare
+account; then it prints the same `workers.dev` address.
 
-**4. Deploy it.**
+This works on Windows 11 (PowerShell, with Node from
+[nodejs.org](https://nodejs.org) — and if you would rather not install git,
+GitHub's green **Code** button has **Download ZIP**). It needs a current Node,
+and wrangler is only supported on Windows 11, macOS 13.5 and up, and Linux with
+glib 2.35 and up — which rules out a box old enough to be running an old Node,
+even if you upgrade Node on it. On a Linux machine that is merely a bit behind,
+[nvm](https://github.com/nvm-sh/nvm) puts a new Node in your home directory
+without touching the system one — run the install line from its README, then
+`nvm install 22`.
 
-```
-npx wrangler deploy
-```
-
-The first time, it asks to install `wrangler` (say yes) and then opens a browser
-window asking you to allow it onto your Cloudflare account (say Allow). Then it
-uploads, and the last thing it prints is an address like
-
-```
-https://terrible-inventions-relay.<something>.workers.dev
-```
-
-**That address is the answer.** Copy it. If you lose it, run `npx wrangler
-deploy` again and it prints it once more, or find the Worker by name in the
-Cloudflare dashboard.
-
-**5. Check it works** by opening that `https://…` address in any browser. It
-should answer with one line of text: `terrible-inventions relay`. That means
-it's alive.
-
-**6. Put it in the app.** On both devices: **Settings → Relay**, and paste the
-address in. The app turns `https://` into `wss://` itself, so paste it exactly
-as Cloudflare printed it.
-
-Send me the address and I'll build it into the app as the default, so neither
-device ever has to have it typed in again.
+If any of that bites, use the browser route above — it is the same deploy, run
+on a machine that is already set up for it.
 
 ## Not a laptop on the same wifi, and not a phone
 
