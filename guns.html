@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>The guns, up the ladder</title>
+<style>
+  body { margin: 0; background: #070912; color: #e9edf8; font: 14px ui-monospace, monospace; }
+  canvas { display: block; width: 100%; height: 100vh; }
+</style>
+<canvas id="c"></canvas>
+<script type="module">
+  import { drawGun, shapeOf } from '/src/mob/draw.ts'
+  import { GUNS, gunAt } from '/src/mob/level.ts'
+
+  const canvas = document.getElementById('c')
+  const ctx = canvas.getContext('2d')
+
+  function frame(now) {
+    const dpr = Math.min(2, devicePixelRatio || 1)
+    canvas.width = innerWidth * dpr
+    canvas.height = innerHeight * dpr
+    const clock = now / 1000
+    ctx.fillStyle = '#0d1428'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+    // One of every rung, so the five shapes and the growth between them are
+    // all on one screen.
+    const cols = 6
+    const rows = Math.ceil(GUNS.length / cols)
+    const cw = canvas.width / cols
+    const ch = canvas.height / rows
+    const scale = Math.min(cw, ch) * 0.34
+
+    GUNS.forEach((gun, rung) => {
+      const x = (rung % cols) * cw + cw / 2
+      const y = Math.floor(rung / cols) * ch + ch * 0.68
+      drawGun(ctx, x, y, scale, gun, clock, (Math.sin(clock * 4 + rung) + 1) / 2, rung)
+      ctx.fillStyle = '#8d96b4'
+      ctx.font = `bold ${Math.round(scale * 0.3)}px ui-monospace, monospace`
+      ctx.textAlign = 'center'
+      ctx.fillText(`${rung}· ${gun.name}`, x, y + ch * 0.18)
+      ctx.fillText(`${gun.hit} a shot · shape ${shapeOf(rung)}`, x, y + ch * 0.26)
+    })
+    requestAnimationFrame(frame)
+  }
+  requestAnimationFrame(frame)
+</script>

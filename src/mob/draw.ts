@@ -247,20 +247,95 @@ export function drawCrate(
 }
 
 /** You: a little gun on a stand, and the barrel it fires out of. */
+/**
+ * Which of the five shapes a gun on this rung is drawn as.
+ *
+ * The ask, in the words it was asked in: "only your shooting power increases,
+ * like bigger guns". A name changing in the corner of the screen is not a
+ * bigger gun — so the thing in your hands changes shape five times over the
+ * ladder, and each shape is visible from across the room: one barrel, then two,
+ * then a wide muzzle, then a braced cannon, then the whole carriage.
+ */
+export const shapeOf = (rung: number): 0 | 1 | 2 | 3 | 4 => {
+  if (rung >= 16) return 4
+  if (rung >= 11) return 3
+  if (rung >= 7) return 2
+  if (rung >= 3) return 1
+  return 0
+}
+
+/** You: a gun on a little carriage, which gets heavier as the ladder goes up. */
 export function drawGun(
   ctx: Ctx, x: number, y: number, scale: number, weapon: Gun, clock: number, firing: number,
+  rung = 0,
 ): void {
-  const w = GUN_W * scale
-  const h = scale * 0.75
+  const shape = shapeOf(rung)
+  // The whole thing grows a little with the ladder as well as changing shape,
+  // so the difference is felt even between two rungs of the same shape.
+  const grow = 1 + shape * 0.1
+  const w = GUN_W * scale * grow
+  const h = scale * 0.75 * grow
+  const kick = Math.max(0, firing) * scale * 0.14
 
   ctx.save()
-  // The barrel, which grows with the gun: a bigger number needs a bigger gun or
-  // the upgrade is a line of text and nothing else.
-  const fat = Math.min(0.3, 0.1 + Math.log2(Math.max(1, weapon.hit)) * 0.035)
-  const kick = Math.max(0, firing) * scale * 0.12
-  ctx.fillStyle = '#cfe6ff'
-  ctx.fillRect(x - scale * fat, y - h * 0.95 + kick, scale * fat * 2, h * 0.7)
 
+  // --- the barrels ---
+  ctx.fillStyle = '#cfe6ff'
+  ctx.strokeStyle = '#4a86b8'
+  ctx.lineWidth = Math.max(1, scale * 0.04)
+  const barrel = (at: number, fat: number, long: number) => {
+    ctx.beginPath()
+    ctx.roundRect(
+      x + at - scale * fat,
+      y - h * 0.4 - scale * long + kick,
+      scale * fat * 2,
+      scale * long,
+      scale * 0.05,
+    )
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  if (shape === 0) barrel(0, 0.09, 0.72)
+  else if (shape === 1) { barrel(-scale * 0.16, 0.08, 0.78); barrel(scale * 0.16, 0.08, 0.78) }
+  else if (shape === 2) {
+    barrel(0, 0.14, 0.8)
+    // A flared muzzle on the end of it, which is what says "this one is louder"
+    // without a word of text.
+    ctx.beginPath()
+    ctx.moveTo(x - scale * 0.26, y - h * 0.4 - scale * 0.8 + kick)
+    ctx.lineTo(x + scale * 0.26, y - h * 0.4 - scale * 0.8 + kick)
+    ctx.lineTo(x + scale * 0.14, y - h * 0.4 - scale * 0.58 + kick)
+    ctx.lineTo(x - scale * 0.14, y - h * 0.4 - scale * 0.58 + kick)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  } else {
+    barrel(0, shape === 3 ? 0.2 : 0.26, shape === 3 ? 0.95 : 1.1)
+    // Bands round it, and at the top rung a brace either side: a barrel this
+    // size needs holding down, and showing that is cheaper than any label.
+    ctx.fillStyle = '#4a86b8'
+    for (const along of shape === 3 ? [0.45, 0.72] : [0.4, 0.62, 0.86]) {
+      ctx.fillRect(
+        x - scale * (shape === 3 ? 0.24 : 0.3),
+        y - h * 0.4 - scale * along + kick,
+        scale * (shape === 3 ? 0.48 : 0.6),
+        scale * 0.08,
+      )
+    }
+    if (shape === 4) {
+      ctx.strokeStyle = '#4a86b8'
+      ctx.lineWidth = Math.max(2, scale * 0.07)
+      for (const side of [-1, 1]) {
+        ctx.beginPath()
+        ctx.moveTo(x + side * w * 0.42, y - h * 0.1)
+        ctx.lineTo(x + side * scale * 0.3, y - h * 0.4 - scale * 0.5 + kick)
+        ctx.stroke()
+      }
+    }
+  }
+
+  // --- the carriage ---
   ctx.fillStyle = INK.gun
   ctx.strokeStyle = INK.gunTrim
   ctx.lineWidth = Math.max(1.5, scale * 0.06)
@@ -269,32 +344,40 @@ export function drawGun(
   ctx.fill()
   ctx.stroke()
 
-  // Treads, turning, so standing still does not look broken.
+  // Treads, turning, so standing still does not look broken. More of them as
+  // the gun gets heavier.
   ctx.fillStyle = INK.gunTrim
-  for (const side of [-1, 1]) {
-    const cx = x + side * w * 0.28
+  const wheels = shape >= 3 ? [-0.34, 0, 0.34] : [-0.28, 0.28]
+  for (const side of wheels) {
+    const cx = x + side * w
     const cy = y + h * 0.42
+    const r = scale * 0.16 * grow
     ctx.beginPath()
-    ctx.arc(cx, cy, scale * 0.16, 0, Math.PI * 2)
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
     ctx.fill()
     ctx.strokeStyle = '#0a0d17'
     ctx.lineWidth = Math.max(1, scale * 0.04)
     ctx.beginPath()
     ctx.moveTo(cx, cy)
-    ctx.lineTo(cx + Math.cos(clock * 6) * scale * 0.14, cy + Math.sin(clock * 6) * scale * 0.14)
+    ctx.lineTo(cx + Math.cos(clock * 6) * r * 0.9, cy + Math.sin(clock * 6) * r * 0.9)
     ctx.stroke()
   }
   ctx.restore()
+  void weapon
 }
 
-function drawShot(ctx: Ctx, shot: Shot, x: number, y: number, scale: number): void {
-  const w = SHOT_W * scale
+function drawShot(ctx: Ctx, shot: Shot, x: number, y: number, scale: number, shape = 0): void {
+  // A heavier gun throws a heavier shot. Same hit box either way — the width
+  // here is paint, not rules — but a Peashooter pellet and a cannon shell
+  // should not be the same dot.
+  const w = SHOT_W * scale * (1 + shape * 0.35)
+  const long = scale * (0.52 + shape * 0.12)
   ctx.save()
   ctx.fillStyle = INK.shot
   ctx.shadowColor = INK.shot
-  ctx.shadowBlur = scale * 0.3
+  ctx.shadowBlur = scale * (0.3 + shape * 0.15)
   ctx.beginPath()
-  ctx.roundRect(x - w / 2, y - scale * 0.26, w, scale * 0.52, w / 2)
+  ctx.roundRect(x - w / 2, y - long / 2, w, long, w / 2)
   ctx.fill()
   ctx.restore()
   void shot
@@ -423,14 +506,18 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
     drawCrate(ctx, crate, spot.x, spot.y, scale, run.rung)
   }
 
+  const shape = shapeOf(run.rung)
   for (const shot of run.shots) {
     const spot = at(shot.x, shot.y)
-    drawShot(ctx, shot, spot.x, spot.y, scale)
+    drawShot(ctx, shot, spot.x, spot.y, scale, shape)
   }
 
   const me = at(run.gun, GUN_Y)
   const weapon = weaponOf(run)
-  drawGun(ctx, me.x, me.y, scale, weapon, run.clock, 1 - Math.min(1, run.cool / weapon.every))
+  drawGun(
+    ctx, me.x, me.y, scale, weapon, run.clock,
+    1 - Math.min(1, run.cool / weapon.every), run.rung,
+  )
 
   for (const said of run.says) {
     const spot = at(said.x, said.y)
@@ -477,9 +564,9 @@ export function drawTaste(ctx: Ctx, w: number, h: number, clock: number): void {
 
   for (const y of [5.1, 5.9]) {
     const spot = at(1.9, y)
-    drawShot(ctx, { id: 9, x: 1.9, y }, spot.x, spot.y, scale)
+    drawShot(ctx, { id: 9, x: 1.9, y }, spot.x, spot.y, scale, 1)
   }
 
   const me = at(1.9, 6.7)
-  drawGun(ctx, me.x, me.y, scale, gunAt(1), clock, 0.4)
+  drawGun(ctx, me.x, me.y, scale, gunAt(4), clock, 0.4, 4)
 }
