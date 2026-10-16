@@ -7,76 +7,73 @@
  *
  * Two things in here are worth more care than they look.
  *
- * The first is the trade. A squad meeting a block does not simply break it or
- * bounce off it — they cancel out one for one, and whichever is bigger carries
- * on with what is left. A squad of fourteen into a block of nine leaves five
- * flying at whatever is behind it, which is the moment this game is about and
- * also subtraction, out loud, several times a second.
+ * The first is that a shot is spent on exactly one thing. It damages a monster
+ * or it chips a crate, never both and never two monsters — which is what makes
+ * the decision in this game a real cost rather than a free bonus. Every hit
+ * that goes into a crate is a hit that did not go into something walking at
+ * you, and the whole game is whether that trade pays off before they arrive.
  *
- * The second is where a gate is read. A gate is a line across part of the lane,
- * and a squad crosses it in the middle of a step rather than landing on it — so
- * what is tested is whether the squad was below it before the step and above it
- * after, not whether it is near it now. Testing nearness would let a slow frame
- * carry a squad clean over a gate without it firing, which is the kind of fault
- * that only shows up on the cheapest device anybody owns.
+ * The second is `arriveIn`, the number at the top of the screen. It is the
+ * other half of the sum, so it has to be honest: it reads the real position and
+ * the real pace of the monster that is actually nearest, including the breed
+ * that walks faster than the rest. A countdown that is approximately right
+ * teaches arithmetic that is approximately wrong.
  */
 import {
-  CART_SPEED, CART_W, GATE_Y, LANE, LEAST, LINE_Y, LIVES, MOB_H, MOB_W, MOST, SQUAD_SPEED, SQUAD_W,
-  TALL, apply, gateEvery, gateRow, mobSpeed, waveFor, weaponFor,
-  type Block, type Dice, type Gate, type Op, type Weapon,
+  CRATE_H, CRATE_W, GUN_SPEED, GUN_W, LANE, LINE_Y, LIVES, MON_H, SHOT_SPEED, SHOT_W, TALL,
+  MON_W, TOP_RUNG, cratePair, crateSpeed, gunAt, waveFor, walkSpeed,
+  type Crate, type Dice, type Gun, type Monster,
 } from './level'
 
 export const FIXED = 1 / 120
 
 export type MobEvent =
-  | 'fire' | 'grow' | 'shrink' | 'hit' | 'broke' | 'gates'
-  | 'through' | 'lost' | 'cleared' | 'armed' | 'over'
+  | 'fire' | 'hit' | 'killed' | 'chip' | 'opened' | 'crates' | 'lost' | 'missed'
+  | 'through' | 'cleared' | 'over'
 
 /**
  * Loudest first, for the screen to pick one noise a frame from.
  *
  * Beside the game rather than in the screen, like every other game in here:
  * `events.test.ts` reads this list and the event union together, because an
- * event missing from the list is never the loudest thing in any frame and so
- * is silent for ever with nothing to notice.
+ * event missing from the list is never the loudest thing in any frame and so is
+ * silent for ever with nothing to notice.
  */
 export const LOUDEST: readonly MobEvent[] = [
-  'over', 'cleared', 'lost', 'through', 'armed', 'broke', 'grow', 'shrink', 'gates', 'hit', 'fire',
+  'over', 'cleared', 'through', 'lost', 'opened', 'missed', 'killed', 'crates', 'chip', 'hit',
+  'fire',
 ]
 
 export type Status = 'playing' | 'lost' | 'cleared' | 'over'
 
-/** A squad in flight. The number is the squad. */
-export interface Squad {
+export interface Shot {
   id: number
   x: number
   y: number
-  n: number
-  /** Counts down after a gate or a trade, so the drawing can flash it. */
-  flash: number
 }
 
 /**
- * A line of arithmetic floating where it happened.
+ * A number floating where something happened.
  *
- * Not decoration. A gate that silently turns four into twelve teaches nothing;
- * `4 × 3 = 12` written where the squad went through is the entire educational
- * content of the game, and it is also the thing that makes a good gate choice
- * feel like a good gate choice.
+ * Not decoration. The damage coming off a monster is how a player learns what
+ * their gun is worth, and the line a crate says when it opens is the only place
+ * the new gun is explained. Both are arithmetic, said out loud, in the place
+ * where it happened.
  */
 export interface Said {
   id: number
-  /** The gate it came out of. One label per gate, replaced as shots go through. */
+  /** What it came out of, so one thing never stacks two labels. */
   from: number
   x: number
   y: number
   text: string
   tint: string
   life: number
+  big: boolean
 }
 
 export interface Input {
-  /** Where the cart is being asked to go, in lane units. Null means stay. */
+  /** Where you are being asked to go, in lane units. Null means stay. */
   to: number | null
   left: boolean
   right: boolean
@@ -88,19 +85,19 @@ export interface Run {
   level: number
   status: Status
   score: number
-  /** Machines seen off, for the whole run. This is what buys the guns. */
-  hits: number
+  /** Monsters seen off, for the whole run. */
+  killed: number
   lives: number
-  /** Where the cart is along the lane. */
-  cart: number
-  weapon: Weapon['id']
-  squads: Squad[]
-  gates: Gate[]
-  blocks: Block[]
+  /** Where you are along the lane. */
+  gun: number
+  /** Which rung of the gun ladder you are on. */
+  rung: number
+  shots: Shot[]
+  crowd: Monster[]
+  crates: Crate[]
   says: Said[]
-  /** Seconds until the next shot, and until the next row of gates. */
+  /** Seconds until the next shot. */
   cool: number
-  gateIn: number
   clock: number
   events: MobEvent[]
   seed: number
@@ -126,27 +123,33 @@ const stir = (seed: number): number => (seed * 1103515245 + 12345) >>> 0
 
 // --- starting ---------------------------------------------------------------
 
-export function newRun(level = 1, lives = LIVES, score = 0, hits = 0, seed = 1): Run {
+/** The gun in hand. Derived, so there is one ladder and nowhere to drift from it. */
+export const weaponOf = (run: Run): Gun => gunAt(run.rung)
+
+export function newRun(
+  level = 1, lives = LIVES, score = 0, rung = 0, seed = 1, killed = 0,
+): Run {
   const dice = makeDice(seed)
   let id = 1
   const nextId = () => id++
-  const blocks = waveFor(level, dice, nextId)
+  const crowd = waveFor(level, dice, nextId)
 
   return {
     level,
     status: 'playing',
     score,
-    hits,
+    killed,
     lives,
-    cart: LANE / 2,
-    weapon: weaponFor(hits).id,
-    squads: [],
-    // The row is there from the first shot. Every shot goes through it.
-    gates: gateRow(level, dice, GATE_Y, nextId),
-    blocks,
+    gun: LANE / 2,
+    rung,
+    shots: [],
+    crowd,
+    // The first pair is already on its way down when a wave opens: the decision
+    // should be in front of the player before the shooting settles into a
+    // rhythm, not thirty seconds later.
+    crates: cratePair(level, rung, dice, nextId),
     says: [],
-    cool: 0.35,
-    gateIn: gateEvery(level),
+    cool: 0.2,
     clock: 0,
     events: [],
     seed: stir(seed),
@@ -154,61 +157,78 @@ export function newRun(level = 1, lives = LIVES, score = 0, hits = 0, seed = 1):
   }
 }
 
-/** The next wave, keeping the score, the guns and what is left of the lives. */
+/** The next wave, keeping the score, the gun, the tally and what is left of the lives. */
 export const nextLevel = (run: Run): Run =>
-  newRun(run.level + 1, run.lives, run.score, run.hits, run.seed + 1)
+  newRun(run.level + 1, run.lives, run.score, run.rung, run.seed + 1, run.killed)
 
 /**
  * Carrying on after one got through.
  *
- * The mob is pushed back up the lane rather than rebuilt: a wave that starts
+ * The crowd is pushed back up the lane rather than rebuilt: a wave that starts
  * again from the top after every life would make a late wave unloseable by
- * attrition, and one that carries on from where it was would put the next block
- * over the line half a second after you pressed the button.
+ * attrition, and one that carries on from where it was would put the next
+ * monster over the line half a second after you pressed the button.
  */
 export function serve(run: Run): Run {
   return {
     ...run,
     status: 'playing',
-    squads: [],
+    shots: [],
     says: [],
-    cool: 0.35,
-    blocks: run.blocks.map((b) => ({ ...b, y: b.y - PUSH_BACK })),
+    cool: 0.2,
+    crowd: run.crowd.map((m) => ({ ...m, y: m.y - PUSH_BACK })),
     events: [],
   }
 }
 
 /**
- * How far the whole mob is pushed back up the lane when one gets through.
+ * How far the crowd is pushed back when one gets through.
  *
- * Measured rather than guessed: at three units a block that crossed the line
- * was back over it four seconds later, and a good player was losing ten lives a
- * minute from wave ten on — not difficulty, a death spiral. Six units is about
- * six seconds of grace at the pace the mob walks deep in.
+ * Measured rather than guessed on the game this replaced: at three units a
+ * monster that crossed the line was back over it four seconds later, and a good
+ * player was losing ten lives a minute — not difficulty, a death spiral.
  */
 const PUSH_BACK = 6
 
-/** How many machines are still standing, for the top of the screen. */
-export const standing = (run: Run): number =>
-  run.blocks.reduce((sum, block) => sum + block.count, 0)
+/** How many monsters are still standing, for the top of the screen. */
+export const standing = (run: Run): number => run.crowd.length
+
+/**
+ * Seconds until the nearest monster reaches the line.
+ *
+ * The other half of every decision in this game, so it is computed from the
+ * real thing rather than estimated: whichever monster is nearest, at its own
+ * breed's pace. Infinity when the lane is clear, which the screen draws as a
+ * dash rather than a number.
+ */
+export function arriveIn(run: Run): number {
+  let soonest = Infinity
+  for (const mon of run.crowd) {
+    const togo = LINE_Y - (mon.y + MON_H / 2)
+    const pace = walkSpeed(run.level) * mon.pace
+    soonest = Math.min(soonest, Math.max(0, togo) / pace)
+  }
+  return soonest
+}
+
+/** What a crate still costs, in seconds at the gun you are holding now. */
+export const costOf = (crate: Crate, weapon: Gun): number =>
+  (crate.need - crate.got) * weapon.every
 
 // --- the lane ---------------------------------------------------------------
 
-const clampCart = (x: number): number =>
-  Math.max(CART_W / 2, Math.min(LANE - CART_W / 2, x))
+const clampGun = (x: number): number => Math.max(GUN_W / 2, Math.min(LANE - GUN_W / 2, x))
 
-/** Whether a squad at this x is inside a gate's slice of the lane. */
-const under = (gate: Gate, x: number): boolean => x >= gate.from && x < gate.to
-
-const boxOf = (block: Block): [number, number, number, number] => [
-  block.x - MOB_W / 2,
-  block.y - MOB_H / 2,
-  block.x + MOB_W / 2,
-  block.y + MOB_H / 2,
+const monBox = (mon: Monster): [number, number, number, number] => [
+  mon.x - MON_W / 2, mon.y - MON_H / 2, mon.x + MON_W / 2, mon.y + MON_H / 2,
 ]
 
-const sum = (op: Op, squad: number, by: number, after: number): string =>
-  `${squad} ${op === 'times' ? '×' : op === 'plus' ? '+' : '−'} ${by} = ${after}`
+const crateBox = (crate: Crate): [number, number, number, number] => [
+  crate.x - CRATE_W / 2, crate.y - CRATE_H / 2, crate.x + CRATE_W / 2, crate.y + CRATE_H / 2,
+]
+
+const inBox = (box: [number, number, number, number], x: number, y: number): boolean =>
+  x + SHOT_W / 2 > box[0] && x - SHOT_W / 2 < box[2] && y <= box[3] && y >= box[1]
 
 // --- a step -----------------------------------------------------------------
 
@@ -217,188 +237,187 @@ export function step(run: Run, input: Input, dt: number): Run {
 
   const next: Run = {
     ...run,
-    squads: run.squads.map((s) => ({ ...s })),
-    gates: run.gates.map((g) => ({ ...g })),
-    blocks: run.blocks.map((b) => ({ ...b })),
+    shots: run.shots.map((s) => ({ ...s })),
+    crowd: run.crowd.map((m) => ({ ...m })),
+    crates: run.crates.map((c) => ({ ...c })),
     says: run.says.map((s) => ({ ...s })),
     events: [],
   }
-  const dice = makeDice(next.seed)
   next.seed = stir(next.seed)
   next.clock += dt
 
-  const weapon = weaponFor(next.hits)
-
-  // --- the cart ---
+  // --- you ---
   if (input.to !== null) {
-    const want = clampCart(input.to)
-    const most = CART_SPEED * dt
-    const gap = want - next.cart
-    next.cart = Math.abs(gap) <= most ? want : next.cart + Math.sign(gap) * most
+    const want = clampGun(input.to)
+    const most = GUN_SPEED * dt
+    const gap = want - next.gun
+    next.gun = Math.abs(gap) <= most ? want : next.gun + Math.sign(gap) * most
   } else if (input.left !== input.right) {
-    next.cart = clampCart(next.cart + (input.right ? 1 : -1) * CART_SPEED * dt)
+    next.gun = clampGun(next.gun + (input.right ? 1 : -1) * GUN_SPEED * dt)
   }
 
   // --- firing ---
+  const weapon = gunAt(next.rung)
+
   next.cool -= dt
   if (next.cool <= 0) {
     next.cool += weapon.every
-    next.squads.push({
-      id: next.nextId++,
-      x: next.cart,
-      y: TALL - 1.6,
-      n: weapon.squad,
-      flash: 0,
-    })
+    next.shots.push({ id: next.nextId++, x: next.gun, y: TALL - 1.7 })
     next.events.push('fire')
   }
 
-  // --- the row of gates, swapped for another every few seconds ---
-  for (const gate of next.gates) gate.flash = Math.max(0, gate.flash - dt)
-
-  next.gateIn -= dt
-  if (next.gateIn <= 0) {
-    next.gateIn += gateEvery(next.level)
-    next.gates = gateRow(next.level, dice, GATE_Y, () => next.nextId++, next.clock)
-    next.events.push('gates')
+  // --- the crates drift down, and a new pair arrives ---
+  const drift = crateSpeed(next.level) * dt
+  for (const crate of next.crates) {
+    crate.y += drift
+    crate.flash = Math.max(0, crate.flash - dt)
+  }
+  // Lost at the line, on the same rule as the crowd: once it is level with
+  // you it is behind everything you could have shot it with.
+  const missed = next.crates.filter((crate) => crate.y + CRATE_H / 2 >= LINE_Y)
+  if (missed.length > 0) {
+    next.crates = next.crates.filter((crate) => !missed.includes(crate))
+    // Only worth a noise if some work went into it. A crate nobody touched
+    // drifting past is not a loss, it is a decision that was made.
+    if (missed.some((crate) => crate.got > 0)) next.events.push('missed')
   }
 
-  // --- the squads go up, through whatever is in the way ---
   /*
-   * Walked along their path in slices, not teleported to the end of it.
+   * No crates arrive mid-wave: the pair that comes with the wave is the lot.
    *
-   * A squad covers two thirds of a unit in a sixtieth of a second and a block
-   * is a unit and a quarter tall, so at any step much longer than a frame a
-   * whole block fits between where a squad was and where it is next, and the
-   * squad sails straight through the mob without touching it. The wall's ball
-   * has the same problem and the same answer: never move further in one go
-   * than half the smallest thing you could hit.
+   * They used to arrive on a timer, which meant a crate was in front of the
+   * crowd most of the time and a run climbed two rungs a wave while the wave
+   * got one rung harder — so by the fifth minute the gun was forty times
+   * stronger than anything walking at it and nothing could go wrong. One pair a
+   * wave means the choice is made once, properly, and it is the only way up.
    */
-  const rise = SQUAD_SPEED * dt
-  const dead = new Set<number>()
-  const slice = Math.min(MOB_H, MOB_W) * 0.5
 
-  for (const squad of next.squads) {
-    squad.flash = Math.max(0, squad.flash - dt)
+  // --- the shots go up, into the first thing they meet ---
+  /*
+   * Walked along their path in slices rather than teleported to the end of it.
+   * A shot covers an eighth of a unit in a frame and a monster is a unit and a
+   * half tall, so at any step much longer than a frame a whole monster fits
+   * between where a shot was and where it is next, and the shot sails through
+   * the crowd without touching anything.
+   */
+  const rise = SHOT_SPEED * dt
+  const slice = Math.min(MON_H, CRATE_H) * 0.5
+  const dead = new Set<number>()
+
+  for (const shot of next.shots) {
     let togo = rise
 
-    while (togo > 0 && !dead.has(squad.id)) {
+    while (togo > 0 && !dead.has(shot.id)) {
       const move = Math.min(togo, slice)
       togo -= move
-      const was = squad.y
-      squad.y -= move
+      shot.y -= move
 
-      // Gates first: a squad that passes a gate and a block in the same slice
-      // went through the gate on the way, so it arrives at its new size.
-      for (const gate of next.gates) {
-        if (!under(gate, squad.x)) continue
-        // Crossed it during this slice, rather than being near it now.
-        if (!(was > gate.y && squad.y <= gate.y)) continue
-        const before = squad.n
-        const after = apply(before, gate.op, gate.by)
-        if (after !== before) {
-          squad.n = after
-          squad.flash = 0.3
-          gate.flash = 0.3
-          next.events.push(after > before ? 'grow' : 'shrink')
-          /*
-           * One label per gate, replacing whatever that gate said last.
-           *
-           * Shots go through a gate twice a second and the sum is the same
-           * sum every time, so letting them pile up stacked three copies of
-           * `1 × 2 = 2` on top of each other and on top of the gate's own
-           * number, which became unreadable — the one number on the screen
-           * the whole game is about. Seen in a screenshot, not in a test.
-           */
-          next.says = next.says.filter((said) => said.from !== gate.id)
+      // Crates first: they hang lower than the crowd they came down through, so
+      // a shot meets one on the way to the monsters behind it.
+      let spent = false
+      for (const crate of next.crates) {
+        if (!inBox(crateBox(crate), shot.x, shot.y)) continue
+        crate.got += 1
+        crate.flash = 0.2
+        spent = true
+        if (crate.got >= crate.need) {
+          next.rung = Math.min(TOP_RUNG, next.rung + crate.step)
+          next.score += 25
+          next.events.push('opened')
+          // The other crate of the pair goes with it: the choice was made, and
+          // leaving the dear one hanging there would turn "which" into "both".
+          for (const other of next.crates) if (other.id !== crate.id) dead.add(other.id)
           next.says.push({
             id: next.nextId++,
-            from: gate.id,
-            x: squad.x,
-            // Above the gate rather than on it, so the frame stays legible.
-            y: gate.y - 0.95,
-            text: sum(gate.op, before, gate.by, after),
-            tint: after > before ? '#9af5c0' : '#ff8c8c',
-            life: 1.2,
+            from: crate.id,
+            x: crate.x,
+            y: crate.y,
+            text: gunAt(next.rung).name.toUpperCase(),
+            tint: '#ffd166',
+            life: 2,
+            big: true,
           })
-        } else if (before === MOST || before === LEAST) {
-          // Pinned at the ceiling or the floor. Say nothing and make no noise:
-          // a gate that did nothing is not news, and a cue for it would fire on
-          // every shot once a squad is capped.
-          gate.flash = 0.15
+          dead.add(crate.id)
+        } else {
+          next.events.push('chip')
         }
+        break
+      }
+      if (spent) {
+        dead.add(shot.id)
+        break
       }
 
-      // Then whatever it has flown into. Nearest first, so a squad with enough
-      // in it takes the front block and carries on into the one behind.
-      const ahead = next.blocks
-        .filter((block) => !dead.has(block.id) && block.count > 0)
-        .sort((a, b) => b.y - a.y)
+      for (const mon of next.crowd) {
+        if (dead.has(mon.id)) continue
+        if (!inBox(monBox(mon), shot.x, shot.y)) continue
 
-      for (const block of ahead) {
-        if (squad.n <= 0) break
-        const [left, top, right, bottom] = boxOf(block)
-        const hitX = squad.x + SQUAD_W / 2 > left && squad.x - SQUAD_W / 2 < right
-        const hitY = squad.y <= bottom && squad.y >= top
-        if (!hitX || !hitY) continue
-
-        const take = Math.min(squad.n, block.count)
-        block.count -= take
-        squad.n -= take
-        block.flash = 0.25
-        next.hits += take
-        next.score += take
-
-        if (block.count <= 0) {
-          dead.add(block.id)
-          next.events.push('broke')
-          next.score += 5
+        const took = Math.min(mon.health, gunAt(next.rung).hit)
+        mon.health -= took
+        mon.flash = 0.18
+        next.score += took
+        // One number per monster, replaced as the hits land. Without this a
+        // quick gun stacks four of them on the same monster in a tenth of a
+        // second and the crowd disappears behind its own arithmetic.
+        next.says = next.says.filter((said) => said.from !== mon.id)
+        next.says.push({
+          id: next.nextId++,
+          from: mon.id,
+          // Off to one side and above, so it does not sit on the number the
+          // monster is wearing — which is the one a player is reading.
+          x: mon.x + 0.85,
+          y: mon.y - 0.85,
+          text: `-${took}`,
+          tint: '#ffe08a',
+          life: 0.5,
+          big: false,
+        })
+        if (mon.health <= 0) {
+          dead.add(mon.id)
+          next.killed += 1
+          next.score += 10
+          next.events.push('killed')
         } else {
           next.events.push('hit')
         }
+        spent = true
+        break
       }
 
-      if (squad.n <= 0 || squad.y < -0.6) dead.add(squad.id)
+      if (spent || shot.y < -0.6) dead.add(shot.id)
     }
   }
 
-  next.squads = next.squads.filter((squad) => !dead.has(squad.id))
-  next.blocks = next.blocks.filter((block) => !dead.has(block.id) && block.count > 0)
+  next.shots = next.shots.filter((shot) => !dead.has(shot.id))
+  next.crates = next.crates.filter((crate) => !dead.has(crate.id))
+  next.crowd = next.crowd.filter((mon) => !dead.has(mon.id) && mon.health > 0)
 
-  // --- the mob walks down ---
-  const walk = mobSpeed(next.level) * dt
+  // --- the crowd walks down ---
+  const walk = walkSpeed(next.level) * dt
   let through = false
-  for (const block of next.blocks) {
-    block.y += walk
-    block.flash = Math.max(0, block.flash - dt)
-    if (block.y + MOB_H / 2 >= LINE_Y) through = true
+  for (const mon of next.crowd) {
+    mon.y += walk * mon.pace
+    mon.flash = Math.max(0, mon.flash - dt)
+    if (mon.y + MON_H / 2 >= LINE_Y) through = true
   }
 
   // --- the labels fade ---
   for (const said of next.says) {
     said.life -= dt
-    said.y -= dt * 0.9
+    said.y -= dt * (said.big ? 0.7 : 1.6)
   }
   next.says = next.says.filter((said) => said.life > 0)
-
-  // --- a new gun, if this run has earned one ---
-  const now = weaponFor(next.hits)
-  if (now.id !== next.weapon) {
-    next.weapon = now.id
-    next.events.push('armed')
-  }
 
   // --- how it ends ---
   if (through) {
     /*
-     * The block stays. It cost a life and it is still there, pushed back up the
-     * lane by `serve` along with everything behind it.
+     * The monster stays. It cost a life and it is still there, pushed back up
+     * the lane by `serve` along with everything behind it.
      *
-     * It used to be taken off the board, which quietly meant a wave could be
-     * "cleared" by standing still and letting the whole mob walk through you:
-     * the last block over the line left nothing on the board, and nothing on
-     * the board is a cleared wave. The bot that never moves cleared one that
-     * way. A wave is cleared by shooting it, or not at all.
+     * Taking it off the board instead would quietly mean a wave could be
+     * "cleared" by standing still and letting the whole crowd walk through you:
+     * the last one over the line leaves nothing on the board, and nothing on the
+     * board is a cleared wave.
      */
     next.lives -= 1
     next.events.push('through')
@@ -409,7 +428,7 @@ export function step(run: Run, input: Input, dt: number): Run {
       next.status = 'lost'
       next.events.push('lost')
     }
-  } else if (next.blocks.length === 0) {
+  } else if (next.crowd.length === 0) {
     next.status = 'cleared'
     next.events.push('cleared')
   }

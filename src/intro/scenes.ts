@@ -68,9 +68,9 @@ import {
   headOf as crawlHead, newRun as newGarden, respawn as crawlAgain, step as crawlOn,
   type Run as Crawl,
 } from '../snake/run'
-import { betterGate as betterMobGate, weaponFor as mobWeapon } from '../mob/level'
 import {
-  newRun as newMob, serve as serveMob, step as stepMob, type Run as MobRun,
+  arriveIn as mobClock, costOf as mobCost, newRun as newMob, serve as serveMob, step as stepMob,
+  weaponOf as mobGun, type Run as MobRun,
 } from '../mob/run'
 import { drawRun as drawMob } from '../mob/draw'
 
@@ -772,21 +772,31 @@ let laneFilmed: MobRun[] | null = null
 function laneFilm(): MobRun[] {
   if (laneFilmed) return laneFilmed
   const frames: MobRun[] = []
-  let run = newMob(3, 99, 0, 60, 7)
+  let run = newMob(3, 99, 0, 2, 7)
   const slice = 1 / 60
 
   for (let t = 0; t < 44; t += slice) {
-    let to: number | null = null
-    if (run.gates.length === 2) {
-      const want = betterMobGate(run.gates, mobWeapon(run.hits).squad)
-      const mine = run.blocks.filter((b) => b.x >= want.from && b.x < want.to && b.y > -4)
-      const target = (mine.length > 0 ? mine : run.blocks).reduce<{ x: number; y: number } | null>(
-        (worst, b) => (worst === null || b.y > worst.y ? b : worst),
+    /*
+     * The bot plays it the way the story says to play it: it works out whether
+     * a crate fits in the time left and goes for it if it does, and otherwise
+     * shoots whatever is nearest. So the footage behind the words is the words
+     * being carried out, without anybody having to keep the two in step.
+     */
+    const clock = mobClock(run)
+    const gun = mobGun(run)
+    let aim: { x: number } | null = null
+    for (const one of run.crates) {
+      if (one.y < -1 || mobCost(one, gun) + 1 > clock) continue
+      if (aim === null) aim = one
+    }
+    if (aim === null) {
+      const near = run.crowd.filter((m) => m.y > -3)
+      aim = near.reduce<{ x: number; y: number } | null>(
+        (worst, m) => (worst === null || m.y > worst.y ? m : worst),
         null,
       )
-      to = target === null ? (want.from + want.to) / 2 : target.x
     }
-    run = stepMob(run, { to, left: false, right: false }, slice)
+    run = stepMob(run, { to: aim ? aim.x : 5, left: false, right: false }, slice)
     if (run.status !== 'playing') run = serveMob({ ...run, status: 'lost', lives: 99 })
     if (Math.round(t / slice) % 6 === 0) frames.push(run)
   }
@@ -1161,7 +1171,7 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
   },
 
   /**
-   * The lane, played by somebody who picks the right gate.
+   * The lane, played by somebody who does the sum before going for a crate.
    */
   lane({ ctx, w, h, clock }) {
     const film = laneFilm()

@@ -202,25 +202,25 @@ export const STORIES: Record<string, Story> = {
   /*
    * The swarm.
    *
-   * The two things that have to land are the two things that are not obvious
-   * from looking at it: that the cart fires by itself, so there is only one
-   * thing to do, and that the gates are a choice rather than scenery. The
-   * crossover gets a beat of its own with the actual numbers in it, because
-   * "pick the better one" is advice and "with one in the squad, plus four
-   * wins" is a rule you can use on the next shot.
+   * Three things have to land, and only three. The gun fires itself, so there
+   * is one control. The number on a monster is how many more shots it needs.
+   * And a crate is paid for in hits that are not going into the crowd — which
+   * is the whole game, so it gets three beats and an actual sum, because "think
+   * about whether it is worth it" is advice and "twelve hits at three a second
+   * is four seconds" is a thing you can do on the next crate.
    */
   mob: {
     id: 'mob',
     title: 'THE SWARM',
     beats: [
-      { seconds: 4.4, scene: 'lane', voice: 'narrator', line: 'A lane, a cart, and the machines {papa} wound up.' },
+      { seconds: 4.4, scene: 'lane', voice: 'narrator', line: 'A crowd of monsters, walking down the lane at you.' },
       { seconds: 3.8, scene: 'lane', voice: 'papa', line: 'I wound every one of them up myself!' },
-      { seconds: 4.4, scene: 'lane', voice: 'narrator', line: 'Slide to move the cart. It fires on its own.' },
-      { seconds: 4.8, scene: 'lane', voice: 'narrator', line: 'Two gates hang across the lane. You can only use one.' },
-      { seconds: 4.8, scene: 'lane', voice: 'narrator', line: 'Times three, or plus four. Take whichever makes more of you.' },
-      { seconds: 5.2, scene: 'lane', voice: 'narrator', line: 'With one in the squad, plus four wins. With five, times three.' },
-      { seconds: 5.2, scene: 'lane', voice: 'narrator', line: 'Twelve of you against nine of them leaves three, still going up.' },
-      { seconds: 4.0, scene: 'lane', voice: 'narrator', line: 'Red gates take people off you. Go round those.' },
+      { seconds: 4.4, scene: 'lane', voice: 'narrator', line: 'Slide to move. The gun fires on its own.' },
+      { seconds: 4.8, scene: 'lane', voice: 'narrator', line: 'The number on a monster is how much more it can take.' },
+      { seconds: 4.6, scene: 'lane', voice: 'narrator', line: 'Crates come down the sides with a better gun inside.' },
+      { seconds: 5.2, scene: 'lane', voice: 'narrator', line: 'A crate costs hits. Hits you are not firing at the crowd.' },
+      { seconds: 5.4, scene: 'lane', voice: 'narrator', line: 'Twelve hits at three a second is four seconds of not shooting.' },
+      { seconds: 5.6, scene: 'lane', voice: 'narrator', line: 'The clock at the top says how long you have. Do the sum.' },
       { seconds: 3.6, scene: 'lane', voice: 'papa', line: 'They keep coming. That is the entire plan.' },
     ],
   },

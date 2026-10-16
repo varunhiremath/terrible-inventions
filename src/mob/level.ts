@@ -1,28 +1,28 @@
 /**
- * The swarm: what is in a lane, and how big the numbers on it are.
+ * The swarm: what is in the lane, and how big the numbers on it are.
  *
- * "A simple mob control game where you shoot things coming at you and then
- * there are math operators that let you multiply or get new weapons based on
- * number of hits."
+ * "A crowd of monsters walking towards you and you shoot at them. You are
+ * single player and your attack goes up by upgrading weapons, and there will be
+ * multiple weapons coming down that may require different number of hits. So
+ * you have to decide which one you wanna target based on how much time is left
+ * for the enemy to reach you."
  *
- * So: you stand at the bottom of a lane and send squads up it. A squad is a
- * number — a cluster of little figures, and the number is written on it — and
- * the gates drifting down the lane do arithmetic to it. Pass a squad through
- * `×3` and three times as many come out the other side.
+ * So: one of you, at the bottom, firing straight up. A crowd of Papa's
+ * wind-up monsters walking down with how much more they can take written on
+ * them. And crates drifting down the lane with a weapon inside, each needing a
+ * number of hits to crack open — hits that are not going into the monsters
+ * while you spend them.
  *
- * The maths is the game rather than a tax on it, and it is the one thing in
- * here that had to be designed rather than copied. A row of gates is two gates
- * side by side and you can only use one of them, so the question every few
- * seconds is *which*: with four in the squad `+6` beats `×2`, and with eight it
- * is the other way round. That crossover is the whole lesson, and it is why
- * `gateRow` refuses to build a row where one side simply wins — a choice with
- * an answer that never changes is not a choice, it is a chore with a correct
- * button.
+ * That is where the arithmetic lives, and it is the whole game: a crate needing
+ * twelve hits at three shots a second is four seconds of not shooting anything
+ * that is walking at you. If the front monster reaches you in six, it is worth
+ * it. If it reaches you in three, it is not, however good the gun inside is.
+ * Both numbers are on the screen — the crate says what it costs, the top of the
+ * lane says how long you have — and the sum between them is the decision.
  *
- * There is no `÷` gate, though it is the obvious fourth one. Dividing a squad
- * of seven by two has to answer something, and every honest answer is either a
- * fraction of a person or a lie about what division does. The app is not going
- * to teach that 7 ÷ 2 = 3.
+ * The first version of this game had you firing *people* up the lane at crates
+ * of machines, which was the wrong way round in every sense. It is one shooter
+ * and a crowd of monsters now.
  */
 
 /**
@@ -45,319 +45,266 @@ export const LIVES = 3
 export const LANE = 10
 export const TALL = 18
 
-/** The cart you push along the bottom, and how wide it is. */
-export const CART_Y = TALL - 1.1
-export const CART_W = 1.7
-export const CART_SPEED = 13
+/** You, at the bottom, and how fast you slide. */
+export const GUN_Y = TALL - 1.1
+export const GUN_W = 1.5
+export const GUN_SPEED = 13
 
 /**
- * The line the mob must not cross, a little above the cart.
+ * The line they must not cross, a little above you.
  *
- * Above rather than level with it: a block that has to touch you to count is a
- * block you can dodge sideways, which turns the last second of a wave into a
- * game of chicken rather than a reason to have shot it sooner.
+ * Above rather than level with you: a monster that has to touch you to count is
+ * a monster you can dodge sideways, which turns the last second of a wave into
+ * a game of chicken rather than a reason to have shot it sooner.
  */
 export const LINE_Y = TALL - 2.3
 
-export const SQUAD_SPEED = 8.2
-/** How wide a squad is, for deciding what it flies into. */
-export const SQUAD_W = 0.78
+export const SHOT_SPEED = 15
+export const SHOT_W = 0.22
 
-export const MOB_W = 2.1
-export const MOB_H = 1.25
+export const MON_W = 1.3
+export const MON_H = 1.5
 
-/**
- * The biggest and smallest a squad can be.
- *
- * The cap is not about difficulty, it is about reading: past a hundred the
- * number stops fitting on the cluster and the cluster stops looking like
- * people. The floor is one, because a gate that can leave you with nothing
- * would mean a shot that was never worth firing.
- */
-export const MOST = 99
-export const LEAST = 1
-
-export type Op = 'times' | 'plus' | 'minus'
-
-export const SIGN: Record<Op, string> = { times: '×', plus: '+', minus: '−' }
-
-/** What a gate does to a squad that goes through it. */
-export const apply = (squad: number, op: Op, by: number): number => {
-  const out =
-    op === 'times' ? squad * by
-    : op === 'plus' ? squad + by
-    : squad - by
-  return Math.max(LEAST, Math.min(MOST, Math.round(out)))
-}
-
-/** Whether a gate is one to aim for or one to swerve round, for the colours. */
-export const kind = (op: Op): 'good' | 'bad' => (op === 'minus' ? 'bad' : 'good')
-
-export interface Gate {
-  id: number
-  op: Op
-  by: number
-  /** The slice of the lane it covers. */
-  from: number
-  to: number
-  y: number
-  /** Counts down after a squad goes through, so the drawing can flash it. */
-  flash: number
-  /** When it slid in, so the drawing can slide it in. */
-  born: number
-}
-
-/**
- * Where the gates hang: one row, across the lane, between you and the mob.
- *
- * One row and not a stream of them, which is what this was first built as.
- * Rows arriving every few seconds and drifting down meant six of them in the
- * lane at once and a squad passing through all six — `×2` six times over is a
- * squad of sixty-four and no decision anywhere in it. One row means every
- * single shot goes through exactly one gate, so the question is asked on every
- * shot and the answer is always about the number you have right now.
- */
-export const GATE_Y = TALL - 5.2
-
-/** A block of Papa's machines, with how many of them are in it written on. */
-export interface Block {
-  id: number
-  x: number
-  y: number
-  count: number
-  flash: number
-}
+export const CRATE_W = 1.9
+export const CRATE_H = 1.8
 
 // --- what you are shooting with ----------------------------------------------
 
-export interface Weapon {
-  id: 'popper' | 'twins' | 'fan' | 'cascade'
-  /** What it is called when it arrives. */
+/**
+ * One gun on the ladder.
+ *
+ * A written-out ladder rather than a set of multipliers applied to whatever you
+ * are holding, which is what this was first. Multipliers compound: a bot
+ * playing five minutes was at sixty damage a shot and twelve shots a second
+ * inside two, both pinned at their ceilings, with the rest of the run spent
+ * holding a gun that could not get better. A ladder cannot run away, every rung
+ * can be balanced against the wave it turns up on, and — the part that matters
+ * for a nine-year-old — the crate can say the name and the number of the gun
+ * you would actually be holding, rather than a sum to do on the gun you have.
+ */
+export interface Gun {
   name: string
-  /** One line about what changed, because a new gun that says nothing is paint. */
-  says: string
-  /** Hits it takes to get this far. */
-  at: number
-  /** How many come out per shot. */
-  squad: number
+  /** How much comes off a monster per shot. */
+  hit: number
   /** Seconds between shots. */
   every: number
-  tint: string
 }
 
 /**
- * The ladder of guns, unlocked by hits rather than bought.
- *
- * Hits, not waves cleared: the ask was "new weapons based on number of hits",
- * and it is the better rule anyway. It rewards shooting *well* — a squad
- * steered through the right gate takes a whole block with one shot — rather
- * than surviving long enough, which is just the clock.
+ * The names, in the order they turn up. Past the end of the list the same names
+ * come round again with a II after them — twenty-four rungs is deeper than
+ * anybody is going to get, and inventing twenty-four names for guns is how a
+ * list ends up with six that mean nothing.
  */
-export const WEAPONS: readonly Weapon[] = [
-  {
-    id: 'popper',
-    name: 'Popper',
-    says: 'One at a time. Make it count.',
-    at: 0,
-    squad: 1,
-    every: 0.5,
-    tint: '#8fd3ff',
-  },
-  {
-    id: 'twins',
-    name: 'Twins',
-    says: 'Two out of every shot now.',
-    at: 80,
-    squad: 2,
-    every: 0.46,
-    tint: '#9af5c0',
-  },
-  {
-    id: 'fan',
-    name: 'Fan',
-    says: 'Three, and quicker.',
-    at: 350,
-    squad: 3,
-    every: 0.4,
-    tint: '#ffd76a',
-  },
-  {
-    id: 'cascade',
-    name: 'Cascade',
-    says: 'Five at a time. Go and get them.',
-    at: 1000,
-    squad: 5,
-    every: 0.34,
-    tint: '#ff9ae0',
-  },
+const NAMES = [
+  'Peashooter', 'Popgun', 'Rattler', 'Thumper', 'Slugger', 'Buzzsaw',
+  'Cannon', 'Howitzer', 'Hammer', 'Bruiser', 'Lightning', 'Thunderclap',
 ]
 
-export const weaponFor = (hits: number): Weapon => {
-  let best = WEAPONS[0]
-  for (const weapon of WEAPONS) if (hits >= weapon.at) best = weapon
-  return best
+/**
+ * The ladder, built from the same factor the waves grow by.
+ *
+ * Forty per cent a rung, which is exactly what a wave gains over the one before
+ * it. That is the whole balance of this game in one line: one rung a wave keeps
+ * you level, two gains you ground, and none loses it — so the crate is not a
+ * bonus, it is the price of staying in the game, and which crate you can afford
+ * is the question it asks.
+ *
+ * The first version of this had the ladder growing faster than the waves and
+ * fourteen rungs long. A bot was holding the best gun in the game two minutes
+ * in, one-shotting everything in the lane, and five minutes passed without it
+ * losing a life — and the measurement that found it was a wave's monsters
+ * getting a third tougher and *nothing in the outcome changing at all*, which
+ * is what a number nobody is bound by looks like.
+ */
+export const GUNS: readonly Gun[] = Array.from({ length: 24 }, (_, rung) => ({
+  name: rung < NAMES.length ? NAMES[rung] : `${NAMES[rung - NAMES.length]} II`,
+  // `rung + 1` under the curve keeps the first few rungs apart: forty per cent
+  // of one is nothing, so a plain power curve gives two Peashooters in a row
+  // and a crate that changes nothing anybody can see.
+  hit: Math.max(rung + 1, Math.round(Math.pow(1.4, rung))),
+  every: Math.max(0.12, Math.round((0.34 - rung * 0.009) * 100) / 100),
+}))
+
+export const TOP_RUNG = GUNS.length - 1
+
+export const gunAt = (rung: number): Gun => GUNS[Math.max(0, Math.min(TOP_RUNG, Math.round(rung)))]
+
+/** Shots a second, which is the number the player needs for the sum. */
+export const rateOf = (gun: Gun): number => Math.round((1 / gun.every) * 10) / 10
+
+// --- the monsters -------------------------------------------------------------
+
+/** The four shapes, so a crowd is a crowd rather than one thing repeated. */
+export type Breed = 'blob' | 'spike' | 'stomper' | 'runner'
+
+export const BREEDS: readonly Breed[] = ['blob', 'spike', 'stomper', 'runner']
+
+export interface Breeding {
+  /** How much more health than the wave's usual. */
+  tough: number
+  /** How much faster or slower than the wave's usual. */
+  pace: number
+  tint: string
+  eye: string
 }
+
+export const BREED: Record<Breed, Breeding> = {
+  blob: { tough: 1, pace: 1, tint: '#7ad67a', eye: '#13331b' },
+  spike: { tough: 1.4, pace: 0.85, tint: '#c86be0', eye: '#2d1133' },
+  stomper: { tough: 2.2, pace: 0.6, tint: '#e0924a', eye: '#3a2008' },
+  runner: { tough: 0.6, pace: 1.6, tint: '#67c8e8', eye: '#0c2733' },
+}
+
+export interface Monster {
+  id: number
+  x: number
+  y: number
+  breed: Breed
+  /** What is left, and what it started with, so the bar can be drawn. */
+  health: number
+  max: number
+  pace: number
+  flash: number
+}
+
+export interface Crate {
+  id: number
+  x: number
+  y: number
+  /** Hits it takes to crack open, and how many have landed. */
+  need: number
+  got: number
+  /** How far up the ladder it carries you: one rung, or two. */
+  step: number
+  flash: number
+}
+
+/** What is in a crate, for somebody holding this gun. */
+export const insideFor = (crate: Crate, rung: number): Gun => gunAt(rung + crate.step)
 
 // --- how hard, and in what order ---------------------------------------------
 
-/** How fast the mob walks down the lane on this level. */
-export const mobSpeed = (level: number): number => 0.7 + Math.min(0.3, (level - 1) * 0.025)
-
-/** How long a row of gates hangs there before it is swapped for another. */
-export const gateEvery = (level: number): number => Math.max(2.2, 3.8 - (level - 1) * 0.14)
-
-/** How long a row takes to slide in, which the drawing uses and the rules do not. */
-export const GATE_SLIDE = 0.3
+/**
+ * How fast the crowd walks down the lane on this wave.
+ *
+ * Geometric, like everything else here. A wave that is forty per cent tougher
+ * and arrives five per cent quicker is half a rung more than one rung of gun
+ * can answer — which is what keeps a crate wanted rather than merely nice, and
+ * what stops a player who takes the dear crate every time from running away
+ * with it.
+ */
+export const walkSpeed = (level: number): number => Math.min(1.5, 0.5 * Math.pow(1.05, level - 1))
 
 /**
- * How many blocks a wave is, and how big the counts on them are.
+ * How much a monster can take on this wave.
  *
- * Both of these were a third of this at first, and the bot in
- * `balance.test.ts` is why they are not. With four blocks of six in it, a wave
- * was twenty-four machines against the five hundred people a minute of
- * shooting sends up the lane — so every wave was over in a few seconds, the
- * rest of it was spent waiting for the next row to walk in, and taking the
- * worse gate every single time cost three per cent. The gates were decoration.
- * A block has to be big enough to need several squads, or the arithmetic on it
- * cannot matter.
+ * Pitched against the gun ladder rather than picked, and growing by exactly the
+ * factor it does: forty per cent a wave against forty per cent a rung. So a
+ * monster always takes about four shots however deep you are, a row always
+ * takes about as long to clear as the next row takes to arrive, and the seconds
+ * spent on a crate are always seconds you did not quite have.
+ *
+ * Wave one is four, and a Peashooter does about two and a half a second
+ * against a row arriving every six — so the gun you start with is exactly
+ * enough for the wave you start on, and nothing after it.
  */
-export const waveSize = (level: number): number => Math.min(24, 9 + Math.floor(level * 1.2))
-export const blockWorth = (level: number): number => 10 + (level - 1) * 2
+export const monHealth = (level: number): number => Math.round(4 * Math.pow(1.4, level - 1))
+
+/** How many of them are in it. */
+export const waveSize = (level: number): number => Math.min(30, 8 + level * 2)
+
+/** How fast a crate drifts down. Slower than the crowd: it is a chance, not a threat. */
+export const crateSpeed = (level: number): number => walkSpeed(level) * 0.8
 
 /**
- * A row of two gates, and what makes it worth looking at.
+ * A pair of crates, side by side, that are not the same deal.
  *
- * Three kinds, and the mix is the lesson rather than the decoration.
+ * One rung up for a small price, two rungs up for a much larger one. That is
+ * the choice, and it is only a choice because of the clock: the cheap one
+ * almost always fits in the time left, the dear one often does not, and working
+ * out which is the sum this whole game is built on.
  *
- * A **close call**, which is most of them: a `times` of t against a `plus` of
- * p, chosen so they cross over at p / (t - 1) between two and four — inside the
- * squad sizes the guns actually fire, which are one, two, three and five. Below
- * the crossover
- * the plus gate sends more up the lane, above it the times gate does. So the
- * right answer with the Popper is the wrong one with the Cascade, and getting a
- * new gun makes you think again rather than stop thinking.
- *
- * A **mile apart**, about a quarter of them: `×4` against `+3`, or `×2`
- * against `+16`. One side is plainly better at any squad size you will ever
- * have. These exist because a row of close calls is a row where it barely
- * matters what you pick — measured: with only close calls, taking the worse
- * gate every single time cost about fifteen per cent, because two numbers that
- * cross over near your squad size are two numbers that are nearly equal near
- * your squad size. The arithmetic has to be worth something when you get it
- * right, and that means some rows where the gap is large.
- *
- * And a **trap**, about one in five from wave two: a good gate and a `minus`.
- * Not a choice and not meant to be — they are there so the gates have to be
- * read rather than driven through, and they are drawn in red.
+ * The prices are multiples of three so the division stays the kind a nine-year
+ * old can do in his head — fifteen hits at three a second is five seconds, and
+ * five seconds is either less than what the clock says or it is not.
  */
-export function gateRow(level: number, rng: Dice, y: number, nextId: () => number, born = 0): Gate[] {
-  const half = LANE / 2
-  const times = rng.pick(level < 3 ? [2, 2, 3] : level < 6 ? [2, 3, 3, 4] : [2, 3, 4, 4])
-  const roll = rng.next()
+export function cratePair(level: number, rung: number, rng: Dice, nextId: () => number): Crate[] {
+  const every = gunAt(rung).every
+  /*
+   * Priced in seconds of shooting rather than in hits, then written on the
+   * crate as the hits those seconds come to.
+   *
+   * Hits alone do not survive the ladder: the same twelve hits is four seconds
+   * of a Peashooter and one and a half of a Thunderclap, so a price that was a
+   * real decision at the start becomes small change by wave ten. Seconds are
+   * what the decision is actually made in — the clock at the top is in seconds
+   * — so the prices are set there and converted at the gun you are holding when
+   * the crate comes down.
+   */
+  const toHits = (seconds: number) => Math.max(3, Math.round(seconds / every / 3) * 3)
+  const cheap = { need: toHits(2.5 + rng.next() * 1.5), step: 1 }
+  const dear = { need: toHits(11 + rng.next() * 7), step: 2 }
 
   /*
-   * Wide rows are commoner on the early waves, which is the opposite of what
-   * it looks like it should be. With one in the squad a `×2` gate is almost an
-   * insult — two people — and a `+10` beside it is ten; the gap between the two
-   * choices is at its widest exactly when the guns are at their smallest. So
-   * the early waves are where a wrong choice is most visible, and that is the
-   * wave to teach it on. Measured: with close calls at the same rate as later,
-   * choosing badly through wave six cost four per cent, which is nothing.
+   * Out in the two side lanes, which the crowd never walks down.
+   *
+   * A crate is meant to be something you go to. When they came down the same
+   * columns as the monsters, the bot that never once aimed at a crate opened
+   * every single one anyway, with shots meant for the crowd — no decision left
+   * in the game at all. Now going for one means leaving the crowd, which is
+   * exactly the cost the clock is there to price.
    */
-  const wideOdds = level < 5 ? 0.45 : 0.25
-
-  let other: { op: Op; by: number }
-  if (level >= 2 && roll < 0.2) {
-    other = { op: 'minus', by: rng.int(2, Math.min(9, 2 + Math.floor(level / 2))) }
-  } else if (roll < 0.2 + wideOdds) {
-    /*
-     * A mile apart: either the times gate wins at every size, or the plus does.
-     *
-     * Both halves have to be built from the crossover rather than from
-     * plausible-looking numbers. `×3` against `+3` looks like a walkover and is
-     * not: they cross over at one and a half, so the plus gate wins with one in
-     * the squad and loses with two. For the times gate to win everywhere the
-     * plus has to be smaller than t - 1, which needs a `×3` or better; for the
-     * plus gate to win everywhere the crossover has to be past five, which is
-     * the biggest squad any gun fires.
-     */
-    other =
-      times >= 3 && rng.next() < 0.5
-        ? { op: 'plus', by: times - 2 }
-        : { op: 'plus', by: (times - 1) * rng.int(7, 14) }
-  } else {
-    // The close call, crossing over where the guns are. Two to four, not two
-    // to six: a gun fires one, two, three or five, so a crossover at six is a
-    // row the plus gate simply wins — the squad never gets that big before a
-    // gate. The band has to be the sizes that actually turn up.
-    other = { op: 'plus', by: (times - 1) * rng.int(2, 4) }
-  }
-
-  const lhs: { op: Op; by: number } = { op: 'times', by: times }
-  const [left, right] = rng.next() < 0.5 ? [lhs, other] : [other, lhs]
+  const [left, right] = rng.next() < 0.5 ? [cheap, dear] : [dear, cheap]
+  void level
 
   return [
-    { id: nextId(), op: left.op, by: left.by, from: 0, to: half, y, flash: 0, born },
-    { id: nextId(), op: right.op, by: right.by, from: half, to: LANE, y, flash: 0, born },
+    { id: nextId(), x: LANE * 0.13, y: -1.2, need: left.need, got: 0, step: left.step, flash: 0 },
+    { id: nextId(), x: LANE * 0.87, y: -1.2, need: right.need, got: 0, step: right.step, flash: 0 },
   ]
 }
 
-/**
- * Which gate in a row is the one to take, with this many in the squad.
- *
- * Here rather than in a test because the bot in `balance.test.ts` plays with
- * it, and a bot that works out the answer its own way is a bot proving its own
- * arithmetic rather than the game's.
- */
-export function betterGate(row: readonly Gate[], squad: number): Gate {
-  let best = row[0]
-  for (const gate of row) {
-    if (apply(squad, gate.op, gate.by) > apply(squad, best.op, best.by)) best = gate
-  }
-  return best
-}
+/** How far apart the rows are. They close up as the waves go on. */
+export const rowGap = (level: number): number => Math.max(2.4, 3 - (level - 1) * 0.05)
 
-/**
- * The blocks a wave starts with, laid out in rows above the lane.
- *
- * Rows alternate between three blocks and two, and the two sit in the gaps
- * between the three. That is not only for the look of it: with three in every
- * row and the odd rows merely nudged sideways, every column was within reach of
- * a cart parked in the middle of the lane, and the bot that stands still and
- * never moves cleared a whole wave. Staggering them properly means the lane has
- * to be walked.
- */
-export function waveFor(level: number, rng: Dice, nextId: () => number): Block[] {
+/** The crowd a wave starts with, in staggered rows above the lane. */
+export function waveFor(level: number, rng: Dice, nextId: () => number): Monster[] {
   const many = waveSize(level)
-  const worth = blockWorth(level)
-  const edge = MOB_W / 2 + 0.5
-  const wide = LANE - edge * 2
-  /** Three across the lane, and two in the gaps between them. */
-  const threes = [edge, edge + wide / 2, edge + wide]
-  const twos = [edge + wide / 4, edge + (wide * 3) / 4]
+  const health = monHealth(level)
+  // The crowd keeps to the middle: the outside lane each side belongs to the
+  // crates, so that going for one is a move away from the shooting.
+  const edge = LANE * 0.28
+  const wide = LANE * 0.44
+  /** Four across the lane, and three in the gaps between them. */
+  const fours = [edge, edge + wide / 3, edge + (wide * 2) / 3, edge + wide]
+  const threes = [edge + wide / 6, edge + wide / 2, edge + (wide * 5) / 6]
 
-  const blocks: Block[] = []
+  const crowd: Monster[] = []
   let row = 0
-  while (blocks.length < many) {
-    const places = row % 2 === 0 ? threes : twos
+  while (crowd.length < many) {
+    const places = row % 2 === 0 ? fours : threes
     for (const x of places) {
-      if (blocks.length >= many) break
-      blocks.push({
+      if (crowd.length >= many) break
+      // Runners and stompers only once the wave is big enough to need variety.
+      const breed = rng.pick(
+        level < 2 ? (['blob'] as const)
+        : level < 4 ? (['blob', 'blob', 'runner'] as const)
+        : (['blob', 'blob', 'runner', 'spike', 'stomper'] as const),
+      )
+      const was = BREED[breed]
+      const full = Math.max(1, Math.round(health * was.tough))
+      crowd.push({
         id: nextId(),
         x,
-        // Rows start above the lane and walk in. Spaced well apart so the mob
-        // arrives steadily rather than all at once: a wave should be a stretch
-        // of pressure, not ten seconds of shooting and fifty of waiting.
-        y: -1.4 - row * (MOB_H + 2.4),
-        count: Math.max(3, worth + rng.int(-3, 4)),
+        y: -1.6 - row * rowGap(level),
+        breed,
+        health: full,
+        max: full,
+        pace: was.pace,
         flash: 0,
       })
     }
     row++
   }
-  return blocks
+  return crowd
 }
-
-/** What the top of the screen says this wave is for. */
-export const waveSays = (level: number): string =>
-  level === 1 ? 'Send them up the lane' : `Wave ${level}`

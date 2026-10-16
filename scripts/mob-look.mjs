@@ -46,20 +46,37 @@ await page.waitForTimeout(600)
 const box = await page.locator('canvas').first().boundingBox()
 if (!box) { console.log('MOB FAILED: no canvas'); await browser.close(); process.exit(1) }
 
-// Slide the cart across the lane a few times, as somebody playing would.
+const bar = async () => (await page.locator('p.font-mono').allTextContents()).join(' ')
+const gunNow = async () => ((await bar()).match(/left · ([a-z]+(?: ii)?)/i) ?? [])[1] ?? '?'
+
+// Shoot the crowd for a few seconds, as somebody playing would.
 await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.8)
 await page.mouse.down()
-for (const [i, at] of [0.2, 0.75, 0.35, 0.6, 0.15].entries()) {
+for (const [i, at] of [0.4, 0.6, 0.45].entries()) {
   await page.mouse.move(box.x + box.width * at, box.y + box.height * 0.8, { steps: 8 })
-  await page.waitForTimeout(1600)
-  if (i === 1 || i === 3) {
-    await page.screenshot({ path: `/tmp/mob-play-${i}.png` })
-  }
+  await page.waitForTimeout(1500)
+  if (i === 1) await page.screenshot({ path: '/tmp/mob-play-1.png' })
 }
+
+/*
+ * Then go and open a crate: park under the side lane and hold there. This is
+ * the whole loop of the game and the one thing no unit test can see — whether
+ * standing somewhere with a finger actually buys you a better gun.
+ */
+const started = await gunNow()
+for (const side of [0.08, 0.92]) {
+  await page.mouse.move(box.x + box.width * side, box.y + box.height * 0.8, { steps: 10 })
+  await page.waitForTimeout(6000)
+  await page.screenshot({ path: `/tmp/mob-crate-${side}.png` })
+  if ((await gunNow()) !== started) break
+}
+const ended = await gunNow()
 await page.mouse.up()
-await page.waitForTimeout(800)
+await page.waitForTimeout(500)
 await page.screenshot({ path: '/tmp/mob-play-last.png' })
 
+console.log(`gun: ${started} -> ${ended}`)
+if (started === ended) console.log('MOB: no crate was opened in twelve seconds of trying')
 const head = await page.locator('body').innerText()
 console.log('--- on screen ---')
 console.log(head.split('\n').slice(0, 6).join(' | '))

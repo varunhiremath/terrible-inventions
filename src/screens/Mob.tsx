@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { LANE, LIVES, WEAPONS, weaponFor } from '../mob/level'
+import { GUNS, LANE, LINE_Y, LIVES } from '../mob/level'
 import {
-  FIXED, LOUDEST, newRun, nextLevel, serve, standing, step,
+  FIXED, LOUDEST, arriveIn, newRun, nextLevel, serve, standing, step, weaponOf,
   type Input, type MobEvent, type Run, type Status,
 } from '../mob/run'
-import { drawGun, drawRun, fieldOf, type View } from '../mob/draw'
+import { drawClock, drawHeld, drawRun, fieldOf, type View } from '../mob/draw'
 import { playCue, setHeat } from '../music/player'
 import type { CueName } from '../music/score'
 import { createPacer } from '../arcade/pacing'
@@ -16,12 +16,11 @@ import { Interlude } from './Interlude'
 /**
  * The swarm.
  *
- * A lane, a cart at the bottom of it, and Papa's machines walking down. The
- * cart fires on its own, so there is exactly one thing to do: slide it. That is
- * deliberate — a game where you must hold one finger to fire and another to
- * aim is a game a nine-year-old plays with his nose on the glass, and this one
- * wants his attention on the two numbers hanging across the lane rather than on
- * his hands.
+ * A lane, you at the bottom of it, and a crowd of Papa's monsters walking down.
+ * The gun fires on its own, so there is exactly one thing to do: slide it. That
+ * is deliberate — a game where you hold one finger to fire and another to aim
+ * is a game a nine-year-old plays with his nose on the glass, and this one
+ * wants his attention on two numbers: what a crate costs, and how long he has.
  *
  * Everything else happens in `src/mob/run.ts`, which knows nothing about
  * screens, and `src/mob/draw.ts`, which knows nothing about the rules.
@@ -31,13 +30,13 @@ const MAX_CATCHUP = 0.25
 
 const NOISE: Record<MobEvent, CueName> = {
   fire: 'pop',
-  grow: 'bigger',
-  shrink: 'smaller',
-  gates: 'swing',
   hit: 'thud',
-  broke: 'crumple',
+  killed: 'crumple',
+  chip: 'bigger',
+  opened: 'upgun',
+  crates: 'swing',
+  missed: 'smaller',
   through: 'breach',
-  armed: 'upgun',
   lost: 'breach',
   cleared: 'swarmDown',
   over: 'routed',
@@ -65,7 +64,7 @@ export function Mob() {
   const kit = useStore((s) => s.save.workshop)
 
   const [hud, setHud] = useState<Hud>({
-    level: 1, score: 0, lives: LIVES, left: 0, status: 'playing', gun: WEAPONS[0].name,
+    level: 1, score: 0, lives: LIVES, left: 0, status: 'playing', gun: GUNS[0].name,
   })
   const [asking, setAsking] = useState(false)
 
@@ -128,15 +127,14 @@ export function Mob() {
           if (loudest) playCue(NOISE[loudest])
         }
 
-        // How tense: how near the nearest block is to the line, and how few
-        // lives are left.
-        const near = next.blocks.reduce((low, block) => Math.max(low, block.y), 0)
-        const close = Math.min(1, Math.max(0, near / 15))
+        // How tense: how little time is left on the clock, and how few lives.
+        const soon = arriveIn(next)
+        const close = Number.isFinite(soon) ? Math.min(1, Math.max(0, 1 - soon / 12)) : 0
         const hurt = 1 - (next.lives - 1) / Math.max(1, LIVES - 1)
         setHeat(Math.min(1, Math.max(close * 0.7, hurt * 0.8)))
 
         best.current = Math.max(best.current, next.score)
-        const gun = weaponFor(next.hits).name
+        const gun = weaponOf(next).name
         if (
           next.status !== hud.status || next.level !== hud.level ||
           next.score !== hud.score || next.lives !== hud.lives ||
@@ -155,14 +153,20 @@ export function Mob() {
         const view: View = { w, h, clock: clock.current }
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         drawRun(ctx, next, view)
+
+        /*
+         * The two numbers the game is played with: how long until they reach
+         * you, and what you are holding. Down at the bottom of the lane, either
+         * side of the gun — on the lane rather than in the bar above it, so
+         * they are in the same glance as the crate whose price they are being
+         * compared against, and *below* the hazard line, which is the one strip
+         * of the lane the crowd never walks through while you are still alive.
+         */
         const field = fieldOf(view)
-        drawGun(
-          ctx,
-          next,
-          field.x + field.scale * 0.35,
-          field.y + field.scale * 0.6,
-          Math.max(10, field.scale * 0.42),
-        )
+        const size = Math.max(10, field.scale * 0.4)
+        const floor = field.y + (LINE_Y + 0.75) * field.scale
+        drawClock(ctx, next, field.x + field.scale * 0.3, floor, size)
+        drawHeld(ctx, next, field.x + (LANE - 0.3) * field.scale, floor, size)
       }
 
       frame = requestAnimationFrame(loop)
@@ -244,7 +248,7 @@ export function Mob() {
     setAsking(false)
     setHud({
       level: 1, score: 0, lives: LIVES + spare.current, left: 0, status: 'playing',
-      gun: WEAPONS[0].name,
+      gun: GUNS[0].name,
     })
   }
 
@@ -260,7 +264,7 @@ export function Mob() {
           {String(hud.score).padStart(6, '0')}
         </p>
         <p className="ml-auto font-mono text-[0.68rem] tabular-nums text-dim">
-          wave {hud.level} · {hud.left} left · best {String(best.current).padStart(5, '0')}
+          wave {hud.level} · {hud.left} left · {hud.gun.toLowerCase()}
         </p>
         <p className="font-mono text-xs tabular-nums text-bolt">
           {'●'.repeat(Math.max(0, hud.lives))}
@@ -296,9 +300,9 @@ export function Mob() {
               </p>
               <p className="mt-2 text-lg font-bold text-chalk">
                 {cleared
-                  ? 'The next lot are bigger.'
+                  ? 'The next lot are tougher. Mind the crates.'
                   : over
-                    ? `You held wave ${hud.level}, and saw off ${hud.score} of them.`
+                    ? `You held wave ${hud.level}, and scored ${hud.score}.`
                     : `${hud.lives} ${hud.lives === 1 ? 'go' : 'goes'} left. The rest are pushed back.`}
               </p>
               <div className="mt-4 flex flex-col gap-2">
@@ -315,7 +319,7 @@ export function Mob() {
 
       <div className="shrink-0 px-4 pb-3 pt-1">
         <p className="text-center font-mono text-[0.65rem] uppercase tracking-widest text-dim/60">
-          slide to move · it fires by itself · pick the gate that makes more
+          slide to move · it fires by itself · a crate costs hits you are not firing at them
         </p>
       </div>
     </div>

@@ -21,7 +21,7 @@ the money taken out.
 |---|---|---|
 | **Papa Panic** | A maze, a lot of dots, four chasers | Between lives, and in the shop |
 | **The Caves** | Ten caves, a trophy in each, and a jetpack he has not tested | Between lives |
-| **The Swarm** | A lane, a cart that fires by itself, and gates that multiply what it fires | In the lane. Picking the gate that makes more of you *is* the game |
+| **The Swarm** | A crowd of monsters walking down a lane at you, and crates with better guns in them | In the lane. Working out whether a crate fits in the time left *is* the game |
 | **The Pipes** | Run, jump, stomp, reach the flag | Between lives |
 | **The Road** | Four lanes, six stages, and four of his machines racing you from a standing start | Between lives; a right answer is half a tank and a car back |
 | **The Long Way Out** | Fly to the eight real planets, in order, through what he has left in the way | None. Break things up for scrap, spend it at each world, and every world tells you something true |
@@ -32,14 +32,20 @@ is parked. Nothing is deleted: `src/arcade/dungeon/`, its screen, its story, its
 and its tests are all still here and still run, and putting it back is one entry in
 `TILES` and one line in `App.tsx`.
 
-The swarm is where the maths stopped being something that happens between lives. Two
-gates hang across the lane and a shot can only go through one of them: `×3` or `+4`,
-and which one sends more up the lane depends on how many you are firing right now. With
-one in the squad `+4` wins; with five, `×3` does. So the answer changes when the gun
-does, and a better gun is bought with hits rather than with anything else. There is a
-test that plays the game three ways — working out which gate is better, deliberately
-taking the other, and standing still — because a version where the gates are decoration
-would look exactly like this one and teach nothing. It found exactly that, twice.
+The swarm is where the maths stopped being something that happens between lives. A crowd
+walks down at you, you shoot it, and the numbers on the monsters are how many more shots
+each one needs. Down the two outside lanes come crates with better guns inside, and a
+crate is paid for in hits — hits that are not going into the crowd while you spend them.
+A crate needing twelve hits at three shots a second is four seconds of not shooting, and
+the clock at the top says how long you have before the nearest one reaches you. That
+comparison is the whole game, and both of its numbers are on the screen.
+
+There is a test that plays it three ways — doing that sum before going for a crate,
+grabbing the dear crate whenever one appears, and never buying a gun at all. Over four
+minutes the first loses no lives, the second loses one or two, and the third is still
+jabbing at wave five with a Peashooter. That test exists because a version where the
+crates are decoration would look exactly like this one and teach nothing, and the first
+two attempts at this game were exactly that.
 
 Two of them make the same promise in the model and prove it in a test: **there is always
 a way through**. A screen with no gap in it is not difficulty, it is a coin toss you lose.

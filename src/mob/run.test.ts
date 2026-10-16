@@ -1,478 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import {
-  GATE_Y, LANE, LEAST, LINE_Y, MOB_H, MOST, WEAPONS,
-  apply, betterGate, blockWorth, gateRow, mobSpeed, waveFor, waveSize, weaponFor,
-  type Dice, type Gate,
+  CRATE_H, GUNS, LANE, LINE_Y, MON_H, TOP_RUNG,
+  cratePair, gunAt, insideFor, monHealth, rateOf, walkSpeed, waveFor, waveSize,
+  type Crate, type Dice, type Monster,
 } from './level'
-import { FIXED, NO_INPUT, newRun, serve, standing, step, type Input, type Run } from './run'
+import {
+  FIXED, NO_INPUT, arriveIn, costOf, newRun, serve, standing, step, weaponOf,
+  type Input, type Run,
+} from './run'
 
 /**
  * The swarm.
  *
  * The rules worth pinning here are the ones a player would notice and a glance
- * at the screen would not: what a gate does to a squad, what happens when a
- * squad is bigger than the block it runs into, and whether a gate can be flown
- * straight through without firing.
+ * at the screen would not: that a shot goes into exactly one thing, that the
+ * clock at the top is telling the truth, and that a crate costs what it says it
+ * costs. Those three together are the decision the whole game is made of, and
+ * any of them being slightly wrong would make the sum on the screen a lie.
  */
-
-const drive = (run: Run, seconds: number, input: Input = NO_INPUT): Run => {
-  let now = run
-  for (let i = 0; i < Math.round(seconds / FIXED); i++) {
-    if (now.status !== 'playing') break
-    now = step(now, input, FIXED)
-  }
-  return now
-}
-
-/**
- * A run with nothing in the lane but what the test puts there.
- *
- * With one exception, which is worth knowing about: there is a keeper block a
- * long way above the lane. An empty lane is a cleared wave, so without it the
- * run ends on the first step and every test that drives for a second measures
- * one step instead. (Found the hard way: four tests failing with a squad that
- * had travelled one step's worth and a gate that had not fired.) It never
- * arrives and nothing ever reaches it.
- */
-const KEEPER = { id: 9000, x: LANE / 2, y: -60, count: 9999, flash: 0 }
-
-const empty = (set: Partial<Run> = {}): Run => ({
-  ...newRun(1),
-  blocks: [KEEPER],
-  gates: [],
-  squads: [],
-  says: [],
-  cool: 999,
-  gateIn: 999,
-  ...set,
-})
-
-const oneGate = (op: Gate['op'], by: number, side: 'left' | 'right' = 'left'): Gate => ({
-  id: 900,
-  op,
-  by,
-  from: side === 'left' ? 0 : LANE / 2,
-  to: side === 'left' ? LANE / 2 : LANE,
-  y: GATE_Y,
-  flash: 0,
-  born: 0,
-})
-
-describe('what a gate does', () => {
-  it('multiplies, adds and takes away', () => {
-    expect(apply(4, 'times', 3)).toBe(12)
-    expect(apply(4, 'plus', 3)).toBe(7)
-    expect(apply(4, 'minus', 3)).toBe(1)
-  })
-
-  it('never leaves a squad with nobody in it, and never overflows the cluster', () => {
-    expect(apply(2, 'minus', 9)).toBe(LEAST)
-    expect(apply(60, 'times', 4)).toBe(MOST)
-  })
-
-  it('fires when a squad crosses it', () => {
-    const run = empty({ gates: [oneGate('times', 3)], cart: 2 })
-    const after = drive({ ...run, cool: 0 }, 1.2)
-    // One shot, one gate: the squad is three times what the gun fires.
-    const squad = after.squads[0]
-    expect(squad, 'the shot went somewhere').toBeTruthy()
-    expect(squad.n).toBe(WEAPONS[0].squad * 3)
-  })
-
-  it('fires even when one step carries a squad right over it', () => {
-    /*
-     * The fault this is here for: asking "is the squad near the gate" instead
-     * of "did it cross the gate" means a long frame — a cheap phone, a tab
-     * coming back to life — carries a squad past the line and the gate never
-     * fires. Nothing errors; the maths simply does not happen.
-     */
-    const run = empty({ gates: [oneGate('times', 3)], cart: 2, cool: 0 })
-    // One step that covers the gap to the gate and then some, so a check for
-    // being near the line would miss it entirely.
-    const after = step(step(run, NO_INPUT, FIXED), NO_INPUT, 0.6)
-    const squad = after.squads[0]
-    expect(squad.y, 'past the gate in one step').toBeLessThan(GATE_Y - 1)
-    expect(squad.n).toBe(WEAPONS[0].squad * 3)
-  })
-
-  it('does not let a squad jump clean over a block', () => {
-    /*
-     * The other half of the same problem, and the one the slices are for: a
-     * block is a unit and a quarter tall, so a step that moves a squad further
-     * than that can put it above a block it never touched.
-     */
-    const run = empty({
-      squads: [{ id: 1, x: 5, y: 9.4, n: 6, flash: 0 }],
-      blocks: [{ id: 2, x: 5, y: 7, count: 20, flash: 0 }],
-    })
-    const after = step(run, NO_INPUT, 0.4)
-    expect(after.squads[0]?.y ?? -99, 'it is above where the block was').toBeLessThan(7)
-    expect(after.blocks[0].count, 'and it took six of them with it').toBe(14)
-  })
-
-  it('only fires on the half of the lane it covers', () => {
-    const left = drive(empty({ gates: [oneGate('times', 3)], cart: 2, cool: 0 }), 1.2)
-    const right = drive(empty({ gates: [oneGate('times', 3)], cart: 8, cool: 0 }), 1.2)
-    expect(left.squads[0].n).toBe(3)
-    expect(right.squads[0].n).toBe(1)
-  })
-
-  it('says the sum out loud where it happened', () => {
-    const after = drive(empty({ gates: [oneGate('times', 3)], cart: 2, cool: 0 }), 1.2)
-    expect(after.says.map((s) => s.text)).toContain('1 × 3 = 3')
-  })
-
-  it('says it once per gate rather than stacking the same sum up', () => {
-    /*
-     * Shots go through a gate twice a second, and the sum does not change, so
-     * three copies of it used to pile up on top of each other and on top of
-     * the gate's own number.
-     */
-    const after = drive(empty({ gates: [oneGate('times', 3)], cart: 2, cool: 0 }), 2.5)
-    expect(after.says.filter((s) => s.text === '1 × 3 = 3').length).toBe(1)
-  })
-})
-
-describe('a squad meeting a block', () => {
-  it('trades one for one and carries the rest on into the next block', () => {
-    const run = empty({
-      squads: [{ id: 1, x: 5, y: 8, n: 14, flash: 0 }],
-      blocks: [
-        { id: 2, x: 5, y: 7, count: 9, flash: 0 },
-        { id: 3, x: 5, y: 5.4, count: 20, flash: 0 },
-      ],
-    })
-    const after = drive(run, 0.6)
-    // Nine taken off the front block, which is gone; five off the one behind.
-    expect(after.blocks.find((b) => b.id === 2)).toBeUndefined()
-    expect(after.blocks.find((b) => b.id === 3)?.count).toBe(15)
-    expect(after.hits).toBe(14)
-    expect(after.squads).toHaveLength(0)
-  })
-
-  it('leaves a block standing when the squad is too small, and the squad is spent', () => {
-    const run = empty({
-      squads: [{ id: 1, x: 5, y: 8, n: 4, flash: 0 }],
-      blocks: [{ id: 2, x: 5, y: 7, count: 9, flash: 0 }],
-    })
-    const after = drive(run, 0.4)
-    expect(after.blocks[0].count).toBe(5)
-    expect(after.squads).toHaveLength(0)
-    expect(after.hits).toBe(4)
-  })
-
-  it('counts a cleared block as one thing happening, not two', () => {
-    const run = empty({
-      squads: [{ id: 1, x: 5, y: 8, n: 9, flash: 0 }],
-      blocks: [{ id: 2, x: 5, y: 7, count: 9, flash: 0 }],
-    })
-    const after = step(run, NO_INPUT, 0.2)
-    expect(after.events.filter((e) => e === 'broke')).toHaveLength(1)
-    expect(after.events).not.toContain('hit')
-  })
-})
-
-describe('the line at the bottom', () => {
-  it('costs a go when a block crosses it, and the block is still there', () => {
-    /*
-     * Still there on purpose. Taking it off the board meant a wave could be
-     * cleared by letting the whole mob walk through you — every block over the
-     * line, nothing left on the board, wave complete. `serve` pushes them back
-     * up instead.
-     */
-    const run = empty({
-      lives: 3,
-      blocks: [
-        { id: 2, x: 5, y: LINE_Y - MOB_H / 2 - 0.02, count: 4, flash: 0 },
-        { id: 3, x: 2, y: 4, count: 4, flash: 0 },
-      ],
-    })
-    const after = drive(run, 0.5)
-    expect(after.status).toBe('lost')
-    expect(after.lives).toBe(2)
-    expect(after.blocks.map((b) => b.id).sort()).toEqual([2, 3])
-    expect(after.events).toContain('through')
-  })
-
-  it('is never cleared by letting the mob through', () => {
-    let run = empty({
-      lives: 99,
-      blocks: [{ id: 2, x: 5, y: 10, count: 9, flash: 0 }],
-    })
-    for (let i = 0; i < 8; i++) {
-      run = drive(run, 12)
-      expect(run.status, 'it costs a life, it does not finish the wave').not.toBe('cleared')
-      // `serve` restarts the gun, which is right in the game and would destroy
-      // the block this test is about.
-      run = { ...serve(run), cool: 999 }
-    }
-  })
-
-  it('is the end of the run when the last go goes', () => {
-    const run = empty({
-      lives: 1,
-      blocks: [{ id: 2, x: 5, y: LINE_Y - MOB_H / 2 - 0.02, count: 4, flash: 0 }],
-    })
-    const after = drive(run, 0.5)
-    expect(after.status).toBe('over')
-    expect(after.events).toContain('over')
-  })
-
-  it('pushes what is left back up the lane before the next go', () => {
-    const run = empty({
-      lives: 3,
-      blocks: [
-        { id: 2, x: 5, y: LINE_Y - MOB_H / 2 - 0.02, count: 4, flash: 0 },
-        { id: 3, x: 2, y: 12, count: 4, flash: 0 },
-      ],
-    })
-    const after = serve(drive(run, 0.5))
-    expect(after.status).toBe('playing')
-    expect(after.blocks[0].y).toBeLessThan(12)
-    expect(after.squads).toHaveLength(0)
-  })
-
-  it('says the wave is cleared when the last block goes', () => {
-    const run = empty({
-      squads: [{ id: 1, x: 5, y: 8, n: 9, flash: 0 }],
-      blocks: [{ id: 2, x: 5, y: 7, count: 9, flash: 0 }],
-    })
-    const after = drive(run, 0.4)
-    expect(after.status).toBe('cleared')
-    expect(standing(after)).toBe(0)
-  })
-})
-
-describe('the guns', () => {
-  it('arrive on hits, in order, and each one is better than the last', () => {
-    expect(weaponFor(0).id).toBe('popper')
-    for (let i = 1; i < WEAPONS.length; i++) {
-      expect(WEAPONS[i].at).toBeGreaterThan(WEAPONS[i - 1].at)
-      expect(WEAPONS[i].squad).toBeGreaterThan(WEAPONS[i - 1].squad)
-      expect(WEAPONS[i].every).toBeLessThan(WEAPONS[i - 1].every)
-      expect(weaponFor(WEAPONS[i].at).id).toBe(WEAPONS[i].id)
-      expect(weaponFor(WEAPONS[i].at - 1).id).toBe(WEAPONS[i - 1].id)
-    }
-  })
-
-  it('is announced once when it changes, and not again', () => {
-    const twins = WEAPONS[1]
-    const run = empty({
-      hits: twins.at - 9,
-      squads: [{ id: 1, x: 5, y: 8, n: 9, flash: 0 }],
-      blocks: [
-        { id: 2, x: 5, y: 7, count: 9, flash: 0 },
-        { id: 3, x: 2, y: 2, count: 50, flash: 0 },
-      ],
-    })
-    const first = step(run, NO_INPUT, 0.2)
-    expect(first.weapon).toBe(twins.id)
-    expect(first.events).toContain('armed')
-    const second = step(first, NO_INPUT, 0.2)
-    expect(second.events).not.toContain('armed')
-  })
-
-  it('fires more often, and sends more up, once it is better', () => {
-    // Two seconds: short enough that nothing has flown off the top yet, so
-    // what is in the lane is everything that was fired.
-    const sent = (run: Run) => run.squads.reduce((all, s) => all + s.n, 0)
-    const popper = drive({ ...empty({ cart: 5 }), cool: 0, hits: 0 }, 2)
-    const cascade = drive({ ...empty({ cart: 5 }), cool: 0, hits: WEAPONS[3].at }, 2)
-    expect(cascade.squads.length).toBeGreaterThan(popper.squads.length)
-    expect(sent(cascade)).toBeGreaterThan(sent(popper) * 3)
-  })
-})
-
-describe('a row of gates', () => {
-  /*
-   * The rule the game is built on: the better gate depends on how many are in
-   * the squad, so the answer changes as the guns do. A row where one side
-   * simply wins is a row with a correct button on it.
-   */
-  it('comes in three kinds, in roughly the mix the game wants', () => {
-    /*
-     * Classified by the only thing a player can see: the two numbers. A row
-     * with a `minus` on it is a trap. Otherwise the two gates cross over at
-     * `plus / (times - 1)` — if that lands between two and four it is a close
-     * call, inside the squad sizes the guns fire, and if it does not then one
-     * side is plainly better and the row is there to be cashed in.
-     *
-     * The sizes probed are the ones the guns actually fire and no others. An
-     * earlier version of this asked which gate wins at eight and at twelve,
-     * which a squad is only ever at *after* a gate — and failed a row that was
-     * working correctly, because the answer did change at a size that never
-     * reaches a gate.
-     *
-     * The mix matters in both directions. All close calls and choosing well is
-     * worth almost nothing (measured: fifteen per cent over a minute, because
-     * numbers that cross over near your squad are nearly equal near your
-     * squad). All wide ones and there is nothing to work out.
-     */
-    let close = 0
-    let wide = 0
-    let traps = 0
-
-    for (let seed = 1; seed <= 600; seed++) {
-      const row = gateRow(5, dice(seed), GATE_Y, idFrom(1))
-      expect(row).toHaveLength(2)
-      if (row.some((gate) => gate.op === 'minus')) {
-        traps++
-        continue
-      }
-      const times = row.find((gate) => gate.op === 'times')
-      const plus = row.find((gate) => gate.op === 'plus')
-      expect(times && plus, 'a row is a times gate and something else').toBeTruthy()
-      if (!times || !plus) continue
-
-      const crossover = plus.by / (times.by - 1)
-      /*
-       * Strictly better, with ties ignored. `betterGate` has to answer
-       * *something* when the two gates come out equal, and counting that answer
-       * as a win failed a row that was behaving perfectly: `×3` against `+2`
-       * ties at a squad of one and then the times gate wins for ever after.
-       */
-      const winners = new Set<string>()
-      for (const weapon of WEAPONS) {
-        const byTimes = apply(weapon.squad, times.op, times.by)
-        const byPlus = apply(weapon.squad, plus.op, plus.by)
-        if (byTimes > byPlus) winners.add('times')
-        else if (byPlus > byTimes) winners.add('plus')
-      }
-
-      if (crossover >= 2 && crossover <= 4) {
-        close++
-        // The point of a close call: which side is better depends on the squad.
-        expect(
-          winners.size,
-          `×${times.by} vs +${plus.by} crosses at ${crossover} but has one winner everywhere`,
-        ).toBe(2)
-      } else {
-        wide++
-        expect(
-          winners.size,
-          `×${times.by} vs +${plus.by} is meant to be a walkover`,
-        ).toBe(1)
-      }
-    }
-
-    const all = close + wide + traps
-    expect(close / all, `${close} close of ${all}`).toBeGreaterThan(0.45)
-    expect(wide / all, `${wide} wide of ${all}`).toBeGreaterThan(0.12)
-    expect(traps / all, `${traps} traps of ${all}`).toBeGreaterThan(0.1)
-    expect(traps / all).toBeLessThan(0.3)
-  })
-
-  it('knows which of the two is better, by the same arithmetic the gates do', () => {
-    /*
-     * The bot in `balance.test.ts` plays by `betterGate`, so if it worked some
-     * other way than `apply` the balance measurements would be a bot proving
-     * its own arithmetic rather than the game's.
-     */
-    for (let seed = 1; seed <= 300; seed++) {
-      const row = gateRow(6, dice(seed), GATE_Y, idFrom(1))
-      for (const squad of [1, 2, 3, 5]) {
-        const best = betterGate(row, squad)
-        const mine = apply(squad, best.op, best.by)
-        for (const gate of row) {
-          expect(mine).toBeGreaterThanOrEqual(apply(squad, gate.op, gate.by))
-        }
-      }
-    }
-  })
-
-  it('never opens with a trap: wave one is all gates worth taking', () => {
-    for (let seed = 1; seed <= 200; seed++) {
-      const row = gateRow(1, dice(seed), GATE_Y, idFrom(1))
-      expect(row.some((gate) => gate.op === 'minus'), `seed ${seed}`).toBe(false)
-    }
-  })
-
-  it('covers the whole lane between the two of them, with no gap in the middle', () => {
-    const row = gateRow(3, dice(7), GATE_Y, idFrom(1))
-    const [left, right] = row[0].from < row[1].from ? row : [row[1], row[0]]
-    expect(left.from).toBe(0)
-    expect(left.to).toBe(right.from)
-    expect(right.to).toBe(LANE)
-  })
-
-  it('is swapped for a different row while you play', () => {
-    const run = newRun(1)
-    const before = run.gates.map((g) => g.id)
-    const after = drive(run, 4.5)
-    expect(after.gates.map((g) => g.id)).not.toEqual(before)
-    expect(after.gates).toHaveLength(2)
-  })
-
-  it('has no stray rows hanging about: one row, always', () => {
-    let run = newRun(3)
-    for (let i = 0; i < 12; i++) {
-      run = drive(run, 2.5, { to: 5, left: false, right: false })
-      if (run.status !== 'playing') run = serve({ ...run, lives: 3 })
-      expect(run.gates).toHaveLength(2)
-    }
-  })
-})
-
-describe('the ladder of waves', () => {
-  it('gets bigger, richer and faster, and never goes backwards', () => {
-    for (let level = 2; level <= 25; level++) {
-      expect(waveSize(level)).toBeGreaterThanOrEqual(waveSize(level - 1))
-      expect(blockWorth(level)).toBeGreaterThan(blockWorth(level - 1))
-      expect(mobSpeed(level)).toBeGreaterThanOrEqual(mobSpeed(level - 1))
-    }
-    expect(waveSize(12)).toBeGreaterThan(waveSize(1))
-  })
-
-  it('starts every wave with the mob above the lane and nothing on the line', () => {
-    for (let level = 1; level <= 20; level++) {
-      const blocks = waveFor(level, dice(level), idFrom(1))
-      expect(blocks.length).toBe(waveSize(level))
-      for (const block of blocks) {
-        expect(block.y).toBeLessThan(0)
-        expect(block.count).toBeGreaterThan(1)
-        expect(block.x).toBeGreaterThan(0)
-        expect(block.x).toBeLessThan(LANE)
-      }
-    }
-  })
-})
-
-describe('the simulation itself', () => {
-  it('plays the same way twice from the same seed', () => {
-    const once = drive(newRun(2, 3, 0, 0, 1234), 6, { to: 3, left: false, right: false })
-    const twice = drive(newRun(2, 3, 0, 0, 1234), 6, { to: 3, left: false, right: false })
-    expect(twice.score).toBe(once.score)
-    expect(twice.hits).toBe(once.hits)
-    expect(twice.blocks.map((b) => b.count)).toEqual(once.blocks.map((b) => b.count))
-  })
-
-  it('does not depend on how finely it is stepped', () => {
-    /*
-     * The house rule: a slow device drops frames, it does not play the game in
-     * slow motion. Coarse and fine stepping are not identical — the dice are
-     * drawn once a step — but the mob has to be in nearly the same place.
-     */
-    const fine = drive(newRun(3, 3, 0, 0, 99), 5, { to: 4, left: false, right: false })
-    let coarse = newRun(3, 3, 0, 0, 99)
-    for (let i = 0; i < Math.round(5 / (FIXED * 8)); i++) {
-      if (coarse.status !== 'playing') break
-      coarse = step(coarse, { to: 4, left: false, right: false }, FIXED * 8)
-    }
-    expect(coarse.clock).toBeCloseTo(fine.clock, 1)
-    const low = (run: Run) => Math.max(...run.blocks.map((b) => b.y), -99)
-    expect(Math.abs(low(coarse) - low(fine))).toBeLessThan(0.3)
-  })
-
-  it('stops stepping once it is over', () => {
-    const over = { ...empty({ lives: 0, status: 'over' as const }), score: 40 }
-    const after = step(over, NO_INPUT, FIXED)
-    expect(after.score).toBe(40)
-    expect(after.clock).toBe(over.clock)
-    expect(after.events).toHaveLength(0)
-  })
-})
-
-// --- helpers ----------------------------------------------------------------
 
 /** Real dice, seeded, matching what the game uses. */
 function dice(seed: number): Dice {
@@ -492,3 +37,392 @@ const idFrom = (from: number) => {
   let id = from
   return () => id++
 }
+
+const drive = (run: Run, seconds: number, input: Input = NO_INPUT): Run => {
+  let now = run
+  for (let i = 0; i < Math.round(seconds / FIXED); i++) {
+    if (now.status !== 'playing') break
+    now = step(now, input, FIXED)
+  }
+  return now
+}
+
+/**
+ * A lane with nothing in it but what the test puts there.
+ *
+ * With one exception: a keeper monster a long way above the lane. An empty lane
+ * is a cleared wave, so without it a run ends on the first step and every test
+ * that drives for a second measures one step instead.
+ */
+const KEEPER: Monster = {
+  id: 9000, x: LANE / 2, y: -80, breed: 'blob', health: 9999, max: 9999, pace: 1, flash: 0,
+}
+
+const empty = (set: Partial<Run> = {}): Run => ({
+  ...newRun(1),
+  crowd: [KEEPER],
+  crates: [],
+  shots: [],
+  says: [],
+  cool: 999,
+  ...set,
+})
+
+const monster = (set: Partial<Monster> = {}): Monster => ({
+  id: 1, x: 5, y: 6, breed: 'blob', health: 10, max: 10, pace: 1, flash: 0, ...set,
+})
+
+const crate = (set: Partial<Crate> = {}): Crate => ({
+  id: 2, x: 5, y: 9, need: 6, got: 0, step: 1, flash: 0, ...set,
+})
+
+/** The rung whose gun hits for exactly this much, for tests about damage. */
+const rungHitting = (hit: number): number => GUNS.findIndex((gun) => gun.hit === hit)
+
+describe('shooting a monster', () => {
+  it('takes the gun off its health, and says how much', () => {
+    const run = empty({
+      crowd: [KEEPER, monster({ health: 10 })],
+      cool: 0,
+      gun: 5,
+      rung: rungHitting(3),
+    })
+    // A second and a bit: a shot takes most of a second to cross the lane.
+    const after = drive(run, 1.2)
+    const mine = after.crowd.find((m) => m.id === 1)
+    expect(mine, 'it is still standing').toBeTruthy()
+    expect(mine && mine.health).toBeLessThan(10)
+    expect(after.says.some((s) => s.text === '-3')).toBe(true)
+  })
+
+  it('spends a shot on one thing only', () => {
+    // Two monsters in a line. One shot cannot take both.
+    const run = empty({
+      crowd: [KEEPER, monster({ id: 1, y: 7 }), monster({ id: 3, y: 5 })],
+      shots: [{ id: 50, x: 5, y: 9 }],
+      cool: 999,
+    })
+    const after = drive(run, 0.35)
+    const health = [1, 3].map((id) => after.crowd.find((m) => m.id === id)?.health ?? 0)
+    expect(health.filter((h) => h < 10), 'only one of them was touched').toHaveLength(1)
+  })
+
+  it('never takes more than it has left, so the last hit is not wasted twice', () => {
+    const run = empty({
+      crowd: [KEEPER, monster({ health: 2, max: 20 })],
+      shots: [{ id: 50, x: 5, y: 7.2 }],
+      rung: rungHitting(8),
+      cool: 999,
+      score: 0,
+    })
+    const after = drive(run, 0.3)
+    expect(after.crowd.find((m) => m.id === 1)).toBeUndefined()
+    expect(after.killed).toBe(1)
+    // Two of health left, so two points of damage, plus the ten for killing it.
+    expect(after.score).toBe(12)
+  })
+
+  it('does not let a shot jump clean over a monster', () => {
+    /*
+     * The slices are for this: a monster is a unit and a half tall and a shot
+     * moves fifteen units a second, so any step longer than a frame can put a
+     * shot above something it never touched.
+     */
+    const run = empty({
+      crowd: [KEEPER, monster({ y: 6 })],
+      shots: [{ id: 50, x: 5, y: 11 }],
+      cool: 999,
+    })
+    const after = step(run, NO_INPUT, 0.4)
+    expect(after.crowd.find((m) => m.id === 1)?.health).toBe(9)
+  })
+})
+
+describe('a crate', () => {
+  it('costs hits rather than damage: a big gun opens it no faster', () => {
+    // Needing more than either can land in the window, so both are still shut
+    // at the end and the counts can be compared rather than the fact of it.
+    // Two guns that fire at the same rate and hit for wildly different
+    // amounts, so the only thing that could differ is whether damage counts.
+    const same = GUNS.filter((gun) => gun.every === GUNS[6].every)
+    const small = drive(empty({
+      crates: [crate({ need: 40 })], cool: 0, gun: 5, rung: GUNS.indexOf(same[0]),
+    }), 2.4)
+    const big = drive(empty({
+      crates: [crate({ need: 40 })], cool: 0, gun: 5, rung: GUNS.indexOf(same[same.length - 1]),
+    }), 2.4)
+    expect(small.crates[0].got).toBeGreaterThan(3)
+    expect(big.crates[0].got).toBe(small.crates[0].got)
+  })
+
+  it('opens on the hit it says, and hands over the gun it was showing', () => {
+    const one = crate({ need: 3, step: 2 })
+    const run = empty({ crates: [one], cool: 0, gun: 5, rung: 2 })
+    const promised = insideFor(one, 2)
+    const after = drive(run, 1.4)
+    expect(after.crates).toHaveLength(0)
+    expect(after.rung).toBe(4)
+    expect(weaponOf(after)).toEqual(promised)
+    expect(after.says.some((s) => s.text === promised.name.toUpperCase())).toBe(true)
+  })
+
+  it('takes the other one of the pair with it: a choice, not a shopping list', () => {
+    const run = empty({
+      crates: [crate({ id: 2, need: 3, x: 2 }), crate({ id: 3, need: 30, x: 8, step: 2 })],
+      cool: 0,
+      gun: 2,
+    })
+    const after = drive(run, 1.4)
+    expect(after.crates).toHaveLength(0)
+  })
+
+  it('eats the shot, so hits spent on it are hits the crowd did not take', () => {
+    const run = empty({
+      crowd: [KEEPER, monster({ y: 4, health: 50, max: 50 })],
+      crates: [crate({ y: 9, need: 99 })],
+      cool: 0,
+      gun: 5,
+    })
+    const after = drive(run, 2)
+    expect(after.crates[0].got, 'the crate took them').toBeGreaterThan(3)
+    expect(after.crowd.find((m) => m.id === 1)?.health, 'and the monster took none').toBe(50)
+  })
+
+  it('is lost if it reaches the line before it is open', () => {
+    const run = empty({
+      crates: [crate({ y: LINE_Y - CRATE_H / 2 - 0.05, need: 99, got: 4 })],
+      cool: 999,
+    })
+    // One step, so the events of that step are the ones being read: `drive`
+    // keeps only the last step's, and this one happens immediately.
+    const after = step(run, NO_INPUT, 0.2)
+    expect(after.crates).toHaveLength(0)
+    expect(after.events).toContain('missed')
+  })
+
+  it('says what it costs in seconds at the gun you are holding', () => {
+    const slow = { hit: 1, every: 0.5, name: 'Slow' }
+    const quick = { hit: 1, every: 0.2, name: 'Quick' }
+    expect(costOf(crate({ need: 12, got: 0 }), slow)).toBeCloseTo(6, 5)
+    expect(costOf(crate({ need: 12, got: 0 }), quick)).toBeCloseTo(2.4, 5)
+    expect(costOf(crate({ need: 12, got: 9 }), quick)).toBeCloseTo(0.6, 5)
+  })
+})
+
+describe('the clock at the top', () => {
+  it('counts down the real monster at its own real pace', () => {
+    const run = empty({
+      crowd: [
+        monster({ id: 1, y: 2, pace: 1 }),
+        // Further back, but twice as quick: this is the one that arrives first.
+        monster({ id: 3, y: 0, pace: 3 }),
+      ],
+      cool: 999,
+    })
+    const togo = arriveIn(run)
+    const slow = (LINE_Y - (2 + MON_H / 2)) / walkSpeed(1)
+    const quick = (LINE_Y - (0 + MON_H / 2)) / (walkSpeed(1) * 3)
+    expect(togo).toBeCloseTo(Math.min(slow, quick), 5)
+    expect(togo).toBeLessThan(slow)
+  })
+
+  it('agrees with how long it actually takes', () => {
+    // The test the whole decision rests on: if this number lies, every sum a
+    // player does on it is wrong.
+    const run = empty({ crowd: [monster({ id: 1, y: 8 })], cool: 999 })
+    const predicted = arriveIn(run)
+    const after = drive(run, predicted + 0.2)
+    expect(after.status).not.toBe('playing')
+    const early = drive(run, predicted - 0.5)
+    expect(early.status).toBe('playing')
+  })
+
+  it('is nothing at all when the lane is clear', () => {
+    expect(arriveIn(empty({ crowd: [] }))).toBe(Infinity)
+  })
+})
+
+describe('the line at the bottom', () => {
+  it('costs a go when one crosses it, and the monster is still there', () => {
+    const run = empty({
+      lives: 3,
+      crowd: [monster({ id: 1, y: LINE_Y - MON_H / 2 - 0.02 }), monster({ id: 3, y: 4 })],
+      cool: 999,
+    })
+    const after = drive(run, 0.5)
+    expect(after.status).toBe('lost')
+    expect(after.lives).toBe(2)
+    expect(after.crowd.map((m) => m.id).sort()).toEqual([1, 3])
+  })
+
+  it('is the end of the run when the last go goes', () => {
+    const run = empty({
+      lives: 1,
+      crowd: [monster({ id: 1, y: LINE_Y - MON_H / 2 - 0.02 })],
+      cool: 999,
+    })
+    const after = drive(run, 0.5)
+    expect(after.status).toBe('over')
+    expect(after.events).toContain('over')
+  })
+
+  it('is never cleared by letting the crowd through', () => {
+    let run = empty({ lives: 99, crowd: [monster({ id: 1, y: 10 })], cool: 999 })
+    for (let i = 0; i < 8; i++) {
+      run = drive(run, 14)
+      expect(run.status, 'it costs a life, it does not finish the wave').not.toBe('cleared')
+      // `serve` restarts the gun, which is right in the game and would shoot
+      // the monster this test is about.
+      run = { ...serve(run), cool: 999 }
+    }
+  })
+
+  it('says the wave is cleared when the last one goes', () => {
+    const run = empty({
+      crowd: [monster({ id: 1, health: 1, y: 7 })],
+      shots: [{ id: 50, x: 5, y: 8 }],
+      cool: 999,
+    })
+    const after = drive(run, 0.4)
+    expect(after.status).toBe('cleared')
+    expect(standing(after)).toBe(0)
+  })
+})
+
+describe('the guns', () => {
+  it('is a ladder where every rung is better than the one below it', () => {
+    for (let rung = 1; rung < GUNS.length; rung++) {
+      expect(GUNS[rung].hit, `rung ${rung}`).toBeGreaterThan(GUNS[rung - 1].hit)
+      expect(GUNS[rung].every).toBeLessThanOrEqual(GUNS[rung - 1].every)
+      expect(GUNS[rung].name).not.toBe(GUNS[rung - 1].name)
+    }
+  })
+
+  it('keeps pace with the waves, which is what makes a crate the price of staying', () => {
+    /*
+     * The two curves this game is balanced on. A wave is forty per cent tougher
+     * than the one before it and a rung hits about forty per cent harder than
+     * the one below it, so one rung a wave stays level. When the ladder grew
+     * faster than that, a bot held the best gun in the game two minutes in and
+     * nothing could go wrong for the rest of the run.
+     */
+    const far = GUNS.length - 1
+    const climbed = GUNS[far].hit / GUNS[far - 8].hit
+    const waves = monHealth(9) / monHealth(1)
+    expect(climbed / waves).toBeGreaterThan(0.6)
+    expect(climbed / waves).toBeLessThan(1.7)
+  })
+
+  it('stops at the top rather than running off the end of the ladder', () => {
+    expect(gunAt(TOP_RUNG + 50)).toEqual(GUNS[TOP_RUNG])
+    expect(gunAt(-3)).toEqual(GUNS[0])
+    expect(insideFor(crate({ step: 2 }), TOP_RUNG)).toEqual(GUNS[TOP_RUNG])
+  })
+
+  it('reports a rate a child can do a sum with', () => {
+    expect(rateOf({ hit: 1, every: 0.5, name: 'x' })).toBe(2)
+    expect(rateOf({ hit: 1, every: 0.25, name: 'x' })).toBe(4)
+    expect(rateOf({ hit: 1, every: 1 / 3, name: 'x' })).toBe(3)
+  })
+})
+
+describe('a pair of crates', () => {
+  it('is a choice: one cheap and small, one dear and big', () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const pair = cratePair(5, 3, dice(seed), idFrom(1))
+      expect(pair).toHaveLength(2)
+      const [a, b] = pair
+      const cheap = a.need <= b.need ? a : b
+      const dear = a.need <= b.need ? b : a
+      expect(dear.need, `${cheap.need} vs ${dear.need}`).toBeGreaterThan(cheap.need)
+      // And what is inside follows the price: the dear one carries you further
+      // up the ladder, so nobody is ever asked to pay more for less.
+      expect(dear.step).toBeGreaterThan(cheap.step)
+    }
+  })
+
+  it('prices them in threes, so the sums stay doable in a head', () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      for (const one of cratePair(4, 2, dice(seed), idFrom(1))) {
+        expect(one.need % 3, `${one.need} hits`).toBe(0)
+        expect(one.need).toBeGreaterThanOrEqual(3)
+        expect(one.need).toBeLessThanOrEqual(90)
+      }
+    }
+  })
+
+  it('puts one on each side of the lane, so taking one means leaving the other', () => {
+    const pair = cratePair(3, 0, dice(11), idFrom(1))
+    expect(pair[0].x).toBeLessThan(LANE / 2)
+    expect(pair[1].x).toBeGreaterThan(LANE / 2)
+  })
+
+  it('comes down once a wave, at the start of it', () => {
+    // One pair a wave and no more: the choice is made once, properly.
+    expect(newRun(3).crates).toHaveLength(2)
+    const after = drive(newRun(3), 12, { to: 5, left: false, right: false })
+    expect(after.crates.length).toBeLessThanOrEqual(2)
+  })
+})
+
+describe('the ladder of waves', () => {
+  it('gets bigger, tougher and faster, and never goes backwards', () => {
+    for (let level = 2; level <= 25; level++) {
+      expect(waveSize(level)).toBeGreaterThanOrEqual(waveSize(level - 1))
+      expect(monHealth(level)).toBeGreaterThan(monHealth(level - 1))
+      expect(walkSpeed(level)).toBeGreaterThanOrEqual(walkSpeed(level - 1))
+    }
+    expect(waveSize(12)).toBeGreaterThan(waveSize(1))
+  })
+
+  it('starts every wave above the lane with nothing on the line', () => {
+    for (let level = 1; level <= 20; level++) {
+      const crowd = waveFor(level, dice(level), idFrom(1))
+      expect(crowd.length).toBe(waveSize(level))
+      for (const mon of crowd) {
+        expect(mon.y).toBeLessThan(0)
+        expect(mon.health).toBeGreaterThan(0)
+        expect(mon.health).toBe(mon.max)
+        expect(mon.x).toBeGreaterThan(0)
+        expect(mon.x).toBeLessThan(LANE)
+      }
+    }
+  })
+
+  it('opens with nothing but blobs, and brings the rest in later', () => {
+    const first = waveFor(1, dice(3), idFrom(1))
+    expect(new Set(first.map((m) => m.breed))).toEqual(new Set(['blob']))
+    const later = waveFor(8, dice(3), idFrom(1))
+    expect(new Set(later.map((m) => m.breed)).size).toBeGreaterThan(1)
+  })
+})
+
+describe('the simulation itself', () => {
+  it('plays the same way twice from the same seed', () => {
+    const once = drive(newRun(2, 3, 0, 0, 1234), 8, { to: 3, left: false, right: false })
+    const twice = drive(newRun(2, 3, 0, 0, 1234), 8, { to: 3, left: false, right: false })
+    expect(twice.score).toBe(once.score)
+    expect(twice.killed).toBe(once.killed)
+    expect(twice.crowd.map((m) => m.health)).toEqual(once.crowd.map((m) => m.health))
+  })
+
+  it('does not depend on how finely it is stepped', () => {
+    const fine = drive(newRun(3, 3, 0, 0, 99), 6, { to: 4, left: false, right: false })
+    let coarse = newRun(3, 3, 0, 0, 99)
+    for (let i = 0; i < Math.round(6 / (FIXED * 8)); i++) {
+      if (coarse.status !== 'playing') break
+      coarse = step(coarse, { to: 4, left: false, right: false }, FIXED * 8)
+    }
+    expect(coarse.clock).toBeCloseTo(fine.clock, 1)
+    const low = (run: Run) => Math.max(...run.crowd.map((m) => m.y), -99)
+    expect(Math.abs(low(coarse) - low(fine))).toBeLessThan(0.3)
+  })
+
+  it('stops stepping once it is over', () => {
+    const over = { ...empty({ lives: 0, status: 'over' as const }), score: 40 }
+    const after = step(over, NO_INPUT, FIXED)
+    expect(after.score).toBe(40)
+    expect(after.clock).toBe(over.clock)
+    expect(after.events).toHaveLength(0)
+  })
+})

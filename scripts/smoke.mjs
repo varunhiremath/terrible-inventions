@@ -701,7 +701,7 @@ if (await enter('The Long Way Out')) {
 
 }
 
-// --- the swarm: one finger, and the sum has to happen ----------------------
+// --- the swarm: one finger, and the shots have to land --------------------
 if (await enter('The Swarm')) {
   await page.waitForTimeout(1400)
 
@@ -712,11 +712,10 @@ if (await enter('The Swarm')) {
   if (left(opened) <= 0) problems.push('the swarm opened with nothing to shoot at')
 
   /*
-   * Slide the cart across the lane and hold it there. The cart fires on its
-   * own, so what is being proved is that a finger on the glass moves it and
-   * that shots are reaching the mob: the count of machines left has to come
-   * down. Everything about the lane is unit tested; none of it proves a touch
-   * arrives.
+   * Slide along the lane and hold. The gun fires on its own, so what is being
+   * proved is that a finger on the glass moves it and that shots are reaching
+   * the crowd: the count of monsters left has to come down. Everything about
+   * the lane is unit tested; none of it proves a touch arrives.
    */
   const lane = await page.locator('canvas').first().boundingBox()
   if (!lane) problems.push('the swarm has no lane')
@@ -811,4 +810,4 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, dragged a line out of the flood, sent a squad up the lane, and traced a puzzle')
+console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, dragged a line out of the flood, held the lane against the swarm, and traced a puzzle')

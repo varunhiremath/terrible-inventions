@@ -65,21 +65,31 @@ These are not preferences. Breaking one defeats the point of the project.
 
 ## The swarm
 
-- **The gates are the game, and they are easy to build wrong.** A row is two gates and a
-  shot goes through one of them, so the question is which — and that question has to have
-  an answer that changes. `gateRow` builds a `times` gate against a `plus` gate from their
-  crossover, `plus / (times - 1)`, never from numbers that look reasonable: `×3` against
-  `+3` looks like a walkover and crosses over between a squad of one and a squad of two.
-- **The squad sizes that matter are the ones the guns fire** — one, two, three and five.
-  A crossover at nine is a gate that always wins, because a squad is only ever bigger than
-  five *after* a gate. A test that probed eight and twelve failed a perfectly good row.
-- **`balance.test.ts` is not a performance test, it is the design.** Three bots play:
-  one picks the better gate, one picks the worse, one stands still. If the first two come
-  out level the gates are painted on, which is how this shipped twice before anybody
-  measured it. Keep it.
-- **A wave is cleared by shooting it.** A block that crosses the line costs a life and
-  stays on the board; it used to be removed, which quietly meant you could "clear" a wave
-  by standing still and letting the whole mob walk through you.
+- **Two curves, one factor.** A wave's monsters are forty per cent tougher than the last
+  wave's, and each rung of the gun ladder hits forty per cent harder than the one below.
+  One rung a wave keeps you level. Break that and the game breaks: when the ladder grew
+  faster, a bot held the best gun in the game two minutes in and five minutes passed
+  without it losing a life — and what found it was a wave's health going up by a third
+  and *nothing in the outcome changing*, which is what a number nobody is bound by looks
+  like.
+- **Crates have the outside lanes to themselves and the crowd never walks there.** When
+  they came down the same columns as the monsters, a bot that never once aimed at a crate
+  opened every crate in the game with shots meant for the crowd. Going for one has to
+  mean leaving the crowd, or there is no decision to make.
+- **Crates are priced in seconds, written as hits.** The same twelve hits is four seconds
+  of a Peashooter and one and a half of a Thunderclap, so a price set in hits stops being
+  a decision by wave ten. `cratePair` sets the price in seconds and converts at the gun
+  in hand.
+- **`arriveIn` has to be exactly right.** It is half of every sum the player does, so it
+  reads the real position and the real pace of whichever monster is genuinely nearest. A
+  countdown that is approximately right teaches arithmetic that is approximately wrong.
+- **One pair of crates a wave, and opening one takes the other away.** It is a choice,
+  not a shopping list.
+- **A wave is cleared by shooting it.** A monster that crosses the line costs a life and
+  stays on the board; removing it would let a wave be "cleared" by standing still.
+- **`balance.test.ts` is the design, not a benchmark.** Four bots: does the sum, grabs
+  greedily, never buys, never moves. If the first two come out level, the crates are
+  decoration. Keep it.
 
 ## The shop
 

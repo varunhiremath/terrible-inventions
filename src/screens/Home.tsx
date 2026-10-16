@@ -164,12 +164,12 @@ const TILES: Tile[] = [
   {
     id: 'mob',
     title: 'The Swarm',
-    blurb: 'Send your crew up the lane. The gates do the rest.',
+    blurb: 'Monsters coming down. Better guns in the crates, if you have time.',
     tint: '#101a33',
     /*
-     * The game's own pieces at the game's own scale: a gate row with the two
-     * numbers on it, a block of machines walking into it, and a squad on its
-     * way up. Drawn by `drawTaste`, which calls the same functions the game
+     * The game's own pieces at the game's own scale: a few of the monsters, a
+     * crate with its price on it, and you at the bottom with two shots in the
+     * air. Drawn by `drawTaste`, which calls the same functions the game
      * calls — the fault this project has found three separate times is a tile
      * showing something that is nowhere in the game it opens.
      */

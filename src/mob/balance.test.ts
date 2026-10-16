@@ -1,182 +1,183 @@
 import { describe, expect, it } from 'vitest'
-import { WEAPONS, betterGate, weaponFor, type Block, type Gate } from './level'
-import { FIXED, newRun, nextLevel, serve, standing, step, type Input, type Run } from './run'
+import { GUN_W, LANE, type Crate, type Monster } from './level'
+import {
+  FIXED, arriveIn, costOf, newRun, nextLevel, serve, step, weaponOf, type Input,
+} from './run'
 
 /**
- * Is it playable, and does the arithmetic actually matter?
+ * Is it playable, and does the decision actually matter?
  *
- * The second question is the one worth a test, and it is the question that
- * rebuilt this game twice. A version where the gates are decoration — where
- * going through either one works out about the same — looks exactly like this
- * one, plays exactly like this one, and teaches nothing. No unit test of the
- * rules would notice.
+ * The second question is the one worth a test, and in this game the decision is
+ * a sum about time: a crate needing twelve hits at three shots a second is four
+ * seconds of not shooting the crowd, and whether that is affordable depends
+ * entirely on the clock at the top of the screen. If a player who does that sum
+ * comes out level with one who ignores it, the crates are decoration and the
+ * game teaches nothing — which is exactly what the first version of this game
+ * turned out to be when it was finally measured.
  *
- * So three bots play it. One works out which gate is better for the squad it is
- * about to fire; one deliberately takes the other; one stands still. If the
- * first two come out level, the gates are painted on.
+ * So four bots play it:
  *
- * Both of the faults it found are worth keeping in mind, because neither was
- * visible from the rules:
- *
- *  - Waves of twenty-four machines against the five hundred people a minute of
- *    shooting sends up the lane. Every wave was over in seconds and taking the
- *    worse gate every time cost three per cent. The blocks are four times the
- *    size now.
- *  - Gates that always crossed over near the squad size, which sounds like good
- *    teaching and is bad reward: two numbers that cross over near your squad
- *    are two numbers that are nearly equal near your squad. A quarter of rows
- *    are a mile apart now, and the cost of choosing badly tripled.
+ *   timed    works out whether the crate fits in the time left, and takes it
+ *            only when it does — preferring the one that pays best per hit
+ *   greedy   always goes for the dearest crate, whatever the clock says
+ *   never    ignores crates entirely and shoots the crowd
+ *   still    stands in the middle and never moves
  */
 
-/** The block it is most urgent to shoot: the one nearest the line. */
-const urgent = (blocks: readonly Block[]): Block | null =>
-  blocks.reduce<Block | null>((worst, b) => (worst === null || b.y > worst.y ? b : worst), null)
+const nearest = (crowd: readonly Monster[]): Monster | null =>
+  crowd.reduce<Monster | null>((worst, m) => (worst === null || m.y > worst.y ? m : worst), null)
 
-const inHalf = (gate: Gate, x: number): boolean => x >= gate.from && x < gate.to
-
-/**
- * Where a bot that wants that gate should stand.
- *
- * Lined up with something to shoot where it can, because a squad that goes up
- * an empty lane is wasted however big a gate made it — which is a real part of
- * playing this rather than a detail of the bot.
- */
-function standAt(run: Run, want: Gate): number {
-  const mine = run.blocks.filter((b) => inHalf(want, b.x) && b.y > -4)
-  const target = urgent(mine.length > 0 ? mine : run.blocks.filter((b) => b.y > -4))
-  // Nothing to shoot on the side with the better gate: take the shot over the
-  // gate, which is what a person does too.
-  return target === null ? (want.from + want.to) / 2 : target.x
-}
-
-type Pick = 'well' | 'badly' | 'still'
+type Pick = 'timed' | 'greedy' | 'never' | 'still'
 
 interface Went {
-  waves: number
+  /** The wave it got to, which is the real score of a run like this. */
+  wave: number
   lost: number
-  hits: number
-  left: number
+  killed: number
+  opened: number
 }
 
-function play(how: Pick, level: number, seconds: number, seed: number): Went {
-  let run = newRun(level, 99, 0, 0, seed)
-  let waves = 0
+function play(how: Pick, seconds: number, seed: number): Went {
+  let run = newRun(1, 99, 0, 0, seed)
   let lost = 0
+  let opened = 0
 
   for (let i = 0; i < Math.round(seconds / FIXED); i++) {
     if (run.status === 'cleared') {
-      waves++
       run = nextLevel(run)
       continue
     }
     if (run.status === 'lost' || run.status === 'over') {
       lost++
-      // Lives are not the thing being measured here, so the bot is given as
-      // many as it needs and the losses are counted instead.
+      // Lives are not what is being measured, so the bot is given as many as it
+      // needs and the losses are counted instead.
       run = serve({ ...run, status: 'lost', lives: 99 })
       continue
     }
 
-    let input: Input = { to: null, left: false, right: false }
-    if (how !== 'still' && run.gates.length === 2) {
-      const squad = weaponFor(run.hits).squad
-      const best = betterGate(run.gates, squad)
-      const worst = run.gates.find((gate) => gate.id !== best.id) ?? best
-      input = { to: standAt(run, how === 'well' ? best : worst), left: false, right: false }
+    let want: number | null = null
+    if (how !== 'still') {
+      const weapon = weaponOf(run)
+      const clock = arriveIn(run)
+      const here = run.crates.filter((c) => c.y > -1)
+      let aim: Crate | null = null
+
+      if (how === 'greedy') {
+        // The dearest crate, whatever the clock says.
+        for (const one of here) if (aim === null || one.step > aim.step) aim = one
+      } else if (how === 'timed') {
+        /*
+         * The sum this whole game is made of: what is left of the crate, in
+         * seconds at the gun in hand, against what is left on the clock — with
+         * a second spare for whatever arrives while you are walking back.
+         */
+        for (const one of here) {
+          if (costOf(one, weapon) + 1 > clock) continue
+          if (aim === null || one.step > aim.step) aim = one
+        }
+      }
+
+      if (aim) {
+        want = aim.x
+      } else {
+        const target = nearest(run.crowd.filter((m) => m.y > -3))
+        want = target ? target.x : LANE / 2
+        // Somebody who does not want the crate shoots round it, which is the
+        // whole reason a crate can be declined.
+        for (const one of run.crates) {
+          if (Math.abs(want - one.x) > 1.4) continue
+          const away = nearest(run.crowd.filter((m) => m.y > -3 && Math.abs(m.x - one.x) > 1.6))
+          if (away) want = away.x
+        }
+      }
     }
-    run = step(run, input, FIXED)
+
+    const rung = run.rung
+    run = step(run, { to: want, left: false, right: false } as Input, FIXED)
+    if (run.rung !== rung) opened++
   }
 
-  return { waves, lost, hits: run.hits, left: standing(run) }
+  return { wave: run.level, lost, killed: run.killed, opened }
 }
 
-/** Five seeds, averaged, because one lane of one wave is not a measurement. */
+/** Five seeds, averaged, because one run is not a measurement. */
 const SEEDS = [5, 11, 23, 41, 77]
 
-const over = (how: Pick, level: number, seconds = 60): Went => {
-  const runs = SEEDS.map((seed) => play(how, level, seconds, seed))
+const over = (how: Pick, seconds = 240): Went => {
+  const runs = SEEDS.map((seed) => play(how, seconds, seed))
   const mean = (of: (went: Went) => number) =>
     runs.reduce((all, went) => all + of(went), 0) / runs.length
   return {
-    waves: mean((w) => w.waves),
+    wave: mean((w) => w.wave),
     lost: mean((w) => w.lost),
-    hits: mean((w) => w.hits),
-    left: mean((w) => w.left),
+    killed: mean((w) => w.killed),
+    opened: mean((w) => w.opened),
   }
 }
 
 /**
- * A minute of play, averaged over five seeds, as measured when this was
- * written. The bounds below sit loosely around these: a balance guard, not a
- * pin on exact numbers.
+ * Four minutes of play, averaged over five seeds, as measured when this was
+ * written. The bounds below sit loosely around these.
  *
- *              well                badly               still
- *   wave  1  2.0w 0.0L  318h    2.0w 0.2L  265h    0w 5L  22h
- *   wave  3  2.0w 0.2L  424h    1.0w 0.8L  339h    0w 5L  43h
- *   wave  6  1.0w 1.0L  540h    1.0w 1.8L  447h    0w 6L  61h
- *   wave 10  1.0w 1.4L  806h    0.4w 3.6L  571h    0w 7L  85h
- *   wave 14  0.6w 3.0L  903h    0.0w 4.6L  659h    0w 8L 109h
- *   wave 20  0.4w 3.6L 1048h    0.0w 6.0L  613h    0w 8L 145h
+ *              wave   lives   monsters   crates
+ *   timed       9.2    0.0      157        9.2
+ *   greedy      8.8    1.4      142        8.4
+ *   never       5.0    3.8       67        0.0
  *
- * Choosing well is worth a fifth of the machines early and two fifths by wave
- * twenty, and about half the lives all the way along. With three lives, a run
- * played well ends somewhere past wave ten, which is the arc this wanted.
+ * Which is the shape this game is supposed to have: doing the sum gets you
+ * through whole, grabbing the dear crate whenever you see one costs lives, and
+ * never spending anything on a gun leaves you jabbing at wave five with a
+ * Peashooter while the wave gets forty per cent tougher every time.
  */
-describe('a minute of it', () => {
-  it('opens gently: a careful player loses nothing on the first waves', () => {
-    const well = over('well', 1)
-    expect(well.waves, `cleared ${well.waves} waves`).toBeGreaterThanOrEqual(1.5)
-    expect(well.lost, `lost ${well.lost} lives`).toBeLessThanOrEqual(0.5)
+describe('four minutes of it', () => {
+  it('rewards working out whether the crate fits in the time left', () => {
+    const timed = over('timed')
+    const greedy = over('greedy')
+    expect(timed.lost, `timed lost ${timed.lost} lives`).toBeLessThanOrEqual(0.5)
+    expect(
+      greedy.lost,
+      `and greedy lost ${greedy.lost} going for the big one regardless`,
+    ).toBeGreaterThan(timed.lost + 0.5)
   })
 
-  it('costs real machines to take the worse gate, and more of them deeper in', () => {
-    const early = { well: over('well', 6), badly: over('badly', 6) }
-    expect(
-      early.badly.hits,
-      `wave 6: well ${early.well.hits} vs badly ${early.badly.hits}`,
-    ).toBeLessThan(early.well.hits * 0.9)
+  it('punishes never buying a gun at all', () => {
+    const timed = over('timed')
+    const never = over('never')
+    expect(never.opened, 'it opened none, as asked').toBe(0)
+    expect(timed.opened, 'and the other kept buying').toBeGreaterThan(5)
+    expect(never.wave, `never reached wave ${never.wave}, timed ${timed.wave}`)
+      .toBeLessThan(timed.wave - 2)
+    expect(never.lost).toBeGreaterThan(timed.lost + 1)
+  })
 
-    const deep = { well: over('well', 10), badly: over('badly', 10) }
-    expect(
-      deep.badly.hits,
-      `wave 10: well ${deep.well.hits} vs badly ${deep.badly.hits}`,
-    ).toBeLessThan(deep.well.hits * 0.8)
-    expect(deep.badly.lost, 'and it costs lives').toBeGreaterThan(deep.well.lost * 1.5)
+  it('does not let a crate be opened by accident on the way past', () => {
+    /*
+     * The one that rebuilt the lane. With the crates coming down the same
+     * columns the crowd walks down, the bot that never aims at one opened every
+     * crate in the game anyway, with shots meant for monsters — so there was no
+     * decision in it at all. They have a lane each at the edges now.
+     */
+    expect(over('never', 120).opened).toBe(0)
   })
 
   it('goes nowhere at all for somebody who stands still', () => {
-    const still = over('still', 1)
-    const well = over('well', 1)
-    expect(still.waves, 'a wave is cleared by shooting it').toBe(0)
-    expect(still.lost).toBeGreaterThan(well.lost + 2)
-    expect(still.hits).toBeLessThan(well.hits * 0.3)
+    const still = over('still', 120)
+    const timed = over('timed', 120)
+    expect(still.wave, 'a wave is cleared by shooting it').toBe(1)
+    expect(still.lost).toBeGreaterThan(timed.lost + 1)
   })
 })
 
 describe('the shape of the climb', () => {
-  it('is no longer free ten waves in', () => {
-    const early = over('well', 1)
-    const later = over('well', 10)
-    expect(later.lost, `lost ${later.lost} lives at wave 10`).toBeGreaterThan(early.lost)
-    expect(later.waves, `still cleared ${later.waves}`).toBeGreaterThanOrEqual(0.5)
+  it('gets somewhere in four minutes, and not to the end of the game', () => {
+    const timed = over('timed')
+    expect(timed.wave, `reached wave ${timed.wave}`).toBeGreaterThan(5)
+    expect(timed.killed, `${timed.killed} monsters seen off`).toBeGreaterThan(100)
   })
 
-  it('is still playable twenty waves in rather than a wall', () => {
-    const deep = over('well', 20)
-    expect(deep.hits, `${deep.hits} machines seen off`).toBeGreaterThan(800)
-    expect(deep.lost, `and ${deep.lost} lives gone`).toBeLessThan(6)
-  })
-
-  it('hands out the better guns over a run rather than in the first ten seconds', () => {
-    /*
-     * The guns are bought with hits, and a minute of the first waves is about
-     * three hundred of them — so the thresholds have to be in the hundreds, or
-     * the whole ladder is climbed before the second wave and there is nothing
-     * left to earn.
-     */
-    const minute = over('well', 1).hits
-    expect(WEAPONS[1].at).toBeLessThan(minute / 2)
-    expect(WEAPONS[2].at).toBeGreaterThan(minute)
-    expect(WEAPONS[3].at).toBeGreaterThan(minute * 2.5)
+  it('leaves room to stand: the lane is wider than you are', () => {
+    // Not balance so much as the thing balance rests on — if the gun filled the
+    // lane there would be no choosing which side of it to be on.
+    expect(LANE / GUN_W).toBeGreaterThan(5)
   })
 })

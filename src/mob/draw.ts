@@ -3,22 +3,20 @@
  *
  * Canvas primitives only, like the rest of this. The lane is drawn to fixed
  * units and scaled to whatever screen it lands on, because judging whether a
- * block will reach the line before your next shot does is the game, and a lane
+ * crate will pay for itself before the crowd arrives is the game, and a lane
  * that changes shape with the window is not a game.
  *
- * The one thing in here that is a decision rather than a drawing: a squad is
- * drawn as a cluster of little figures *and* has its number written on it. Not
- * one or the other. The cluster is what makes a squad of twenty feel like
- * twenty — a single sprite with "20" on it reads as a bullet with a label — and
- * the number is what makes the arithmetic legible, because nobody counts
- * seventeen dots while they are moving. Past a dozen figures the cluster stops
- * gaining anything, so it stops growing and the number carries the rest.
+ * The monsters are Papa's wind-up ones: round, bug-eyed, bouncing, and drawn in
+ * sweet colours on purpose. The brief that started this game said zombies; the
+ * standing instruction about who plays it says nothing frightening, and those
+ * two are not in conflict — a crowd shambling down a lane at you is exactly as
+ * tense whether it is made of corpses or of grinning green blobs on springs.
  */
 import {
-  CART_W, CART_Y, GATE_SLIDE, LANE, LINE_Y, MOB_H, MOB_W, SIGN, TALL, WEAPONS,
-  kind, weaponFor, type Block, type Gate, type Op, type Weapon,
+  BREED, CRATE_H, CRATE_W, GUN_W, GUN_Y, LANE, LINE_Y, MON_H, MON_W, SHOT_W, TALL,
+  gunAt, insideFor, rateOf, type Crate, type Gun, type Monster,
 } from './level'
-import type { Run, Said, Squad } from './run'
+import { arriveIn, weaponOf, type Run, type Said, type Shot } from './run'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -30,18 +28,15 @@ export interface View {
 
 export const INK = {
   back: '#070912',
-  far: '#111a33',
-  lane: '#1b2b44',
   edge: '#2b3c6b',
   chalk: '#e9edf8',
   dim: '#8d96b4',
   line: '#ff5f7a',
-  cart: '#8fd3ff',
-  cartTrim: '#2a6ea8',
-  mob: '#b9603f',
-  mobTrim: '#6d2f1c',
-  good: '#9af5c0',
-  bad: '#ff8c8c',
+  gun: '#8fd3ff',
+  gunTrim: '#2a6ea8',
+  shot: '#ffe08a',
+  crate: '#c9a227',
+  crateTrim: '#6d5410',
 } as const
 
 /** The lane, as a box on the screen, keeping its shape whatever the window. */
@@ -53,277 +48,267 @@ export function fieldOf(view: View): { x: number; y: number; scale: number } {
 const mono = (size: number) => `bold ${size}px ui-monospace, Menlo, Consolas, monospace`
 
 /**
- * One little figure: a head, a body, two legs.
+ * Writing with a dark outline round it, which is the only kind that survives.
  *
- * Three ovals and two lines at the size this is drawn at, which is a few pixels
- * tall. Anything more detailed is mud.
+ * `fit` is the width it must not exceed, and it is not optional anywhere the
+ * text goes inside something: the crate labels were written at a size that
+ * looked right on a desktop and ran off both ends of the crate and off the side
+ * of the lane on a phone. Measuring and shrinking is four lines and it cannot
+ * be got wrong by eye.
  */
-function drawBody(ctx: Ctx, x: number, y: number, r: number, ink: string, step: number): void {
+function shout(
+  ctx: Ctx, text: string, x: number, y: number, size: number, ink: string,
+  align: CanvasTextAlign = 'center', fit?: number,
+): void {
+  ctx.font = mono(size)
+  if (fit !== undefined) {
+    const wide = ctx.measureText(text).width
+    if (wide > fit) {
+      size = Math.max(6, size * (fit / wide))
+      ctx.font = mono(size)
+    }
+  }
+  ctx.textAlign = align
+  ctx.textBaseline = 'middle'
+  ctx.lineWidth = Math.max(2, size * 0.3)
+  ctx.strokeStyle = 'rgba(5,6,12,0.9)'
+  ctx.strokeText(text, x, y)
   ctx.fillStyle = ink
-  // Body.
-  ctx.beginPath()
-  ctx.ellipse(x, y, r * 0.62, r * 0.95, 0, 0, Math.PI * 2)
-  ctx.fill()
-  // Head.
-  ctx.beginPath()
-  ctx.arc(x, y - r * 1.15, r * 0.52, 0, Math.PI * 2)
-  ctx.fill()
-  // Legs, out of step with each other so a crowd looks like it is walking.
-  ctx.strokeStyle = ink
-  ctx.lineWidth = Math.max(1, r * 0.32)
-  ctx.beginPath()
-  ctx.moveTo(x - r * 0.1, y + r * 0.8)
-  ctx.lineTo(x - r * 0.45 + Math.sin(step) * r * 0.3, y + r * 1.7)
-  ctx.moveTo(x + r * 0.1, y + r * 0.8)
-  ctx.lineTo(x + r * 0.45 - Math.sin(step) * r * 0.3, y + r * 1.7)
-  ctx.stroke()
+  ctx.fillText(text, x, y)
 }
 
 /**
- * Where the figures in a cluster of this size sit, in units of their radius.
+ * One monster: a body, two eyes, a mouth, and legs that shuffle.
  *
- * Two and three stand side by side rather than in a ring, because a ring of two
- * puts one behind the other and a squad of two then looks like a squad of one
- * with a smudge — which is exactly the size where the number matters most,
- * since that is what the first gate of the game is about to double.
+ * The shape carries the breed, because colour alone is no use to anybody
+ * working out which of them is nearly dead. A stomper is squat and heavy, a
+ * runner is small and leggy, a spike has a crown of them.
  */
-function clusterSpots(many: number): { dx: number; dy: number }[] {
-  if (many <= 3) {
-    const spread = many === 1 ? [0] : many === 2 ? [-0.9, 0.9] : [-1.6, 0, 1.6]
-    return spread.map((dx) => ({ dx, dy: 0 }))
-  }
-
-  const spots: { dx: number; dy: number }[] = []
-  // Rings outward from the middle: one, then five, then as many as fit.
-  const rings = [
-    { at: 0, of: 1 },
-    { at: 1.5, of: 5 },
-    { at: 2.8, of: 6 },
-  ]
-  for (const ring of rings) {
-    for (let i = 0; i < ring.of && spots.length < many; i++) {
-      const turn = (i / ring.of) * Math.PI * 2 + ring.at
-      spots.push({ dx: Math.cos(turn) * ring.at, dy: Math.sin(turn) * ring.at * 0.7 })
-    }
-    if (spots.length >= many) break
-  }
-  return spots
-}
-
-export function drawSquad(
-  ctx: Ctx,
-  squad: Squad,
-  x: number,
-  y: number,
-  scale: number,
-  clock: number,
-  tint: string,
+export function drawMonster(
+  ctx: Ctx, mon: Monster, x: number, y: number, scale: number, clock: number,
 ): void {
-  // Twelve figures is as many as reads as a crowd; past that the number does
-  // the work. Below that the count and the crowd agree exactly, which is the
-  // whole point of drawing them at all.
-  const shown = Math.min(12, squad.n)
-  const r = scale * (squad.n > 6 ? 0.13 : 0.17)
+  const was = BREED[mon.breed]
+  const w = MON_W * scale * (mon.breed === 'stomper' ? 1 : mon.breed === 'runner' ? 0.72 : 0.88)
+  const h = MON_H * scale * (mon.breed === 'runner' ? 0.7 : 0.82)
+  // Everything bounces, out of step with its neighbours, so a crowd reads as a
+  // crowd of things rather than one thing stamped out several times.
+  const bob = Math.sin(clock * 5 * mon.pace + mon.id) * scale * 0.07
+  const top = y - h / 2 + bob
 
   ctx.save()
-  if (squad.flash > 0) {
-    ctx.shadowColor = tint
-    ctx.shadowBlur = scale * 0.5 * squad.flash
-  }
-  for (const [i, spot] of clusterSpots(shown).entries()) {
-    drawBody(ctx, x + spot.dx * r * 1.9, y + spot.dy * r * 1.9, r, tint, clock * 14 + i)
-  }
-  ctx.restore()
 
-  if (squad.n > 1) {
-    const size = Math.max(9, scale * (squad.n > 9 ? 0.4 : 0.36))
-    ctx.font = mono(size)
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.lineWidth = Math.max(2, size * 0.3)
-    ctx.strokeStyle = 'rgba(5,6,12,0.9)'
-    ctx.strokeText(String(squad.n), x, y - r * 2.9)
-    ctx.fillStyle = '#ffffff'
-    ctx.fillText(String(squad.n), x, y - r * 2.9)
+  // Legs.
+  ctx.strokeStyle = was.eye
+  ctx.lineWidth = Math.max(1.5, scale * 0.09)
+  const stride = Math.sin(clock * 8 * mon.pace + mon.id) * w * 0.16
+  for (const side of [-1, 1]) {
+    ctx.beginPath()
+    ctx.moveTo(x + side * w * 0.22, top + h * 0.8)
+    ctx.lineTo(x + side * w * 0.3 + stride * side, top + h * 1.12)
+    ctx.stroke()
   }
+
+  ctx.fillStyle = mon.flash > 0 ? '#ffffff' : was.tint
+  if (mon.breed === 'spike') {
+    // A crown of spikes, drawn before the body so they sit behind it.
+    ctx.beginPath()
+    for (let i = 0; i < 7; i++) {
+      const a = Math.PI + (i / 6) * Math.PI
+      ctx.moveTo(x, top + h / 2)
+      ctx.lineTo(x + Math.cos(a) * w * 0.72, top + h / 2 + Math.sin(a) * h * 0.78)
+    }
+    ctx.strokeStyle = mon.flash > 0 ? '#ffffff' : was.tint
+    ctx.lineWidth = Math.max(2, scale * 0.14)
+    ctx.stroke()
+  }
+
+  ctx.beginPath()
+  ctx.ellipse(x, top + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Eyes, both looking down the lane at you.
+  const eyeR = scale * (mon.breed === 'runner' ? 0.1 : 0.13)
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.arc(x + side * w * 0.2, top + h * 0.38, eyeR, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = was.eye
+    ctx.beginPath()
+    ctx.arc(x + side * w * 0.2, top + h * 0.44, eyeR * 0.55, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // A mouth, open, with a couple of teeth in it. Daft rather than grim.
+  ctx.fillStyle = was.eye
+  ctx.beginPath()
+  ctx.ellipse(x, top + h * 0.68, w * 0.2, h * 0.12, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#ffffff'
+  for (const side of [-1, 1]) {
+    ctx.beginPath()
+    ctx.moveTo(x + side * w * 0.11, top + h * 0.62)
+    ctx.lineTo(x + side * w * 0.05, top + h * 0.62)
+    ctx.lineTo(x + side * w * 0.08, top + h * 0.7)
+    ctx.closePath()
+    ctx.fill()
+  }
+
+  /*
+   * What it can still take, as a number on its chest and a bar under it.
+   *
+   * Both, not one: the bar is what tells you at a glance which of a crowd is
+   * nearly done, and the number is what lets you work out how many more shots
+   * that is — which is the arithmetic this game is made of.
+   */
+  const size = Math.max(10, scale * 0.42)
+  shout(ctx, String(mon.health), x, top + h / 2 + scale * 0.02, size, '#ffffff')
+
+  const barW = w * 0.9
+  const barH = scale * 0.12
+  const barY = top + h * 1.22
+  ctx.fillStyle = 'rgba(8,10,18,0.75)'
+  ctx.fillRect(x - barW / 2, barY, barW, barH)
+  ctx.fillStyle = mon.health / mon.max > 0.45 ? '#7ae582' : '#ff8c8c'
+  ctx.fillRect(x - barW / 2, barY, barW * Math.max(0, mon.health / mon.max), barH)
+  ctx.restore()
 }
 
-/** A block of Papa's machines: a crate on treads with a count on the side. */
-export function drawBlock(
-  ctx: Ctx,
-  block: Block,
-  x: number,
-  y: number,
-  scale: number,
-  clock: number,
+/**
+ * A crate: what is inside it, and what it costs in hits.
+ *
+ * The price is the big number, because the price is the thing being decided
+ * about. What is inside is underneath it in smaller type — a gun you cannot
+ * afford yet is not worth reading about first.
+ */
+export function drawCrate(
+  ctx: Ctx, crate: Crate, x: number, y: number, scale: number, rung: number,
 ): void {
-  const w = MOB_W * scale
-  const h = MOB_H * scale
+  const inside = insideFor(crate, rung)
+  const w = CRATE_W * scale
+  const h = CRATE_H * scale
   const left = x - w / 2
   const top = y - h / 2
-  const hurt = block.flash > 0
+  const left_to_go = Math.max(0, crate.need - crate.got)
+  const done = crate.got / crate.need
 
   ctx.save()
-  ctx.fillStyle = hurt ? '#ffd9c9' : INK.mob
-  ctx.strokeStyle = INK.mobTrim
-  ctx.lineWidth = Math.max(1.5, scale * 0.06)
+  ctx.fillStyle = crate.flash > 0 ? '#ffe9a8' : INK.crate
+  ctx.strokeStyle = INK.crateTrim
+  ctx.lineWidth = Math.max(1.5, scale * 0.07)
   ctx.beginPath()
-  ctx.roundRect(left, top, w, h, scale * 0.18)
+  ctx.roundRect(left, top, w, h, scale * 0.14)
   ctx.fill()
   ctx.stroke()
 
-  // Treads, shuffling along. The offset is the clock, so a row of them moves
-  // together like one machine rather than twelve separate ones.
-  ctx.fillStyle = INK.mobTrim
-  const treadH = h * 0.2
-  for (let i = 0; i < 5; i++) {
-    const slide = ((clock * 0.8 + i / 5) % 1) * (w * 0.2)
-    ctx.fillRect(left + w * 0.08 + slide + i * w * 0.18, top + h - treadH * 0.9, w * 0.1, treadH)
+  // Planks, and the cracks that open as the hits land.
+  ctx.strokeStyle = INK.crateTrim
+  ctx.lineWidth = Math.max(1, scale * 0.045)
+  ctx.beginPath()
+  ctx.moveTo(left, top + h * 0.33)
+  ctx.lineTo(left + w, top + h * 0.33)
+  ctx.stroke()
+  if (done > 0) {
+    ctx.strokeStyle = 'rgba(30,14,0,0.75)'
+    ctx.lineWidth = Math.max(1, scale * 0.06 * (0.4 + done))
+    const cracks = Math.min(5, 1 + Math.floor(done * 5))
+    for (let i = 0; i < cracks; i++) {
+      const at = left + w * ((i + 1) / (cracks + 1))
+      ctx.beginPath()
+      ctx.moveTo(at, top + h * 0.34)
+      ctx.lineTo(at + (i % 2 === 0 ? w * 0.08 : -w * 0.08), top + h * 0.95)
+      ctx.stroke()
+    }
   }
 
-  // One eye, because a crate with an eye is a thing coming for you and a crate
-  // is a crate.
-  ctx.fillStyle = '#10131f'
-  ctx.beginPath()
-  ctx.arc(x + w * 0.26, top + h * 0.34, scale * 0.1, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = hurt ? '#ff6b6b' : '#ffd166'
-  ctx.beginPath()
-  ctx.arc(x + w * 0.28, top + h * 0.33, scale * 0.045, 0, Math.PI * 2)
-  ctx.fill()
-
-  const size = Math.max(11, scale * 0.52)
-  ctx.font = mono(size)
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#1a0f0a'
-  ctx.fillText(String(block.count), left + w * 0.12, y)
+  /*
+   * The price first and biggest, then what it buys, on three short lines.
+   *
+   * It was one long line — "48 HITS · RATTLER · 3 A SHOT" — which ran off both
+   * ends of the crate and off the sides of the lane, which is what happens when
+   * a label is written without anybody looking at it on a phone. Three stacked
+   * lines fit inside the box they belong to, and the order is the order the
+   * decision is made in: what it costs, then what it is.
+   */
+  const room = w * 0.88
+  shout(ctx, String(left_to_go), x, top + h * 0.3, Math.max(13, scale * 0.52), '#2b1d04', 'center', room)
+  shout(ctx, 'HITS', x, top + h * 0.56, Math.max(8, scale * 0.24), '#3a2906', 'center', room)
+  shout(
+    ctx,
+    `${inside.name.toUpperCase()} ${inside.hit}`,
+    x,
+    top + h * 0.81,
+    Math.max(8, scale * 0.23),
+    '#3a2906',
+    'center',
+    room,
+  )
   ctx.restore()
 }
 
-/** One gate: a frame across its half of the lane with the sum written in it. */
-export function drawGate(
-  ctx: Ctx,
-  gate: Gate,
-  field: { x: number; y: number; scale: number },
-  clock: number,
+/** You: a little gun on a stand, and the barrel it fires out of. */
+export function drawGun(
+  ctx: Ctx, x: number, y: number, scale: number, weapon: Gun, clock: number, firing: number,
 ): void {
-  const { scale } = field
-  const slide = Math.min(1, Math.max(0, (clock - gate.born) / GATE_SLIDE))
-  const ease = 1 - (1 - slide) * (1 - slide)
-  const left = field.x + gate.from * scale
-  const wide = (gate.to - gate.from) * scale
-  const y = field.y + gate.y * scale
-  const tall = scale * 1.15
-  const good = kind(gate.op) === 'good'
-  const ink = good ? INK.good : INK.bad
+  const w = GUN_W * scale
+  const h = scale * 0.75
 
   ctx.save()
-  ctx.globalAlpha = 0.25 + 0.75 * ease
-  ctx.translate(0, (1 - ease) * -scale * 1.2)
+  // The barrel, which grows with the gun: a bigger number needs a bigger gun or
+  // the upgrade is a line of text and nothing else.
+  const fat = Math.min(0.3, 0.1 + Math.log2(Math.max(1, weapon.hit)) * 0.035)
+  const kick = Math.max(0, firing) * scale * 0.12
+  ctx.fillStyle = '#cfe6ff'
+  ctx.fillRect(x - scale * fat, y - h * 0.95 + kick, scale * fat * 2, h * 0.7)
 
-  // The frame. Open in the middle: it is a gate, not a wall, and a squad goes
-  // through it rather than into it.
-  ctx.fillStyle = good ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.12)'
-  ctx.fillRect(left, y - tall / 2, wide, tall)
-  ctx.strokeStyle = ink
-  ctx.lineWidth = Math.max(2, scale * (gate.flash > 0 ? 0.13 : 0.08))
-  ctx.beginPath()
-  ctx.moveTo(left, y - tall / 2)
-  ctx.lineTo(left + wide, y - tall / 2)
-  ctx.moveTo(left, y + tall / 2)
-  ctx.lineTo(left + wide, y + tall / 2)
-  ctx.stroke()
-  // Posts at the edges of the lane and down the middle, so which half is which
-  // is unmistakable.
-  ctx.fillStyle = ink
-  ctx.fillRect(left - scale * 0.03, y - tall / 2, scale * 0.07, tall)
-  ctx.fillRect(left + wide - scale * 0.04, y - tall / 2, scale * 0.07, tall)
-
-  if (gate.flash > 0) {
-    ctx.shadowColor = ink
-    ctx.shadowBlur = scale * 0.8 * gate.flash
-  }
-  const size = Math.max(16, scale * 0.78)
-  ctx.font = mono(size)
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillStyle = ink
-  ctx.fillText(`${SIGN[gate.op]}${gate.by}`, left + wide / 2, y)
-  ctx.restore()
-}
-
-/** The cart, which is the gun on wheels. */
-export function drawCart(
-  ctx: Ctx,
-  x: number,
-  y: number,
-  scale: number,
-  weapon: Weapon,
-  clock: number,
-): void {
-  const w = CART_W * scale
-  const h = scale * 0.8
-
-  ctx.save()
-  // Barrels: one for each in the squad it fires, which is the clearest way to
-  // say what a new gun changed without a word of text.
-  ctx.fillStyle = weapon.tint
-  const barrels = Math.min(5, weapon.squad)
-  for (let i = 0; i < barrels; i++) {
-    const at = barrels === 1 ? 0 : (i / (barrels - 1) - 0.5) * w * 0.62
-    ctx.fillRect(x + at - scale * 0.06, y - h * 0.95, scale * 0.12, h * 0.55)
-  }
-
-  ctx.fillStyle = INK.cart
-  ctx.strokeStyle = INK.cartTrim
+  ctx.fillStyle = INK.gun
+  ctx.strokeStyle = INK.gunTrim
   ctx.lineWidth = Math.max(1.5, scale * 0.06)
   ctx.beginPath()
-  ctx.roundRect(x - w / 2, y - h / 2, w, h, scale * 0.2)
+  ctx.roundRect(x - w / 2, y - h / 2, w, h, scale * 0.18)
   ctx.fill()
   ctx.stroke()
 
-  // Wheels, turning with the clock so standing still does not look broken.
-  ctx.fillStyle = INK.cartTrim
+  // Treads, turning, so standing still does not look broken.
+  ctx.fillStyle = INK.gunTrim
   for (const side of [-1, 1]) {
-    const cx = x + side * w * 0.3
-    const cy = y + h * 0.45
+    const cx = x + side * w * 0.28
+    const cy = y + h * 0.42
     ctx.beginPath()
-    ctx.arc(cx, cy, scale * 0.17, 0, Math.PI * 2)
+    ctx.arc(cx, cy, scale * 0.16, 0, Math.PI * 2)
     ctx.fill()
     ctx.strokeStyle = '#0a0d17'
     ctx.lineWidth = Math.max(1, scale * 0.04)
     ctx.beginPath()
     ctx.moveTo(cx, cy)
-    ctx.lineTo(cx + Math.cos(clock * 6) * scale * 0.15, cy + Math.sin(clock * 6) * scale * 0.15)
+    ctx.lineTo(cx + Math.cos(clock * 6) * scale * 0.14, cy + Math.sin(clock * 6) * scale * 0.14)
     ctx.stroke()
   }
   ctx.restore()
 }
 
-/** The sums, floating where they happened. */
+function drawShot(ctx: Ctx, shot: Shot, x: number, y: number, scale: number): void {
+  const w = SHOT_W * scale
+  ctx.save()
+  ctx.fillStyle = INK.shot
+  ctx.shadowColor = INK.shot
+  ctx.shadowBlur = scale * 0.3
+  ctx.beginPath()
+  ctx.roundRect(x - w / 2, y - scale * 0.26, w, scale * 0.52, w / 2)
+  ctx.fill()
+  ctx.restore()
+  void shot
+}
+
 function drawSaid(ctx: Ctx, said: Said, x: number, y: number, scale: number): void {
-  const fade = Math.min(1, said.life / 0.5)
-  const size = Math.max(12, scale * 0.52)
+  const fade = Math.min(1, said.life / 0.4)
   ctx.save()
   ctx.globalAlpha = fade
-  ctx.font = mono(size)
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.lineWidth = Math.max(2, size * 0.32)
-  ctx.strokeStyle = 'rgba(5,6,12,0.92)'
-  ctx.strokeText(said.text, x, y)
-  ctx.fillStyle = said.tint
-  ctx.fillText(said.text, x, y)
+  shout(ctx, said.text, x, y, Math.max(said.big ? 15 : 11, scale * (said.big ? 0.6 : 0.4)), said.tint)
   ctx.restore()
 }
 
-/**
- * The lane itself: the dark beyond the top, the walls, and the line.
- *
- * The top of the lane fades out rather than ending in a hard edge, because the
- * mob walks in from above and a block appearing at a line looks like a bug.
- */
+/** The lane itself: the dark beyond the top, the walls, and the line. */
 function drawLane(ctx: Ctx, field: { x: number; y: number; scale: number }, view: View): void {
   const { scale } = field
   const wide = LANE * scale
@@ -339,7 +324,6 @@ function drawLane(ctx: Ctx, field: { x: number; y: number; scale: number }, view
   ctx.fillStyle = sky
   ctx.fillRect(field.x, field.y, wide, tall)
 
-  // Lane markings, to give the walk down something to be measured against.
   ctx.strokeStyle = 'rgba(255,255,255,0.045)'
   ctx.lineWidth = Math.max(1, scale * 0.04)
   for (let i = 1; i < LANE; i++) {
@@ -353,8 +337,8 @@ function drawLane(ctx: Ctx, field: { x: number; y: number; scale: number }, view
   ctx.lineWidth = Math.max(2, scale * 0.09)
   ctx.strokeRect(field.x, field.y, wide, tall)
 
-  // The line they must not cross, drawn as hazard stripes rather than a line:
-  // a thin red line reads as decoration and this is the whole stake.
+  // The line they must not cross, as hazard stripes rather than a thin line: a
+  // thin red line reads as decoration and this is the whole stake.
   const y = field.y + LINE_Y * scale
   const thick = scale * 0.26
   ctx.save()
@@ -374,6 +358,48 @@ function drawLane(ctx: Ctx, field: { x: number; y: number; scale: number }, view
   ctx.restore()
 }
 
+/**
+ * The clock at the top: how long until the nearest one reaches you.
+ *
+ * Half of every sum in this game, so it is on the screen in seconds rather than
+ * left to be judged by eye. The other half is the number on a crate, and a
+ * child who can work out that twelve hits at three a second is four seconds —
+ * and that four is less than six — is playing this game properly.
+ */
+export function drawClock(ctx: Ctx, run: Run, x: number, y: number, size: number): void {
+  const left = arriveIn(run)
+  const soon = left < 3
+  ctx.save()
+  shout(ctx, 'THEY GET HERE IN', x, y - size * 0.75, size * 0.6, INK.dim, 'left')
+  shout(
+    ctx,
+    Number.isFinite(left) ? `${left.toFixed(1)}s` : '—',
+    x,
+    y + size * 0.5,
+    size * 1.4,
+    soon ? '#ff8c8c' : INK.chalk,
+    'left',
+  )
+  ctx.restore()
+}
+
+/** What you are holding: the damage and the rate, which are the sum's numbers. */
+export function drawHeld(ctx: Ctx, run: Run, x: number, y: number, size: number): void {
+  const weapon = weaponOf(run)
+  ctx.save()
+  shout(ctx, weapon.name.toUpperCase(), x, y - size * 0.75, size * 0.7, INK.gun, 'right')
+  shout(
+    ctx,
+    `${weapon.hit} a shot · ${rateOf(weapon)} a second`,
+    x,
+    y + size * 0.5,
+    size * 0.6,
+    INK.dim,
+    'right',
+  )
+  ctx.restore()
+}
+
 /** Everything, in the order it has to be in. */
 export function drawRun(ctx: Ctx, run: Run, view: View): void {
   const field = fieldOf(view)
@@ -387,21 +413,24 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
   ctx.rect(field.x, field.y, LANE * scale, TALL * scale)
   ctx.clip()
 
-  for (const gate of run.gates) drawGate(ctx, gate, field, run.clock)
-
-  for (const block of run.blocks) {
-    const spot = at(block.x, block.y)
-    drawBlock(ctx, block, spot.x, spot.y, scale, run.clock)
+  for (const mon of run.crowd) {
+    const spot = at(mon.x, mon.y)
+    drawMonster(ctx, mon, spot.x, spot.y, scale, run.clock)
   }
 
-  const weapon = weaponFor(run.hits)
-  for (const squad of run.squads) {
-    const spot = at(squad.x, squad.y)
-    drawSquad(ctx, squad, spot.x, spot.y, scale, run.clock, weapon.tint)
+  for (const crate of run.crates) {
+    const spot = at(crate.x, crate.y)
+    drawCrate(ctx, crate, spot.x, spot.y, scale, run.rung)
   }
 
-  const cart = at(run.cart, CART_Y)
-  drawCart(ctx, cart.x, cart.y, scale, weapon, run.clock)
+  for (const shot of run.shots) {
+    const spot = at(shot.x, shot.y)
+    drawShot(ctx, shot, spot.x, spot.y, scale)
+  }
+
+  const me = at(run.gun, GUN_Y)
+  const weapon = weaponOf(run)
+  drawGun(ctx, me.x, me.y, scale, weapon, run.clock, 1 - Math.min(1, run.cool / weapon.every))
 
   for (const said of run.says) {
     const spot = at(said.x, said.y)
@@ -411,41 +440,19 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
 }
 
 /**
- * The gun you have, named, for the corner of the screen.
- *
- * Drawn rather than written as a word on its own: the thing that changed is how
- * many barrels there are, so showing the barrels says it without reading.
- */
-export function drawGun(ctx: Ctx, run: Run, x: number, y: number, size: number): void {
-  const weapon = weaponFor(run.hits)
-  const next = WEAPONS.find((w) => w.at > run.hits)
-
-  ctx.save()
-  ctx.font = mono(size)
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'middle'
-  ctx.fillStyle = weapon.tint
-  ctx.fillText(weapon.name.toUpperCase(), x, y)
-  if (next) {
-    ctx.font = mono(size * 0.8)
-    ctx.fillStyle = INK.dim
-    ctx.fillText(`${next.at - run.hits} to ${next.name.toLowerCase()}`, x, y + size * 1.3)
-  }
-  ctx.restore()
-}
-
-/**
  * A stretch of the lane for the front screen's tile and the opening story.
  *
- * The game's own pieces, at the game's own scale: a gate row, a block walking
- * down into it and a squad on its way up. Drawn from the same functions the
+ * The game's own pieces at the game's own scale: a couple of monsters, a crate
+ * with its price on it, and you at the bottom. Drawn from the same functions the
  * game draws with, so it cannot drift away from what the game looks like — the
- * fault this project has found three times now is a tile showing something
- * that is nowhere in the game it opens.
+ * fault this project has found three times now is a tile showing something that
+ * is nowhere in the game it opens.
  */
 export function drawTaste(ctx: Ctx, w: number, h: number, clock: number): void {
-  const scale = Math.min(w / 6.4, h / 7.2)
-  const field = { x: (w - 6.4 * scale) / 2, y: (h - 7.2 * scale) / 2, scale }
+  const wide = 6.4
+  const tall = 7.2
+  const scale = Math.min(w / wide, h / tall)
+  const field = { x: (w - wide * scale) / 2, y: (h - tall * scale) / 2, scale }
   const at = (x: number, y: number) => ({ x: field.x + x * scale, y: field.y + y * scale })
 
   const sky = ctx.createLinearGradient(0, 0, 0, h)
@@ -454,20 +461,25 @@ export function drawTaste(ctx: Ctx, w: number, h: number, clock: number): void {
   ctx.fillStyle = sky
   ctx.fillRect(0, 0, w, h)
 
-  const row: Gate[] = [
-    { id: 1, op: 'times' as Op, by: 3, from: 0, to: 3.2, y: 3.5, flash: 0, born: -9 },
-    { id: 2, op: 'plus' as Op, by: 4, from: 3.2, to: 6.4, y: 3.5, flash: 0, born: -9 },
+  const crowd: Monster[] = [
+    { id: 1, x: 1.5, y: 1.4, breed: 'blob', health: 6, max: 9, pace: 1, flash: 0 },
+    { id: 2, x: 4.6, y: 1.1, breed: 'spike', health: 11, max: 12, pace: 0.85, flash: 0 },
+    { id: 3, x: 3, y: 2.9, breed: 'runner', health: 3, max: 5, pace: 1.6, flash: 0 },
   ]
-  for (const gate of row) drawGate(ctx, gate, field, clock)
+  for (const mon of crowd) {
+    const spot = at(mon.x, mon.y)
+    drawMonster(ctx, mon, spot.x, spot.y, scale, clock)
+  }
 
-  const block = { id: 3, x: 1.6, y: 1.2, count: 12, flash: 0 }
-  const spot = at(block.x, block.y)
-  drawBlock(ctx, block, spot.x, spot.y, scale, clock)
+  const crate: Crate = { id: 4, x: 4.4, y: 4.4, need: 12, got: 4, step: 2, flash: 0 }
+  const box = at(crate.x, crate.y)
+  drawCrate(ctx, crate, box.x, box.y, scale, 1)
 
-  const squad = { id: 4, x: 1.6, y: 5.1, n: 4, flash: 0 }
-  const up = at(squad.x, squad.y)
-  drawSquad(ctx, squad, up.x, up.y, scale, clock, WEAPONS[1].tint)
+  for (const y of [5.1, 5.9]) {
+    const spot = at(1.9, y)
+    drawShot(ctx, { id: 9, x: 1.9, y }, spot.x, spot.y, scale)
+  }
 
-  const cart = at(3.2, 6.6)
-  drawCart(ctx, cart.x, cart.y, scale, WEAPONS[1], clock)
+  const me = at(1.9, 6.7)
+  drawGun(ctx, me.x, me.y, scale, gunAt(1), clock, 0.4)
 }
