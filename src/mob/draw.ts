@@ -370,7 +370,7 @@ export function drawClock(ctx: Ctx, run: Run, x: number, y: number, size: number
   const left = arriveIn(run)
   const soon = left < 3
   ctx.save()
-  shout(ctx, 'THEY GET HERE IN', x, y - size * 0.75, size * 0.6, INK.dim, 'left')
+  shout(ctx, 'THEY GET HERE IN', x, y - size * 0.85, size * 0.55, INK.dim, 'left')
   shout(
     ctx,
     Number.isFinite(left) ? `${left.toFixed(1)}s` : '—',
@@ -387,7 +387,7 @@ export function drawClock(ctx: Ctx, run: Run, x: number, y: number, size: number
 export function drawHeld(ctx: Ctx, run: Run, x: number, y: number, size: number): void {
   const weapon = weaponOf(run)
   ctx.save()
-  shout(ctx, weapon.name.toUpperCase(), x, y - size * 0.75, size * 0.7, INK.gun, 'right')
+  shout(ctx, weapon.name.toUpperCase(), x, y - size * 0.85, size * 0.62, INK.gun, 'right')
   shout(
     ctx,
     `${weapon.hit} a shot · ${rateOf(weapon)} a second`,

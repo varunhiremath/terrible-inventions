@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { GUNS, LANE, LINE_Y, LIVES } from '../mob/level'
+import { GUNS, LANE, LIVES, TALL } from '../mob/level'
 import {
   FIXED, LOUDEST, arriveIn, newRun, nextLevel, serve, standing, step, weaponOf,
   type Input, type MobEvent, type Run, type Status,
@@ -159,12 +159,14 @@ export function Mob() {
          * you, and what you are holding. Down at the bottom of the lane, either
          * side of the gun — on the lane rather than in the bar above it, so
          * they are in the same glance as the crate whose price they are being
-         * compared against, and *below* the hazard line, which is the one strip
-         * of the lane the crowd never walks through while you are still alive.
+         * compared against, and in the two bottom corners, under the hazard
+         * line — the one strip of lane the crowd never walks through while you
+         * are still alive, and far enough down not to be written across the gun
+         * when it slides into the corner.
          */
         const field = fieldOf(view)
         const size = Math.max(10, field.scale * 0.4)
-        const floor = field.y + (LINE_Y + 0.75) * field.scale
+        const floor = field.y + (TALL - 0.55) * field.scale
         drawClock(ctx, next, field.x + field.scale * 0.3, floor, size)
         drawHeld(ctx, next, field.x + (LANE - 0.3) * field.scale, floor, size)
       }
