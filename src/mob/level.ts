@@ -65,7 +65,7 @@ export const SHOT_W = 0.22
 export const MON_W = 0.95
 export const MON_H = 1.45
 
-export const CRATE_W = 1.4
+export const CRATE_W = 1.3
 export const CRATE_H = 1.8
 
 // --- what you are shooting with ----------------------------------------------
@@ -193,13 +193,15 @@ export interface Monster {
  * eye and go and get, which is most of what "more going on" means in a game
  * like this.
  */
-export type Catch = 'turret' | 'rapid' | 'blast'
+export type Catch = 'turret' | 'rapid' | 'blast' | 'gun'
 
 export interface Falling {
   id: number
   x: number
   y: number
   kind: Catch
+  /** For a gun coming down: how far up the ladder it carries you. */
+  step: number
   flash: number
 }
 
@@ -213,7 +215,15 @@ export const CATCH: Record<Catch, Caught> = {
   turret: { name: 'TURRET', says: 'It fires with you', tint: '#8fd3ff' },
   rapid: { name: 'RAPID', says: 'Twice as fast', tint: '#ffd166' },
   blast: { name: 'BLAST', says: 'Clears the front', tint: '#ff8c8c' },
+  gun: { name: 'GUN', says: 'Shot open and dropped', tint: '#cfe6ff' },
 }
+
+/**
+ * The three that fall on their own. A gun is the fourth kind of falling thing
+ * and never turns up by itself: one only ever comes down because you shot its
+ * rack open, which is the whole point of the racks.
+ */
+export const AIRDROPS: readonly Catch[] = ['turret', 'rapid', 'blast']
 
 /** How long a caught thing lasts, in seconds. A blast is instant. */
 export const TURRET_FOR = 14
@@ -227,14 +237,23 @@ export const CATCH_NEAR = 1.1
 /** How long between things falling. */
 export const dropEvery = (level: number): number => Math.max(7, 12 - (level - 1) * 0.3)
 
+/**
+ * A weapon on a rack, riding down the parapet.
+ *
+ * Shoot it enough times and the gun in it comes down on a parachute for you to
+ * run under — which is the bit that makes the two kinds of falling thing make
+ * sense together, and the reason "what is the difference between the crates and
+ * the parachutes" was a fair question about the last version. There is one kind
+ * of thing to catch; the racks are where the good ones come from.
+ */
 export interface Crate {
   id: number
   x: number
   y: number
-  /** Hits it takes to crack open, and how many have landed. */
+  /** Hits it takes to shake the gun loose, and how many have landed. */
   need: number
   got: number
-  /** How far up the ladder it carries you: one rung, or two. */
+  /** How far up the ladder the gun on it carries you: one rung, or two. */
   step: number
   flash: number
 }
@@ -312,8 +331,13 @@ export function cratePair(level: number, rung: number, rng: Dice, nextId: () => 
    * the crate comes down.
    */
   const toHits = (seconds: number) => Math.max(3, Math.round(seconds / every / 3) * 3)
-  const cheap = { need: toHits(2.5 + rng.next() * 1.5), step: 1 }
-  const dear = { need: toHits(11 + rng.next() * 7), step: 2 }
+  /*
+   * Cheaper than they were, because the hits are no longer the whole price:
+   * the gun comes down on a parachute afterwards and has to be caught, which
+   * costs a walk across the bridge at a moment you do not choose.
+   */
+  const cheap = { need: toHits(2 + rng.next() * 1.5), step: 1 }
+  const dear = { need: toHits(9 + rng.next() * 6), step: 2 }
 
   /*
    * Out in the two side lanes, which the crowd never walks down.
@@ -332,8 +356,8 @@ export function cratePair(level: number, rung: number, rng: Dice, nextId: () => 
     // units across, and with the crates any further in a shot aimed at the
     // brute on the end of a row clipped the crate behind it. Which is how a bot
     // that never aimed at a crate still opened five a run.
-    { id: nextId(), x: LANE * 0.08, y: -1.2, need: left.need, got: 0, step: left.step, flash: 0 },
-    { id: nextId(), x: LANE * 0.92, y: -1.2, need: right.need, got: 0, step: right.step, flash: 0 },
+    { id: nextId(), x: LANE * 0.075, y: -1.2, need: left.need, got: 0, step: left.step, flash: 0 },
+    { id: nextId(), x: LANE * 0.925, y: -1.2, need: right.need, got: 0, step: right.step, flash: 0 },
   ]
 }
 
@@ -376,7 +400,20 @@ export function waveFor(level: number, rng: Dice, nextId: () => number): Monster
     const shift = row % 2 === 0 ? 0 : wide / (across - 1) / 2
     for (let i = 0; i < across; i++) {
       if (crowd.length >= many) break
-      const x = edge + (wide * i) / (across - 1) + shift
+      /*
+       * A nudge each, fixed for the life of the monster. Rows on exact columns
+       * read as a marching band; half a step of wander makes the same rows read
+       * as a crowd, and costs nothing — the lanes are still wide enough apart
+       * to aim between.
+       */
+      const wander = (rng.next() - 0.5) * (wide / (across - 1)) * 0.45
+      // Clamped to the crowd's own band: a monster that wandered into a rack
+      // lane put the rack behind it in the line of fire, and a bot that never
+      // aimed at one was opening two a run again.
+      const x = Math.max(edge, Math.min(
+        LANE - edge,
+        edge + (wide * i) / (across - 1) + shift + wander,
+      ))
       if (x > LANE - edge) continue
       const breed = rng.pick(
         level < 2 ? (['shambler'] as const)

@@ -77,7 +77,19 @@ function play(how: Pick, seconds: number, seed: number): Went {
         }
       }
 
-      if (aim) {
+      /*
+       * A gun on a parachute is worth more than anything else on the bridge:
+       * it has already been paid for in hits, and it is lost if nobody is under
+       * it. Both bots that buy guns go and get them.
+       */
+      // ...but only once it is nearly down. Walking over the moment it leaves
+      // the rack means standing under a parachute for five seconds not
+      // shooting, which no player would do and which made this bot look like
+      // the game was broken.
+      const mine = run.falling.find((drop) => drop.kind === 'gun' && drop.y > 9)
+      if (mine) {
+        want = mine.x
+      } else if (aim) {
         want = aim.x
       } else {
         const target = nearest(run.crowd.filter((m) => m.y > -3))
@@ -120,28 +132,31 @@ const over = (how: Pick, seconds = 180): Went => {
 }
 
 /**
- * Four minutes of play, averaged over five seeds, as measured when this was
+ * Three minutes of play, averaged over three seeds, as measured when this was
  * written. The bounds below sit loosely around these.
  *
- *              wave   lives   monsters   crates
- *   timed       9.2    0.0      157        9.2
- *   greedy      8.8    1.4      142        8.4
- *   never       5.0    3.8       67        0.0
+ *              wave   lives   monsters   guns
+ *   timed       8.3     1.7      224      7.7
+ *   greedy      6.0    10.7      140      5.0
+ *   never       5.0     8.3      108      0.0
+ *   still       2.0    19.3        5      0.0
  *
- * Which is the shape this game is supposed to have: doing the sum gets you
- * through whole, grabbing the dear crate whenever you see one costs lives, and
- * never spending anything on a gun leaves you jabbing at wave five with a
- * Peashooter while the wave gets forty per cent tougher every time.
+ * The gap between the first two rows is the game. It got six times wider the
+ * moment a gun stopped going straight into your hands and started coming down
+ * on a parachute: a rack taken at the wrong moment now costs the hits *and* the
+ * walk across the bridge to catch what you paid for, and the clock is the only
+ * thing that tells you whether you have both.
  */
 describe('four minutes of it', () => {
   it('rewards working out whether the crate fits in the time left', () => {
     const timed = over('timed')
     const greedy = over('greedy')
-    expect(timed.lost, `timed lost ${timed.lost} lives`).toBeLessThanOrEqual(0.5)
+    expect(timed.lost, `timed lost ${timed.lost} lives`).toBeLessThan(4)
     expect(
       greedy.lost,
       `and greedy lost ${greedy.lost} going for the big one regardless`,
-    ).toBeGreaterThan(timed.lost + 0.5)
+    ).toBeGreaterThan(timed.lost * 2.5)
+    expect(greedy.wave, `greedy reached wave ${greedy.wave}`).toBeLessThan(timed.wave - 1)
   }, 40_000)
 
   it('punishes never buying a gun at all', () => {

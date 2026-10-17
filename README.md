@@ -35,10 +35,13 @@ and its tests are all still here and still run, and putting it back is one entry
 The swarm is where the maths stopped being something that happens between lives. A crowd
 comes over a bridge at the gate you are holding, you shoot it, and the numbers on them
 are how many more shots each one needs — with brutes among them from the third wave that
-take six times as many. Crates ride down the parapets with better guns inside, and a
-crate is paid for in hits — hits that are not going into the crowd while you spend them.
-Things fall on parachutes in between: a turret that holds the line beside you, a few
-seconds of firing twice as fast, a blast that clears the front of the bridge.
+take six times as many. Guns ride down the parapets on racks, and a rack is paid for in
+hits — hits that are not going into the crowd while you spend them. Shoot one loose and
+the gun comes down on a parachute, which you then have to be under: paying buys the
+drop, being in the right place buys the gun. Three other things fall in between — a
+turret that holds the line beside you, a few seconds of firing twice as fast, and a
+blast that clears the front of the bridge — and every gun you have been handed sits in
+a row at your feet.
 A crate needing twelve hits at three shots a second is four seconds of not shooting, and
 the clock at the top says how long you have before the nearest one reaches you. That
 comparison is the whole game, and both of its numbers are on the screen.

@@ -104,8 +104,8 @@ export function drawMonster(
   const h = MON_H * scale * size
   const w = MON_W * scale * size
   const walk = clock * 4.5 * mon.pace + mon.step
-  const sway = Math.sin(walk) * w * 0.1
-  const bob = Math.abs(Math.cos(walk)) * h * 0.04
+  const sway = Math.sin(walk) * w * 0.06
+  const bob = Math.abs(Math.cos(walk)) * h * 0.05
   const top = y - h / 2 + bob
   const hurt = mon.flash > 0
   // A touch of its own in the colour, so a crowd of forty is not one drawing
@@ -121,27 +121,49 @@ export function drawMonster(
   ctx.shadowColor = 'rgba(4,6,12,0.65)'
   ctx.shadowBlur = Math.max(1, scale * 0.08)
 
-  // Legs, striding out of step with each other.
+  /*
+   * Legs, walking *at* you rather than past you.
+   *
+   * The first version swung them left and right, which is the stride you draw
+   * for something crossing the screen — and that is exactly what it looked
+   * like: a crowd shuffling sideways while sliding down the bridge. Something
+   * walking towards the camera does not move its feet sideways at all. The near
+   * leg lengthens and plants, the far one shortens and lifts, they swap, and
+   * the whole body rocks a little from side to side over whichever foot is
+   * down. Same two lines, completely different animation.
+   */
   ctx.strokeStyle = was.rag
   ctx.lineWidth = Math.max(2, w * (mon.breed === 'brute' ? 0.3 : 0.2))
   for (const side of [-1, 1]) {
-    const swing = Math.sin(walk + (side > 0 ? Math.PI : 0)) * w * 0.3
+    const phase = Math.sin(walk + (side > 0 ? Math.PI : 0))
+    // How far down this foot reaches: forward and planted, or lifted behind.
+    const reach = h * (0.38 + 0.1 * phase)
+    const lift = Math.max(0, -phase) * h * 0.06
     ctx.beginPath()
-    ctx.moveTo(x + side * w * 0.16, top + h * 0.6)
-    ctx.lineTo(x + side * w * 0.2 + swing, top + h)
+    ctx.moveTo(x + side * w * 0.16 + sway, top + h * 0.6 - lift)
+    ctx.lineTo(x + side * w * 0.2 + sway * 0.5, top + h * 0.6 + reach - lift)
     ctx.stroke()
   }
 
-  // Arms, out in front, swinging a little. This is the shape of the thing.
+  /*
+   * Arms reaching towards you, which from this angle means *down the screen*
+   * and foreshortened — out of the shoulder, forwards, and the hands end up
+   * low and near the middle rather than out at the sides.
+   */
   ctx.strokeStyle = skin
   ctx.lineWidth = Math.max(2, w * (mon.breed === 'brute' ? 0.26 : 0.16))
   for (const side of [-1, 1]) {
-    const reach = Math.sin(walk + side) * h * 0.06
+    const bobArm = Math.sin(walk + (side > 0 ? 0.6 : 0)) * h * 0.03
     ctx.beginPath()
-    ctx.moveTo(x + side * w * 0.3, top + h * 0.34)
-    ctx.lineTo(x + side * w * 0.44 + lean * 0.4, top + h * 0.5 + reach)
-    ctx.lineTo(x + side * w * 0.34 + lean, top + h * 0.62 + reach)
+    ctx.moveTo(x + side * w * 0.3 + sway, top + h * 0.34)
+    ctx.lineTo(x + side * w * 0.36 + sway, top + h * 0.52 + bobArm)
+    ctx.lineTo(x + side * w * 0.26 + sway, top + h * 0.68 + bobArm)
     ctx.stroke()
+    // A hand on the end of it, which is what sells the foreshortening.
+    ctx.fillStyle = skin
+    ctx.beginPath()
+    ctx.arc(x + side * w * 0.26 + sway, top + h * 0.7 + bobArm, w * 0.09, 0, Math.PI * 2)
+    ctx.fill()
   }
 
   // Body: ragged clothing over the shoulders, skin showing at the neck.
@@ -232,79 +254,6 @@ export function drawMonster(
 }
 
 /**
- * A crate: what is inside it, and what it costs in hits.
- *
- * The price is the big number, because the price is the thing being decided
- * about. What is inside is underneath it in smaller type — a gun you cannot
- * afford yet is not worth reading about first.
- */
-export function drawCrate(
-  ctx: Ctx, crate: Crate, x: number, y: number, scale: number, rung: number,
-): void {
-  const inside = insideFor(crate, rung)
-  const w = CRATE_W * scale
-  const h = CRATE_H * scale
-  const left = x - w / 2
-  const top = y - h / 2
-  const left_to_go = Math.max(0, crate.need - crate.got)
-  const done = crate.got / crate.need
-
-  ctx.save()
-  ctx.fillStyle = crate.flash > 0 ? '#ffe9a8' : INK.crate
-  ctx.strokeStyle = INK.crateTrim
-  ctx.lineWidth = Math.max(1.5, scale * 0.07)
-  ctx.beginPath()
-  ctx.roundRect(left, top, w, h, scale * 0.14)
-  ctx.fill()
-  ctx.stroke()
-
-  // Planks, and the cracks that open as the hits land.
-  ctx.strokeStyle = INK.crateTrim
-  ctx.lineWidth = Math.max(1, scale * 0.045)
-  ctx.beginPath()
-  ctx.moveTo(left, top + h * 0.33)
-  ctx.lineTo(left + w, top + h * 0.33)
-  ctx.stroke()
-  if (done > 0) {
-    ctx.strokeStyle = 'rgba(30,14,0,0.75)'
-    ctx.lineWidth = Math.max(1, scale * 0.06 * (0.4 + done))
-    const cracks = Math.min(5, 1 + Math.floor(done * 5))
-    for (let i = 0; i < cracks; i++) {
-      const at = left + w * ((i + 1) / (cracks + 1))
-      ctx.beginPath()
-      ctx.moveTo(at, top + h * 0.34)
-      ctx.lineTo(at + (i % 2 === 0 ? w * 0.08 : -w * 0.08), top + h * 0.95)
-      ctx.stroke()
-    }
-  }
-
-  /*
-   * The price first and biggest, then what it buys, on three short lines.
-   *
-   * It was one long line — "48 HITS · RATTLER · 3 A SHOT" — which ran off both
-   * ends of the crate and off the sides of the lane, which is what happens when
-   * a label is written without anybody looking at it on a phone. Three stacked
-   * lines fit inside the box they belong to, and the order is the order the
-   * decision is made in: what it costs, then what it is.
-   */
-  const room = w * 0.88
-  shout(ctx, String(left_to_go), x, top + h * 0.3, Math.max(13, scale * 0.52), '#2b1d04', 'center', room)
-  shout(ctx, 'HITS', x, top + h * 0.56, Math.max(8, scale * 0.24), '#3a2906', 'center', room)
-  shout(
-    ctx,
-    `${inside.name.toUpperCase()} ${inside.hit}`,
-    x,
-    top + h * 0.81,
-    Math.max(8, scale * 0.23),
-    '#3a2906',
-    'center',
-    room,
-  )
-  ctx.restore()
-}
-
-/** You: a little gun on a stand, and the barrel it fires out of. */
-/**
  * Which of the five shapes a gun on this rung is drawn as.
  *
  * The ask, in the words it was asked in: "only your shooting power increases,
@@ -319,6 +268,120 @@ export const shapeOf = (rung: number): 0 | 1 | 2 | 3 | 4 => {
   if (rung >= 7) return 2
   if (rung >= 3) return 1
   return 0
+}
+
+/**
+ * A weapon on a rack, riding down the parapet with a price on it.
+ *
+ * It was a wooden crate with words on it, and the question it got was the right
+ * one: what is the difference between these and the things on parachutes? None
+ * that you could see. So a rack shows the gun that is on it, drawn with the
+ * same five silhouettes the soldier holds, and shooting it loose sends that gun
+ * down on a parachute like everything else — one kind of thing to catch, and
+ * the racks are where the good ones come from.
+ */
+export function drawCrate(
+  ctx: Ctx, crate: Crate, x: number, y: number, scale: number, rung: number,
+): void {
+  const inside = insideFor(crate, rung)
+  const w = CRATE_W * scale
+  const h = CRATE_H * scale
+  const left = x - w / 2
+  const top = y - h / 2
+  const togo = Math.max(0, crate.need - crate.got)
+  const done = crate.got / crate.need
+
+  ctx.save()
+
+  // The rack: two posts and a crossbar, the gun hanging on it.
+  ctx.fillStyle = crate.flash > 0 ? '#ffe9a8' : '#6b4a2f'
+  ctx.strokeStyle = '#241812'
+  ctx.lineWidth = Math.max(1, scale * 0.04)
+  ctx.beginPath()
+  ctx.roundRect(left, top + h * 0.1, w, h * 0.12, scale * 0.04)
+  ctx.fill()
+  ctx.stroke()
+  for (const side of [-1, 1]) {
+    ctx.beginPath()
+    ctx.roundRect(x + side * w * 0.42 - scale * 0.05, top + h * 0.1, scale * 0.1, h * 0.72, scale * 0.03)
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  // The gun itself, shaken looser the more hits have landed.
+  const shake = done * scale * 0.08
+  ctx.save()
+  ctx.translate(x + Math.sin(crate.got * 2.3) * shake, top + h * 0.42 + done * h * 0.06)
+  ctx.rotate(done * 0.25)
+  drawWeapon(ctx, 0, 0, scale * 0.85, shapeOf(rung + crate.step), 0)
+  ctx.restore()
+
+  /*
+   * The price, under it, in the hits it takes. Big, because the price is what
+   * is being decided about — and measured against the width of the rack,
+   * because the first version of this label ran off both ends of it on a phone.
+   */
+  const room = w * 1.1
+  shout(ctx, `${togo} HITS`, x, top + h * 0.95, Math.max(11, scale * 0.42), '#ffe08a', 'center', room)
+  shout(
+    ctx,
+    `${inside.name.toUpperCase()} ${inside.hit}`,
+    x, top + h * 1.24, Math.max(8, scale * 0.26), '#cfe6ff', 'center', room,
+  )
+  ctx.restore()
+}
+
+/**
+ * One weapon, at whatever size, pointing up.
+ *
+ * Pulled out of the soldier so that the rack, the parachute and the stash all
+ * draw the same gun he is holding. Five of them; see `shapeOf`.
+ */
+export function drawWeapon(
+  ctx: Ctx, x: number, y: number, scale: number, shape: number, kick = 0,
+): void {
+  ctx.save()
+  ctx.fillStyle = '#cfe6ff'
+  ctx.strokeStyle = '#4a86b8'
+  ctx.lineWidth = Math.max(1, scale * 0.035)
+
+  // Stock.
+  ctx.fillStyle = '#6b4a2f'
+  ctx.beginPath()
+  ctx.roundRect(x - scale * 0.085, y + kick, scale * 0.17, scale * 0.34, scale * 0.05)
+  ctx.fill()
+  ctx.fillStyle = '#cfe6ff'
+
+  const barrel = (dx: number, fat: number, long: number) => {
+    ctx.beginPath()
+    ctx.roundRect(x + dx - scale * fat, y - scale * long + kick, scale * fat * 2, scale * long, scale * 0.04)
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  if (shape === 0) barrel(0, 0.06, 0.62)
+  else if (shape === 1) { barrel(-scale * 0.08, 0.055, 0.68); barrel(scale * 0.08, 0.055, 0.68) }
+  else if (shape === 2) {
+    barrel(0, 0.1, 0.72)
+    ctx.beginPath()
+    ctx.moveTo(x - scale * 0.2, y - scale * 0.72 + kick)
+    ctx.lineTo(x + scale * 0.2, y - scale * 0.72 + kick)
+    ctx.lineTo(x + scale * 0.1, y - scale * 0.54 + kick)
+    ctx.lineTo(x - scale * 0.1, y - scale * 0.54 + kick)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  } else {
+    barrel(0, shape === 3 ? 0.14 : 0.18, shape === 3 ? 0.84 : 0.96)
+    ctx.fillStyle = '#4a86b8'
+    for (const along of shape === 3 ? [0.4, 0.64] : [0.36, 0.56, 0.78]) {
+      ctx.fillRect(
+        x - scale * (shape === 3 ? 0.17 : 0.22), y - scale * along + kick,
+        scale * (shape === 3 ? 0.34 : 0.44), scale * 0.06,
+      )
+    }
+  }
+  ctx.restore()
 }
 
 /**
@@ -383,59 +446,10 @@ export function drawGun(
   ctx.fill()
   ctx.fillRect(x - w * 0.38 + sway, top + h * 0.12, w * 0.76, h * 0.04)
 
-  // --- the weapon, held across him, which is the thing that changes ---
+  // --- the weapon, held out to the side, which is the thing that changes ---
   const bx = x + w * 0.52 + sway
   const by = top + h * 0.3 + kick
-  ctx.fillStyle = '#cfe6ff'
-  ctx.strokeStyle = '#4a86b8'
-  ctx.lineWidth = Math.max(1, scale * 0.035)
-
-  const barrel = (dx: number, fat: number, long: number) => {
-    ctx.beginPath()
-    ctx.roundRect(bx + dx - scale * fat, by - scale * long, scale * fat * 2, scale * long, scale * 0.04)
-    ctx.fill()
-    ctx.stroke()
-  }
-
-  // The stock, in both hands, whatever the gun is.
-  ctx.fillStyle = '#6b4a2f'
-  ctx.beginPath()
-  ctx.roundRect(bx - scale * 0.085, by - scale * 0.02, scale * 0.17, scale * 0.34, scale * 0.05)
-  ctx.fill()
-  ctx.fillStyle = '#cfe6ff'
-
-  if (shape === 0) barrel(0, 0.06, 0.62)
-  else if (shape === 1) { barrel(-scale * 0.08, 0.055, 0.68); barrel(scale * 0.08, 0.055, 0.68) }
-  else if (shape === 2) {
-    barrel(0, 0.1, 0.72)
-    ctx.beginPath()
-    ctx.moveTo(bx - scale * 0.2, by - scale * 0.72)
-    ctx.lineTo(bx + scale * 0.2, by - scale * 0.72)
-    ctx.lineTo(bx + scale * 0.1, by - scale * 0.54)
-    ctx.lineTo(bx - scale * 0.1, by - scale * 0.54)
-    ctx.closePath()
-    ctx.fill()
-    ctx.stroke()
-  } else {
-    barrel(0, shape === 3 ? 0.14 : 0.18, shape === 3 ? 0.84 : 0.96)
-    ctx.fillStyle = '#4a86b8'
-    for (const along of shape === 3 ? [0.4, 0.64] : [0.36, 0.56, 0.78]) {
-      ctx.fillRect(
-        bx - scale * (shape === 3 ? 0.17 : 0.22), by - scale * along,
-        scale * (shape === 3 ? 0.34 : 0.44), scale * 0.06,
-      )
-    }
-    if (shape === 4) {
-      // A brace down to the hip: at this end of the ladder he is holding on to
-      // the thing as much as aiming it.
-      ctx.strokeStyle = '#4a86b8'
-      ctx.lineWidth = Math.max(2, scale * 0.05)
-      ctx.beginPath()
-      ctx.moveTo(bx - scale * 0.1, by - scale * 0.3)
-      ctx.lineTo(x - w * 0.2 + sway, top + h * 0.6)
-      ctx.stroke()
-    }
-  }
+  drawWeapon(ctx, bx, by, scale, shape, 0)
 
   // Arms, over the top of the weapon, so it is held rather than floating.
   ctx.strokeStyle = '#3f7fc4'
@@ -663,7 +677,7 @@ export function drawGone(
 
 /** A thing falling, under a little parachute, to be caught. */
 export function drawFalling(
-  ctx: Ctx, drop: Falling, x: number, y: number, scale: number, clock: number,
+  ctx: Ctx, drop: Falling, x: number, y: number, scale: number, clock: number, rung = 0,
 ): void {
   const was = CATCH[drop.kind]
   const sway = Math.sin(clock * 2 + drop.id) * scale * 0.18
@@ -682,6 +696,18 @@ export function drawFalling(
     ctx.moveTo(x + sway + side * w * 0.72, y - w * 0.95)
     ctx.lineTo(x + side * w * 0.3, y - w * 0.4)
     ctx.stroke()
+  }
+
+  if (drop.kind === 'gun') {
+    // A gun comes down as itself, swinging on its straps — the same drawing
+    // that was on the rack and the same one that ends up in his hands.
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate(Math.sin(clock * 2 + drop.id) * 0.12)
+    drawWeapon(ctx, 0, w * 0.3, scale * 0.95, shapeOf(rung + drop.step), 0)
+    ctx.restore()
+    ctx.restore()
+    return
   }
 
   // The box, in the colour of what is in it.
@@ -719,6 +745,57 @@ export function drawFalling(
     }
     ctx.closePath()
     ctx.fill()
+  }
+  ctx.restore()
+}
+
+/**
+ * The stash: every gun you have been handed so far, in a row at your feet.
+ *
+ * Asked for in those words — "show some upgraded guns at the bottom like a
+ * stash that you have collected" — and it earns its space for a reason the ask
+ * did not have to say: the ladder is twenty-four rungs long and until now the
+ * only evidence of it was a word in the corner. A row that grows is the one
+ * place the whole run is visible at once.
+ *
+ * Only the shapes you have actually held, newest at the right and lit up; the
+ * older ones go dim and small, and past eight of them the oldest drop off the
+ * left rather than squeezing the row.
+ */
+export function drawStash(
+  ctx: Ctx, rung: number, x: number, y: number, scale: number,
+): void {
+  const shapes: number[] = []
+  let last = -1
+  for (let at = 0; at <= rung; at++) {
+    const shape = shapeOf(at)
+    if (shape !== last) {
+      shapes.push(shape)
+      last = shape
+    }
+  }
+  // Every rung of the same shape is one entry, plus the rung you are on, so the
+  // row says "five guns in" rather than "eleven rungs in" — which is what a
+  // player can actually see in their hands.
+  const show = shapes.slice(-8)
+  const step = scale * 0.74
+  const from = x - ((show.length - 1) * step) / 2
+
+  ctx.save()
+  // A dark board behind them, or a row of pale guns over pale timber is a row
+  // of nothing.
+  ctx.fillStyle = 'rgba(8,11,20,0.55)'
+  ctx.beginPath()
+  ctx.roundRect(
+    from - step * 0.62, y - scale * 0.78, step * (show.length - 1) + step * 1.24, scale * 1.05,
+    scale * 0.12,
+  )
+  ctx.fill()
+
+  for (const [i, shape] of show.entries()) {
+    const latest = i === show.length - 1
+    ctx.globalAlpha = latest ? 1 : 0.45 + (i / show.length) * 0.25
+    drawWeapon(ctx, from + i * step, y + scale * 0.12, scale * (latest ? 0.62 : 0.48), shape, 0)
   }
   ctx.restore()
 }
@@ -823,7 +900,7 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
 
   for (const drop of run.falling) {
     const spot = at(drop.x, drop.y)
-    drawFalling(ctx, drop, spot.x, spot.y, scale, run.clock)
+    drawFalling(ctx, drop, spot.x, spot.y, scale, run.clock, run.rung)
   }
 
   for (const turret of run.turrets) {
@@ -836,6 +913,10 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
     const spot = at(shot.x, shot.y)
     drawShot(ctx, shot, spot.x, spot.y, scale, shape)
   }
+
+  // The stash goes down before he does, so he stands in front of his own guns
+  // rather than being written over by them when he walks to the middle.
+  drawStash(ctx, run.rung, field.x + (LANE / 2) * scale, field.y + (LINE_Y + 0.8) * scale, scale)
 
   const me = at(run.gun, GUN_Y)
   const weapon = weaponOf(run)

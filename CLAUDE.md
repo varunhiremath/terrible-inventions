@@ -83,8 +83,17 @@ These are not preferences. Breaking one defeats the point of the project.
 - **`arriveIn` has to be exactly right.** It is half of every sum the player does, so it
   reads the real position and the real pace of whichever monster is genuinely nearest. A
   countdown that is approximately right teaches arithmetic that is approximately wrong.
-- **One pair of crates a wave, and opening one takes the other away.** It is a choice,
+- **One pair of racks a wave, and opening one takes the other away.** It is a choice,
   not a shopping list.
+- **A gun is never handed over directly.** Shooting a rack open drops the gun on a
+  parachute to be caught, so there is exactly one kind of thing to catch and the racks
+  are where the good ones come from. It also tripled what a badly timed rack costs: the
+  bot that grabs regardless went from losing twice what the careful one loses to losing
+  six times as much.
+- **They walk towards the camera, not across it.** Feet move up and down, never
+  sideways; the body rocks over whichever foot is planted. The first version swung the
+  legs left and right, which is the stride for something crossing the screen, and it
+  read exactly like that — a crowd shuffling sideways while sliding down the bridge.
 - **A wave is cleared by shooting it.** A monster that crosses the line costs a life and
   stays on the board; removing it would let a wave be "cleared" by standing still.
 - **`balance.test.ts` is the design, not a benchmark.** Four bots: does the sum, grabs

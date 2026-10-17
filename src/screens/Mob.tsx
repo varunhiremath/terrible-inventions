@@ -172,6 +172,7 @@ export function Mob() {
         const floor = field.y + (TALL - 0.55) * field.scale
         drawClock(ctx, next, field.x + field.scale * 0.3, floor, size)
         drawHeld(ctx, next, field.x + (LANE - 0.3) * field.scale, floor, size)
+
       }
 
       frame = requestAnimationFrame(loop)
@@ -324,7 +325,7 @@ export function Mob() {
 
       <div className="shrink-0 px-4 pb-3 pt-1">
         <p className="text-center font-mono text-[0.65rem] uppercase tracking-widest text-dim/60">
-          slide to move · it fires by itself · a crate costs hits you are not firing at them
+          slide to move · it fires by itself · shoot a rack loose, then run under the gun
         </p>
       </div>
     </div>

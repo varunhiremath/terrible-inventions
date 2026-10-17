@@ -160,15 +160,38 @@ describe('a crate', () => {
     expect(big.crates[0].got).toBe(small.crates[0].got)
   })
 
-  it('opens on the hit it says, and hands over the gun it was showing', () => {
-    const one = crate({ need: 3, step: 2 })
+  it('drops the gun it was showing, which then has to be caught', () => {
+    /*
+     * Shooting the rack open does not put the gun in your hands: it comes down
+     * on a parachute and you have to be under it. Paying the hits buys the
+     * drop, being in the right place buys the gun.
+     */
+    const one = crate({ need: 3, step: 2, x: 5 })
     const run = empty({ crates: [one], cool: 0, gun: 5, rung: 2 })
     const promised = insideFor(one, 2)
-    const after = drive(run, 1.4)
-    expect(after.crates).toHaveLength(0)
-    expect(after.rung).toBe(4)
-    expect(weaponOf(after)).toEqual(promised)
-    expect(after.says.some((s) => s.text === promised.name.toUpperCase())).toBe(true)
+
+    const shot = drive(run, 1.4)
+    expect(shot.crates, 'the rack is empty').toHaveLength(0)
+    expect(shot.rung, 'and the gun is not his yet').toBe(2)
+    expect(shot.falling.map((f) => f.kind)).toContain('gun')
+
+    // It falls to him — he is standing right under it — and then it is his.
+    // Three seconds and a bit: long enough for it to come down, short enough
+    // that the label saying what he caught has not faded yet.
+    const landed = drive(shot, 3.2)
+    expect(landed.rung).toBe(4)
+    expect(weaponOf(landed)).toEqual(promised)
+    expect(landed.says.some((s) => s.text === promised.name.toUpperCase())).toBe(true)
+  })
+
+  it('leaves a dropped gun behind if nobody runs under it', () => {
+    const one = crate({ need: 3, step: 2, x: 2 })
+    const run = empty({ crates: [one], cool: 0, gun: 2, rung: 2 })
+    const shot = drive(run, 1.4)
+    // Walk away from it before it lands.
+    const away = drive(shot, 6, { to: 9, left: false, right: false })
+    expect(away.rung, 'paid for it and missed it').toBe(2)
+    expect(away.falling.some((f) => f.kind === 'gun')).toBe(false)
   })
 
   it('takes the other one of the pair with it: a choice, not a shopping list', () => {

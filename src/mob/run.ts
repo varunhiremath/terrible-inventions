@@ -22,7 +22,7 @@
 import {
   BLAST_WORTH, CATCH_NEAR, CRATE_H, CRATE_W, FALL_SPEED, GUN_SPEED, GUN_W, GUN_Y, LANE, LINE_Y,
   LIVES, MON_H, MON_W, RAPID_FOR, SHOT_SPEED, SHOT_W, TALL, TOP_RUNG, TURRET_FOR,
-  cratePair, crateSpeed, dropEvery, gunAt, waveFor, walkSpeed,
+  AIRDROPS, cratePair, crateSpeed, dropEvery, gunAt, waveFor, walkSpeed,
   type Catch, type Crate, type Dice, type Falling, type Gun, type Monster,
 } from './level'
 
@@ -337,7 +337,7 @@ export function step(run: Run, input: Input, dt: number): Run {
   next.dropIn -= dt
   if (next.dropIn <= 0) {
     next.dropIn += dropEvery(next.level)
-    const kind: Catch = dice.pick(['turret', 'rapid', 'blast'] as const)
+    const kind: Catch = dice.pick(AIRDROPS)
     next.falling.push({
       id: next.nextId++,
       // Over the crowd, so catching one means being under the crowd when it
@@ -345,6 +345,7 @@ export function step(run: Run, input: Input, dt: number): Run {
       x: LANE * 0.2 + dice.next() * LANE * 0.6,
       y: -1,
       kind,
+      step: 0,
       flash: 0,
     })
     next.events.push('dropped')
@@ -360,6 +361,7 @@ export function step(run: Run, input: Input, dt: number): Run {
   for (const drop of caught) {
     next.events.push('caught')
     next.score += 15
+    if (drop.kind === 'gun') next.rung = Math.min(TOP_RUNG, next.rung + drop.step)
     if (drop.kind === 'rapid') next.rapid = RAPID_FOR
     if (drop.kind === 'turret') {
       next.turrets.push({ id: next.nextId++, x: next.gun, left: TURRET_FOR, cool: 0 })
@@ -380,7 +382,7 @@ export function step(run: Run, input: Input, dt: number): Run {
       from: drop.id,
       x: Math.min(LANE - 1.5, Math.max(1.5, drop.x)),
       y: GUN_Y - 1.6,
-      text: drop.kind.toUpperCase(),
+      text: drop.kind === 'gun' ? gunAt(next.rung).name.toUpperCase() : drop.kind.toUpperCase(),
       tint: '#ffd166',
       life: 1.6,
       big: true,
@@ -445,7 +447,21 @@ export function step(run: Run, input: Input, dt: number): Run {
         crate.flash = 0.2
         spent = true
         if (crate.got >= crate.need) {
-          next.rung = Math.min(TOP_RUNG, next.rung + crate.step)
+          /*
+           * The gun does not go straight into your hands: it comes off the rack
+           * on a parachute and has to be caught. Paying the hits buys the drop,
+           * being in the right place buys the gun — and it means every single
+           * thing that ends up in your hands arrived the same way, which is what
+           * makes the racks and the parachutes one idea instead of two.
+           */
+          next.falling.push({
+            id: next.nextId++,
+            x: crate.x,
+            y: crate.y,
+            kind: 'gun',
+            step: crate.step,
+            flash: 0,
+          })
           next.score += 25
           next.events.push('opened')
           // The other crate of the pair goes with it: the choice was made, and
@@ -456,7 +472,7 @@ export function step(run: Run, input: Input, dt: number): Run {
             from: crate.id,
             x: crate.x,
             y: crate.y,
-            text: gunAt(next.rung).name.toUpperCase(),
+            text: gunAt(next.rung + crate.step).name.toUpperCase(),
             tint: '#ffd166',
             life: 2,
             big: true,
