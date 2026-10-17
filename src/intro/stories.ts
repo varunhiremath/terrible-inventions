@@ -202,25 +202,27 @@ export const STORIES: Record<string, Story> = {
   /*
    * The swarm.
    *
-   * Three things have to land, and only three. The gun fires itself, so there
-   * is one control. The number on a monster is how many more shots it needs.
-   * And a crate is paid for in hits that are not going into the crowd — which
-   * is the whole game, so it gets three beats and an actual sum, because "think
-   * about whether it is worth it" is advice and "twelve hits at three a second
-   * is four seconds" is a thing you can do on the next crate.
+   * It is a siege now, so the story opens on the place rather than the rules:
+   * a bridge, a gate, and you holding it. Then the three things that have to
+   * land — the gun fires itself, the number on one of them is how many more
+   * shots it needs, and a crate is paid for in hits that are not going into the
+   * crowd. That last one gets an actual sum, because "think about whether it is
+   * worth it" is advice and "twelve hits at three a second is four seconds" is
+   * a thing you can do on the next crate.
    */
   mob: {
     id: 'mob',
     title: 'THE SWARM',
     beats: [
-      { seconds: 4.4, scene: 'lane', voice: 'narrator', line: 'A crowd of monsters, walking down the lane at you.' },
+      { seconds: 4.4, scene: 'lane', voice: 'narrator', line: 'A bridge, a gate, and a crowd coming at you.' },
       { seconds: 3.8, scene: 'lane', voice: 'papa', line: 'I wound every one of them up myself!' },
       { seconds: 4.4, scene: 'lane', voice: 'narrator', line: 'Slide to move. The gun fires on its own.' },
-      { seconds: 4.8, scene: 'lane', voice: 'narrator', line: 'The number on a monster is how much more it can take.' },
-      { seconds: 4.6, scene: 'lane', voice: 'narrator', line: 'Crates come down the sides with a better gun inside.' },
-      { seconds: 5.2, scene: 'lane', voice: 'narrator', line: 'A crate costs hits. Hits you are not firing at the crowd.' },
+      { seconds: 4.4, scene: 'lane', voice: 'narrator', line: 'The number on one is how much more it can take.' },
+      { seconds: 4.2, scene: 'lane', voice: 'narrator', line: 'Big ones come later. They take a lot more.' },
+      { seconds: 5.2, scene: 'lane', voice: 'narrator', line: 'Crates ride the walls. A crate costs hits you are not firing.' },
       { seconds: 5.4, scene: 'lane', voice: 'narrator', line: 'Twelve hits at three a second is four seconds of not shooting.' },
-      { seconds: 5.6, scene: 'lane', voice: 'narrator', line: 'The clock at the top says how long you have. Do the sum.' },
+      { seconds: 4.6, scene: 'lane', voice: 'narrator', line: 'The clock says how long you have. Do the sum.' },
+      { seconds: 4.4, scene: 'lane', voice: 'narrator', line: 'Things drop on parachutes too. Run under them.' },
       { seconds: 3.6, scene: 'lane', voice: 'papa', line: 'They keep coming. That is the entire plan.' },
     ],
   },

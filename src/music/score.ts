@@ -2800,6 +2800,33 @@ const ROUTED: Track = {
   ],
 }
 
+/** Something coming down under a parachute. */
+const CHUTE: Track = {
+  name: 'Chute',
+  beatsPerMinute: 190,
+  parts: [{ wave: 'bell', gain: 0.035, sustain: 0.7, pattern: 'C5 A4 F4 -  ' }],
+}
+
+/** And catching it. */
+const GRAB: Track = {
+  name: 'Grab',
+  beatsPerMinute: 200,
+  parts: [
+    { wave: 'pluck', gain: 0.06, sustain: 0.6, pattern: 'F4 C5 F5 ' },
+    { wave: 'bell', gain: 0.035, sustain: 0.8, pattern: 'F5 .  .  ' },
+  ],
+}
+
+/** The blast going off, which should be the loudest thing in the game. */
+const BOOM: Track = {
+  name: 'Boom',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'pulse', duty: 0.5, gain: 0.07, sustain: 0.5, pattern: 'F2 C3 F3 ' },
+    { wave: 'pluck', gain: 0.05, sustain: 0.7, pattern: 'F4 .  C5 ' },
+  ],
+}
+
 export const MOB_CUES = {
   pop: POP,
   bigger: BIGGER,
@@ -2811,6 +2838,9 @@ export const MOB_CUES = {
   upgun: UPGUN,
   swarmDown: SWARM_DOWN,
   routed: ROUTED,
+  chute: CHUTE,
+  grab: GRAB,
+  boom: BOOM,
 } as const
 
 export const CUES = {

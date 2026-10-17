@@ -21,7 +21,7 @@ the money taken out.
 |---|---|---|
 | **Papa Panic** | A maze, a lot of dots, four chasers | Between lives, and in the shop |
 | **The Caves** | Ten caves, a trophy in each, and a jetpack he has not tested | Between lives |
-| **The Swarm** | A crowd of monsters walking down a lane at you, and crates with better guns in them | In the lane. Working out whether a crate fits in the time left *is* the game |
+| **The Swarm** | A bridge, a gate, and a crowd coming over it. You are the soldier holding it | On the bridge. Working out whether a crate fits in the time left *is* the game |
 | **The Pipes** | Run, jump, stomp, reach the flag | Between lives |
 | **The Road** | Four lanes, six stages, and four of his machines racing you from a standing start | Between lives; a right answer is half a tank and a car back |
 | **The Long Way Out** | Fly to the eight real planets, in order, through what he has left in the way | None. Break things up for scrap, spend it at each world, and every world tells you something true |
@@ -33,9 +33,12 @@ and its tests are all still here and still run, and putting it back is one entry
 `TILES` and one line in `App.tsx`.
 
 The swarm is where the maths stopped being something that happens between lives. A crowd
-walks down at you, you shoot it, and the numbers on the monsters are how many more shots
-each one needs. Down the two outside lanes come crates with better guns inside, and a
+comes over a bridge at the gate you are holding, you shoot it, and the numbers on them
+are how many more shots each one needs — with brutes among them from the third wave that
+take six times as many. Crates ride down the parapets with better guns inside, and a
 crate is paid for in hits — hits that are not going into the crowd while you spend them.
+Things fall on parachutes in between: a turret that holds the line beside you, a few
+seconds of firing twice as fast, a blast that clears the front of the bridge.
 A crate needing twelve hits at three shots a second is four seconds of not shooting, and
 the clock at the top says how long you have before the nearest one reaches you. That
 comparison is the whole game, and both of its numbers are on the screen.

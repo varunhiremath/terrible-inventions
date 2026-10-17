@@ -52,7 +52,7 @@ describe('the order things are heard in', () => {
   it('covers every event the swarm can raise, exactly once', () => {
     const all: MobEvent[] = [
       'fire', 'hit', 'killed', 'chip', 'opened', 'crates', 'missed', 'through', 'lost', 'cleared',
-      'over',
+      'over', 'dropped', 'caught', 'blast',
     ]
     sameSet(MOB, all)
   })

@@ -90,6 +90,16 @@ These are not preferences. Breaking one defeats the point of the project.
 - **`balance.test.ts` is the design, not a benchmark.** Four bots: does the sum, grabs
   greedily, never buys, never moves. If the first two come out level, the crates are
   decoration. Keep it.
+- **The crowd opens *on* the bridge, not above it.** Every row used to start off the top
+  of the screen and walk in at half a unit a second, so the first twenty seconds of every
+  wave was an empty bridge and a soldier firing at nothing — which is what "dull and
+  slow" turned out to mean. `OPENS_AT` puts the front row in view on the first frame.
+- **Breeds are told apart by build before colour** — a runner leans, a lurcher is wide, a
+  brute is half again as tall with shoulders to match. Scaling one drawing up for the
+  brute gave a blob with wings; it has its own silhouette now. `cast.html` draws all four
+  plus the drops, the turret and every gun, which is the only way to see that.
+- **Nothing in here is gruesome.** No blood, no bones. A crowd shambling at you is
+  exactly as tense drawn kindly, and who plays this decides that.
 
 ## The shop
 

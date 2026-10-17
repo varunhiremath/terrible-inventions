@@ -62,10 +62,10 @@ export const LINE_Y = TALL - 2.3
 export const SHOT_SPEED = 15
 export const SHOT_W = 0.22
 
-export const MON_W = 1.3
-export const MON_H = 1.5
+export const MON_W = 0.95
+export const MON_H = 1.45
 
-export const CRATE_W = 1.9
+export const CRATE_W = 1.4
 export const CRATE_H = 1.8
 
 // --- what you are shooting with ----------------------------------------------
@@ -136,24 +136,35 @@ export const rateOf = (gun: Gun): number => Math.round((1 / gun.every) * 10) / 1
 // --- the monsters -------------------------------------------------------------
 
 /** The four shapes, so a crowd is a crowd rather than one thing repeated. */
-export type Breed = 'blob' | 'spike' | 'stomper' | 'runner'
+export type Breed = 'shambler' | 'runner' | 'lurcher' | 'brute'
 
-export const BREEDS: readonly Breed[] = ['blob', 'spike', 'stomper', 'runner']
+export const BREEDS: readonly Breed[] = ['shambler', 'runner', 'lurcher', 'brute']
 
 export interface Breeding {
   /** How much more health than the wave's usual. */
   tough: number
   /** How much faster or slower than the wave's usual. */
   pace: number
-  tint: string
+  /** How much bigger than the usual one. */
+  size: number
+  skin: string
+  rag: string
   eye: string
 }
 
+/**
+ * What is walking at you.
+ *
+ * Four of them, and they are told apart by build before colour: a runner is
+ * lean and leaning forward, a lurcher is wide and slow, and a brute is twice
+ * the height of anything else on the bridge. Colour alone is no use to somebody
+ * deciding in half a second which end of the row to shoot first.
+ */
 export const BREED: Record<Breed, Breeding> = {
-  blob: { tough: 1, pace: 1, tint: '#7ad67a', eye: '#13331b' },
-  spike: { tough: 1.4, pace: 0.85, tint: '#c86be0', eye: '#2d1133' },
-  stomper: { tough: 2.2, pace: 0.6, tint: '#e0924a', eye: '#3a2008' },
-  runner: { tough: 0.6, pace: 1.6, tint: '#67c8e8', eye: '#0c2733' },
+  shambler: { tough: 1, pace: 1, size: 1, skin: '#8fd08a', rag: '#4a6b53', eye: '#1d3a24' },
+  runner: { tough: 0.55, pace: 1.7, size: 0.88, skin: '#9fdcc6', rag: '#2f6b63', eye: '#0f2e2b' },
+  lurcher: { tough: 1.6, pace: 0.75, size: 1.15, skin: '#c0a173', rag: '#6a5134', eye: '#36281a' },
+  brute: { tough: 6, pace: 0.55, size: 1.85, skin: '#b4705f', rag: '#5c2b22', eye: '#2a0f0b' },
 }
 
 export interface Monster {
@@ -165,8 +176,56 @@ export interface Monster {
   health: number
   max: number
   pace: number
+  size: number
+  flash: number
+  /** Its own offset into the walk cycle, so a crowd is not one thing stamped out. */
+  step: number
+}
+
+// --- the things that fall ----------------------------------------------------
+
+/**
+ * A thing worth running under.
+ *
+ * Crates are the decision this game is built on and they are deliberately slow,
+ * deliberate and priced. These are the opposite: they fall, they are free, and
+ * they are gone in a few seconds — something to notice out of the corner of an
+ * eye and go and get, which is most of what "more going on" means in a game
+ * like this.
+ */
+export type Catch = 'turret' | 'rapid' | 'blast'
+
+export interface Falling {
+  id: number
+  x: number
+  y: number
+  kind: Catch
   flash: number
 }
+
+export interface Caught {
+  name: string
+  says: string
+  tint: string
+}
+
+export const CATCH: Record<Catch, Caught> = {
+  turret: { name: 'TURRET', says: 'It fires with you', tint: '#8fd3ff' },
+  rapid: { name: 'RAPID', says: 'Twice as fast', tint: '#ffd166' },
+  blast: { name: 'BLAST', says: 'Clears the front', tint: '#ff8c8c' },
+}
+
+/** How long a caught thing lasts, in seconds. A blast is instant. */
+export const TURRET_FOR = 14
+export const RAPID_FOR = 8
+/** How much of your gun a blast is worth, to everything near the front. */
+export const BLAST_WORTH = 6
+/** How fast a dropped thing falls, and how near you have to be to catch it. */
+export const FALL_SPEED = 2.6
+export const CATCH_NEAR = 1.1
+
+/** How long between things falling. */
+export const dropEvery = (level: number): number => Math.max(7, 12 - (level - 1) * 0.3)
 
 export interface Crate {
   id: number
@@ -194,7 +253,7 @@ export const insideFor = (crate: Crate, rung: number): Gun => gunAt(rung + crate
  * what stops a player who takes the dear crate every time from running away
  * with it.
  */
-export const walkSpeed = (level: number): number => Math.min(1.5, 0.5 * Math.pow(1.05, level - 1))
+export const walkSpeed = (level: number): number => Math.min(1.6, 0.62 * Math.pow(1.05, level - 1))
 
 /**
  * How much a monster can take on this wave.
@@ -205,14 +264,24 @@ export const walkSpeed = (level: number): number => Math.min(1.5, 0.5 * Math.pow
  * takes about as long to clear as the next row takes to arrive, and the seconds
  * spent on a crate are always seconds you did not quite have.
  *
- * Wave one is four, and a Peashooter does about two and a half a second
- * against a row arriving every six — so the gun you start with is exactly
- * enough for the wave you start on, and nothing after it.
+ * Wave one is two, and a Peashooter does about three a second against a row
+ * of six arriving every four — so the gun you start with is exactly enough for
+ * the wave you start on, and nothing after it. It used to be four each in rows
+ * of three and a half; the crowd is twice the size now and each of them is
+ * correspondingly less work, because "a lot more of them walking down" was the
+ * ask and a crowd that is half as dense and twice as tough is not a crowd.
  */
-export const monHealth = (level: number): number => Math.round(4 * Math.pow(1.4, level - 1))
+export const monHealth = (level: number): number => Math.max(2, Math.round(2.2 * Math.pow(1.4, level - 1)))
 
 /** How many of them are in it. */
-export const waveSize = (level: number): number => Math.min(30, 8 + level * 2)
+export const waveSize = (level: number): number => Math.min(60, 16 + level * 4)
+
+/** How many walk abreast. Six is as many as fit across the bridge legibly. */
+export const acrossFor = (level: number): number => (level < 3 ? 5 : 6)
+
+/** How many brutes are in among them. None until the third wave. */
+export const brutesFor = (level: number): number =>
+  level < 3 ? 0 : Math.min(5, Math.floor(level / 3))
 
 /** How fast a crate drifts down. Slower than the crowd: it is a chance, not a threat. */
 export const crateSpeed = (level: number): number => walkSpeed(level) * 0.8
@@ -259,52 +328,91 @@ export function cratePair(level: number, rung: number, rng: Dice, nextId: () => 
   void level
 
   return [
-    { id: nextId(), x: LANE * 0.13, y: -1.2, need: left.need, got: 0, step: left.step, flash: 0 },
-    { id: nextId(), x: LANE * 0.87, y: -1.2, need: right.need, got: 0, step: right.step, flash: 0 },
+    // On the parapets, clear of the widest thing in the crowd: a brute is two
+    // units across, and with the crates any further in a shot aimed at the
+    // brute on the end of a row clipped the crate behind it. Which is how a bot
+    // that never aimed at a crate still opened five a run.
+    { id: nextId(), x: LANE * 0.08, y: -1.2, need: left.need, got: 0, step: left.step, flash: 0 },
+    { id: nextId(), x: LANE * 0.92, y: -1.2, need: right.need, got: 0, step: right.step, flash: 0 },
   ]
 }
 
-/** How far apart the rows are. They close up as the waves go on. */
-export const rowGap = (level: number): number => Math.max(2.4, 3 - (level - 1) * 0.05)
+/**
+ * Where the front row stands when a wave opens.
+ *
+ * On the bridge, not above it. Every row used to start off the top of the
+ * screen and walk in at half a unit a second, which meant the first twenty
+ * seconds of every wave was an empty bridge and a soldier firing at nothing —
+ * reported, correctly, as dull and slow. The crowd is in view from the first
+ * frame now, and the clock still reads twenty-odd seconds because the bridge is
+ * long.
+ */
+export const OPENS_AT = 4.5
 
-/** The crowd a wave starts with, in staggered rows above the lane. */
+/** How far apart the rows are. They close up as the waves go on. */
+export const rowGap = (level: number): number => Math.max(1.8, 2.2 - (level - 1) * 0.03)
+
+/**
+ * The crowd a wave starts with, in staggered rows above the bridge.
+ *
+ * Five or six abreast with the rows offset by half a step, which reads as a
+ * crowd pouring down rather than a grid walking down. The brutes are dropped in
+ * among them rather than given rows of their own: the thing that makes a brute
+ * frightening is the ordinary ones around it carrying on while you deal with
+ * it.
+ */
 export function waveFor(level: number, rng: Dice, nextId: () => number): Monster[] {
   const many = waveSize(level)
   const health = monHealth(level)
   // The crowd keeps to the middle: the outside lane each side belongs to the
   // crates, so that going for one is a move away from the shooting.
-  const edge = LANE * 0.28
-  const wide = LANE * 0.44
-  /** Four across the lane, and three in the gaps between them. */
-  const fours = [edge, edge + wide / 3, edge + (wide * 2) / 3, edge + wide]
-  const threes = [edge + wide / 6, edge + wide / 2, edge + (wide * 5) / 6]
+  const edge = LANE * 0.18
+  const wide = LANE * 0.64
+  const across = acrossFor(level)
 
   const crowd: Monster[] = []
   let row = 0
   while (crowd.length < many) {
-    const places = row % 2 === 0 ? fours : threes
-    for (const x of places) {
+    const shift = row % 2 === 0 ? 0 : wide / (across - 1) / 2
+    for (let i = 0; i < across; i++) {
       if (crowd.length >= many) break
-      // Runners and stompers only once the wave is big enough to need variety.
+      const x = edge + (wide * i) / (across - 1) + shift
+      if (x > LANE - edge) continue
       const breed = rng.pick(
-        level < 2 ? (['blob'] as const)
-        : level < 4 ? (['blob', 'blob', 'runner'] as const)
-        : (['blob', 'blob', 'runner', 'spike', 'stomper'] as const),
+        level < 2 ? (['shambler'] as const)
+        : level < 4 ? (['shambler', 'shambler', 'runner'] as const)
+        : (['shambler', 'shambler', 'runner', 'lurcher'] as const),
       )
-      const was = BREED[breed]
-      const full = Math.max(1, Math.round(health * was.tough))
-      crowd.push({
-        id: nextId(),
-        x,
-        y: -1.6 - row * rowGap(level),
-        breed,
-        health: full,
-        max: full,
-        pace: was.pace,
-        flash: 0,
-      })
+      crowd.push(newMonster(nextId(), x, OPENS_AT - row * rowGap(level), breed, health, rng))
     }
     row++
   }
+
+  // And the brutes, scattered through the middle of the crowd rather than at
+  // the front or the back of it.
+  for (let i = 0; i < brutesFor(level); i++) {
+    const at = crowd[rng.int(Math.floor(crowd.length * 0.2), crowd.length - 1)]
+    crowd.push(newMonster(nextId(), at.x, at.y - 0.6, 'brute', health, rng))
+  }
+
   return crowd
+}
+
+function newMonster(
+  id: number, x: number, y: number, breed: Breed, health: number, rng: Dice,
+): Monster {
+  const was = BREED[breed]
+  const full = Math.max(1, Math.round(health * was.tough))
+  return {
+    id,
+    x,
+    y,
+    breed,
+    health: full,
+    max: full,
+    pace: was.pace,
+    size: was.size,
+    flash: 0,
+    step: rng.next() * Math.PI * 2,
+  }
 }

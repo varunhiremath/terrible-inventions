@@ -100,10 +100,14 @@ function play(how: Pick, seconds: number, seed: number): Went {
   return { wave: run.level, lost, killed: run.killed, opened }
 }
 
-/** Five seeds, averaged, because one run is not a measurement. */
-const SEEDS = [5, 11, 23, 41, 77]
+/**
+ * Three seeds, averaged, because one run is not a measurement — and three
+ * rather than five because the crowd is twice the size it was and these take
+ * real seconds now.
+ */
+const SEEDS = [5, 23, 77]
 
-const over = (how: Pick, seconds = 240): Went => {
+const over = (how: Pick, seconds = 180): Went => {
   const runs = SEEDS.map((seed) => play(how, seconds, seed))
   const mean = (of: (went: Went) => number) =>
     runs.reduce((all, went) => all + of(went), 0) / runs.length
@@ -138,7 +142,7 @@ describe('four minutes of it', () => {
       greedy.lost,
       `and greedy lost ${greedy.lost} going for the big one regardless`,
     ).toBeGreaterThan(timed.lost + 0.5)
-  })
+  }, 40_000)
 
   it('punishes never buying a gun at all', () => {
     const timed = over('timed')
@@ -148,7 +152,7 @@ describe('four minutes of it', () => {
     expect(never.wave, `never reached wave ${never.wave}, timed ${timed.wave}`)
       .toBeLessThan(timed.wave - 2)
     expect(never.lost).toBeGreaterThan(timed.lost + 1)
-  })
+  }, 40_000)
 
   it('does not let a crate be opened by accident on the way past', () => {
     /*
@@ -158,14 +162,19 @@ describe('four minutes of it', () => {
      * decision in it at all. They have a lane each at the edges now.
      */
     expect(over('never', 120).opened).toBe(0)
-  })
+  }, 40_000)
 
   it('goes nowhere at all for somebody who stands still', () => {
     const still = over('still', 120)
     const timed = over('timed', 120)
-    expect(still.wave, 'a wave is cleared by shooting it').toBe(1)
+    /*
+     * Not "never clears one": a Blast can fall on somebody's head and clear
+     * most of a wave for them, which is luck and is meant to be luck. What
+     * standing still cannot do is keep up.
+     */
+    expect(still.wave, `still reached wave ${still.wave}`).toBeLessThan(timed.wave - 1)
     expect(still.lost).toBeGreaterThan(timed.lost + 1)
-  })
+  }, 40_000)
 })
 
 describe('the shape of the climb', () => {
@@ -173,7 +182,7 @@ describe('the shape of the climb', () => {
     const timed = over('timed')
     expect(timed.wave, `reached wave ${timed.wave}`).toBeGreaterThan(5)
     expect(timed.killed, `${timed.killed} monsters seen off`).toBeGreaterThan(100)
-  })
+  }, 40_000)
 
   it('leaves room to stand: the lane is wider than you are', () => {
     // Not balance so much as the thing balance rests on — if the gun filled the

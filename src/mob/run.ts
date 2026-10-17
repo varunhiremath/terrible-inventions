@@ -20,16 +20,17 @@
  * teaches arithmetic that is approximately wrong.
  */
 import {
-  CRATE_H, CRATE_W, GUN_SPEED, GUN_W, LANE, LINE_Y, LIVES, MON_H, SHOT_SPEED, SHOT_W, TALL,
-  MON_W, TOP_RUNG, cratePair, crateSpeed, gunAt, waveFor, walkSpeed,
-  type Crate, type Dice, type Gun, type Monster,
+  BLAST_WORTH, CATCH_NEAR, CRATE_H, CRATE_W, FALL_SPEED, GUN_SPEED, GUN_W, GUN_Y, LANE, LINE_Y,
+  LIVES, MON_H, MON_W, RAPID_FOR, SHOT_SPEED, SHOT_W, TALL, TOP_RUNG, TURRET_FOR,
+  cratePair, crateSpeed, dropEvery, gunAt, waveFor, walkSpeed,
+  type Catch, type Crate, type Dice, type Falling, type Gun, type Monster,
 } from './level'
 
 export const FIXED = 1 / 120
 
 export type MobEvent =
   | 'fire' | 'hit' | 'killed' | 'chip' | 'opened' | 'crates' | 'lost' | 'missed'
-  | 'through' | 'cleared' | 'over'
+  | 'through' | 'cleared' | 'over' | 'dropped' | 'caught' | 'blast'
 
 /**
  * Loudest first, for the screen to pick one noise a frame from.
@@ -40,8 +41,8 @@ export type MobEvent =
  * silent for ever with nothing to notice.
  */
 export const LOUDEST: readonly MobEvent[] = [
-  'over', 'cleared', 'through', 'lost', 'opened', 'missed', 'killed', 'crates', 'chip', 'hit',
-  'fire',
+  'over', 'cleared', 'through', 'lost', 'opened', 'blast', 'caught', 'missed', 'killed', 'crates',
+  'dropped', 'chip', 'hit', 'fire',
 ]
 
 export type Status = 'playing' | 'lost' | 'cleared' | 'over'
@@ -50,6 +51,33 @@ export interface Shot {
   id: number
   x: number
   y: number
+  /** What it takes off. A turret's shots are its own, not yours. */
+  hit: number
+}
+
+/**
+ * One that has gone down, lying where it fell for half a second.
+ *
+ * Nothing to do with the rules — nothing collides with it and nothing walks
+ * round it. It is here because a monster that simply disappears reads as a
+ * monster being switched off, and one that falls over reads as one being shot,
+ * and that is most of the difference between the two.
+ */
+export interface Gone {
+  id: number
+  x: number
+  y: number
+  breed: Monster['breed']
+  size: number
+  life: number
+}
+
+/** A turret you caught, firing away beside you until its time is up. */
+export interface Turret {
+  id: number
+  x: number
+  left: number
+  cool: number
 }
 
 /**
@@ -95,9 +123,16 @@ export interface Run {
   shots: Shot[]
   crowd: Monster[]
   crates: Crate[]
+  /** Things falling that are caught by standing under them. */
+  falling: Falling[]
+  turrets: Turret[]
+  gone: Gone[]
+  /** Seconds of firing twice as fast, left. */
+  rapid: number
   says: Said[]
-  /** Seconds until the next shot. */
+  /** Seconds until the next shot, and until the next thing falls. */
   cool: number
+  dropIn: number
   clock: number
   events: MobEvent[]
   seed: number
@@ -148,8 +183,13 @@ export function newRun(
     // should be in front of the player before the shooting settles into a
     // rhythm, not thirty seconds later.
     crates: cratePair(level, rung, dice, nextId),
+    falling: [],
+    turrets: [],
+    gone: [],
+    rapid: 0,
     says: [],
     cool: 0.2,
+    dropIn: dropEvery(level) * 0.6,
     clock: 0,
     events: [],
     seed: stir(seed),
@@ -204,7 +244,7 @@ export const standing = (run: Run): number => run.crowd.length
 export function arriveIn(run: Run): number {
   let soonest = Infinity
   for (const mon of run.crowd) {
-    const togo = LINE_Y - (mon.y + MON_H / 2)
+    const togo = LINE_Y - (mon.y + (MON_H * mon.size) / 2)
     const pace = walkSpeed(run.level) * mon.pace
     soonest = Math.min(soonest, Math.max(0, togo) / pace)
   }
@@ -219,8 +259,10 @@ export const costOf = (crate: Crate, weapon: Gun): number =>
 
 const clampGun = (x: number): number => Math.max(GUN_W / 2, Math.min(LANE - GUN_W / 2, x))
 
+/** The box a monster fills. A brute is twice the size and has to be twice the box. */
 const monBox = (mon: Monster): [number, number, number, number] => [
-  mon.x - MON_W / 2, mon.y - MON_H / 2, mon.x + MON_W / 2, mon.y + MON_H / 2,
+  mon.x - (MON_W * mon.size) / 2, mon.y - (MON_H * mon.size) / 2,
+  mon.x + (MON_W * mon.size) / 2, mon.y + (MON_H * mon.size) / 2,
 ]
 
 const crateBox = (crate: Crate): [number, number, number, number] => [
@@ -240,9 +282,13 @@ export function step(run: Run, input: Input, dt: number): Run {
     shots: run.shots.map((s) => ({ ...s })),
     crowd: run.crowd.map((m) => ({ ...m })),
     crates: run.crates.map((c) => ({ ...c })),
+    falling: run.falling.map((f) => ({ ...f })),
+    turrets: run.turrets.map((t) => ({ ...t })),
+    gone: run.gone.map((g) => ({ ...g })),
     says: run.says.map((s) => ({ ...s })),
     events: [],
   }
+  const dice = makeDice(next.seed)
   next.seed = stir(next.seed)
   next.clock += dt
 
@@ -259,12 +305,90 @@ export function step(run: Run, input: Input, dt: number): Run {
   // --- firing ---
   const weapon = gunAt(next.rung)
 
+  // --- firing, twice as fast while a caught Rapid lasts ---
+  next.rapid = Math.max(0, next.rapid - dt)
+  const every = next.rapid > 0 ? weapon.every / 2 : weapon.every
+
   next.cool -= dt
   if (next.cool <= 0) {
-    next.cool += weapon.every
-    next.shots.push({ id: next.nextId++, x: next.gun, y: TALL - 1.7 })
+    next.cool += every
+    next.shots.push({ id: next.nextId++, x: next.gun, y: TALL - 1.7, hit: weapon.hit })
     next.events.push('fire')
   }
+
+  // --- and the turrets you caught, firing away beside you ---
+  for (const turret of next.turrets) {
+    turret.left -= dt
+    turret.cool -= dt
+    if (turret.cool <= 0 && turret.left > 0) {
+      turret.cool += 0.45
+      next.shots.push({
+        id: next.nextId++,
+        x: turret.x,
+        y: TALL - 1.7,
+        // Half of yours: a turret is a hand, not a second player.
+        hit: Math.max(1, Math.round(weapon.hit / 2)),
+      })
+    }
+  }
+  next.turrets = next.turrets.filter((turret) => turret.left > 0)
+
+  // --- things falling, and catching them ---
+  next.dropIn -= dt
+  if (next.dropIn <= 0) {
+    next.dropIn += dropEvery(next.level)
+    const kind: Catch = dice.pick(['turret', 'rapid', 'blast'] as const)
+    next.falling.push({
+      id: next.nextId++,
+      // Over the crowd, so catching one means being under the crowd when it
+      // lands rather than parked safely out at the edge.
+      x: LANE * 0.2 + dice.next() * LANE * 0.6,
+      y: -1,
+      kind,
+      flash: 0,
+    })
+    next.events.push('dropped')
+  }
+
+  for (const drop of next.falling) {
+    drop.y += FALL_SPEED * dt
+    drop.flash = Math.max(0, drop.flash - dt)
+  }
+  const caught = next.falling.filter(
+    (drop) => Math.abs(drop.x - next.gun) < CATCH_NEAR && drop.y > GUN_Y - 1.2,
+  )
+  for (const drop of caught) {
+    next.events.push('caught')
+    next.score += 15
+    if (drop.kind === 'rapid') next.rapid = RAPID_FOR
+    if (drop.kind === 'turret') {
+      next.turrets.push({ id: next.nextId++, x: next.gun, left: TURRET_FOR, cool: 0 })
+    }
+    if (drop.kind === 'blast') {
+      // Everything already on the bridge takes a shell's worth. It is the
+      // panic button, and it is why one is worth running for.
+      const worth = weapon.hit * BLAST_WORTH
+      for (const mon of next.crowd) {
+        if (mon.y < 2) continue
+        mon.health -= worth
+        mon.flash = 0.3
+      }
+      next.events.push('blast')
+    }
+    next.says.push({
+      id: next.nextId++,
+      from: drop.id,
+      x: Math.min(LANE - 1.5, Math.max(1.5, drop.x)),
+      y: GUN_Y - 1.6,
+      text: drop.kind.toUpperCase(),
+      tint: '#ffd166',
+      life: 1.6,
+      big: true,
+    })
+  }
+  next.falling = next.falling.filter(
+    (drop) => !caught.includes(drop) && drop.y < TALL + 1,
+  )
 
   // --- the crates drift down, and a new pair arrives ---
   const drift = crateSpeed(next.level) * dt
@@ -352,7 +476,7 @@ export function step(run: Run, input: Input, dt: number): Run {
         if (dead.has(mon.id)) continue
         if (!inBox(monBox(mon), shot.x, shot.y)) continue
 
-        const took = Math.min(mon.health, gunAt(next.rung).hit)
+        const took = Math.min(mon.health, shot.hit)
         mon.health -= took
         mon.flash = 0.18
         next.score += took
@@ -377,6 +501,9 @@ export function step(run: Run, input: Input, dt: number): Run {
           next.killed += 1
           next.score += 10
           next.events.push('killed')
+          next.gone.push({
+            id: next.nextId++, x: mon.x, y: mon.y, breed: mon.breed, size: mon.size, life: 0.7,
+          })
         } else {
           next.events.push('hit')
         }
@@ -398,8 +525,12 @@ export function step(run: Run, input: Input, dt: number): Run {
   for (const mon of next.crowd) {
     mon.y += walk * mon.pace
     mon.flash = Math.max(0, mon.flash - dt)
-    if (mon.y + MON_H / 2 >= LINE_Y) through = true
+    if (mon.y + (MON_H * mon.size) / 2 >= LINE_Y) through = true
   }
+
+  // --- the fallen fade ---
+  for (const was of next.gone) was.life -= dt
+  next.gone = next.gone.filter((was) => was.life > 0)
 
   // --- the labels fade ---
   for (const said of next.says) {

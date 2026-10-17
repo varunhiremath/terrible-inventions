@@ -40,6 +40,9 @@ const NOISE: Record<MobEvent, CueName> = {
   lost: 'breach',
   cleared: 'swarmDown',
   over: 'routed',
+  dropped: 'chute',
+  caught: 'grab',
+  blast: 'boom',
 }
 
 interface Hud {

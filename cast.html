@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Who is on the bridge</title>
+<style>body{margin:0;background:#0a1020;color:#e9edf8;font:13px ui-monospace,monospace}canvas{display:block;width:100%;height:100vh}</style>
+<canvas id="c"></canvas>
+<script type="module">
+  import { drawMonster, drawFalling, drawTurret, drawGun, drawCrate } from '/src/mob/draw.ts'
+  import { BREED, BREEDS, gunAt } from '/src/mob/level.ts'
+  const canvas = document.getElementById('c')
+  const ctx = canvas.getContext('2d')
+  const mon = (id, breed, health, max) => ({
+    id, x: 0, y: 0, breed, health, max,
+    pace: BREED[breed].pace, size: BREED[breed].size, flash: 0, step: id,
+  })
+  function frame(now) {
+    const dpr = Math.min(2, devicePixelRatio || 1)
+    canvas.width = innerWidth * dpr
+    canvas.height = innerHeight * dpr
+    const clock = now / 1000
+    ctx.fillStyle = '#1d2537'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    const scale = Math.min(canvas.width / 9, canvas.height / 7)
+    const row = (y, label) => { ctx.fillStyle = '#8d96b4'; ctx.font = `bold ${scale*0.18}px ui-monospace`; ctx.textAlign='left'; ctx.fillText(label, scale*0.2, y) }
+
+    BREEDS.forEach((breed, i) => {
+      const x = scale * (1.4 + i * 2)
+      const y = scale * 2
+      drawMonster(ctx, mon(i + 1, breed, 7, 12), x, y, scale, clock)
+      ctx.fillStyle = '#8d96b4'; ctx.font = `bold ${scale*0.16}px ui-monospace`; ctx.textAlign='center'
+      ctx.fillText(breed, x, y + scale * 1.6)
+    })
+    row(scale * 3.1, 'the crowd')
+
+    const kinds = ['turret', 'rapid', 'blast']
+    kinds.forEach((kind, i) => {
+      drawFalling(ctx, { id: i + 9, x: 0, y: 0, kind, flash: 0 }, scale * (1.4 + i * 1.6), scale * 4.3, scale, clock)
+    })
+    drawTurret(ctx, 9, scale * 6.2, scale * 4.4, scale, clock)
+    drawCrate(ctx, { id: 20, x: 0, y: 0, need: 18, got: 6, step: 2, flash: 0 }, scale * 7.8, scale * 4.3, scale, 2)
+    row(scale * 5.1, 'what falls, a turret, a crate')
+
+    ;[0, 4, 8, 12, 18].forEach((rung, i) => {
+      drawGun(ctx, scale * (1.2 + i * 1.7), scale * 6.4, scale, gunAt(rung), clock, (Math.sin(clock * 5 + i) + 1) / 2, rung)
+    })
+    row(scale * 6.9, 'you, up the ladder')
+    requestAnimationFrame(frame)
+  }
+  requestAnimationFrame(frame)
+</script>

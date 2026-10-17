@@ -13,10 +13,10 @@
  * tense whether it is made of corpses or of grinning green blobs on springs.
  */
 import {
-  BREED, CRATE_H, CRATE_W, GUN_W, GUN_Y, LANE, LINE_Y, MON_H, MON_W, SHOT_W, TALL,
-  gunAt, insideFor, rateOf, type Crate, type Gun, type Monster,
+  BREED, CATCH, CRATE_H, CRATE_W, GUN_W, GUN_Y, LANE, LINE_Y, MON_H, MON_W, SHOT_W, TALL,
+  gunAt, insideFor, rateOf, type Crate, type Falling, type Gun, type Monster,
 } from './level'
-import { arriveIn, weaponOf, type Run, type Said, type Shot } from './run'
+import { arriveIn, weaponOf, type Gone, type Run, type Said, type Shot } from './run'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -46,6 +46,13 @@ export function fieldOf(view: View): { x: number; y: number; scale: number } {
 }
 
 const mono = (size: number) => `bold ${size}px ui-monospace, Menlo, Consolas, monospace`
+
+/** A colour, nudged lighter or darker, for giving a crowd a bit of variety. */
+function shade(hex: string, by: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  const mix = (at: number) => Math.max(0, Math.min(255, ((n >> at) & 255) + Math.round(by)))
+  return `rgb(${mix(16)}, ${mix(8)}, ${mix(0)})`
+}
 
 /**
  * Writing with a dark outline round it, which is the only kind that survives.
@@ -78,95 +85,145 @@ function shout(
 }
 
 /**
- * One monster: a body, two eyes, a mouth, and legs that shuffle.
+ * One of them, walking at you: head, shoulders, two arms out, two legs.
  *
- * The shape carries the breed, because colour alone is no use to anybody
- * working out which of them is nearly dead. A stomper is squat and heavy, a
- * runner is small and leggy, a spike has a crown of them.
+ * Humanoid, which was asked for in those words and is the right call anyway. A
+ * ball with eyes is a toy; a person-shaped thing shambling down a bridge with
+ * its arms out is the oldest silhouette in this genre, and it reads at the size
+ * of a thumbnail — which a face never does.
+ *
+ * Nothing about them is gruesome. No blood, no bones, no gore: they are
+ * green-grey, ragged and bent, and that is the whole of it. A crowd shambling
+ * at you is exactly as tense drawn kindly, and who plays this decides that.
  */
 export function drawMonster(
   ctx: Ctx, mon: Monster, x: number, y: number, scale: number, clock: number,
 ): void {
   const was = BREED[mon.breed]
-  const w = MON_W * scale * (mon.breed === 'stomper' ? 1 : mon.breed === 'runner' ? 0.72 : 0.88)
-  const h = MON_H * scale * (mon.breed === 'runner' ? 0.7 : 0.82)
-  // Everything bounces, out of step with its neighbours, so a crowd reads as a
-  // crowd of things rather than one thing stamped out several times.
-  const bob = Math.sin(clock * 5 * mon.pace + mon.id) * scale * 0.07
+  const size = mon.size
+  const h = MON_H * scale * size
+  const w = MON_W * scale * size
+  const walk = clock * 4.5 * mon.pace + mon.step
+  const sway = Math.sin(walk) * w * 0.1
+  const bob = Math.abs(Math.cos(walk)) * h * 0.04
   const top = y - h / 2 + bob
+  const hurt = mon.flash > 0
+  // A touch of its own in the colour, so a crowd of forty is not one drawing
+  // printed forty times.
+  const own = Math.sin(mon.step * 7) * 7
+  const skin = hurt ? '#ffffff' : shade(was.skin, own)
+  const lean = mon.breed === 'runner' ? w * 0.18 : mon.breed === 'brute' ? -w * 0.05 : w * 0.06
 
   ctx.save()
+  ctx.lineCap = 'round'
+  // Everything is drawn over a dark edge, which is what lifts a green figure
+  // off a grey bridge at the size of a thumb.
+  ctx.shadowColor = 'rgba(4,6,12,0.65)'
+  ctx.shadowBlur = Math.max(1, scale * 0.08)
 
-  // Legs.
-  ctx.strokeStyle = was.eye
-  ctx.lineWidth = Math.max(1.5, scale * 0.09)
-  const stride = Math.sin(clock * 8 * mon.pace + mon.id) * w * 0.16
+  // Legs, striding out of step with each other.
+  ctx.strokeStyle = was.rag
+  ctx.lineWidth = Math.max(2, w * (mon.breed === 'brute' ? 0.3 : 0.2))
   for (const side of [-1, 1]) {
+    const swing = Math.sin(walk + (side > 0 ? Math.PI : 0)) * w * 0.3
     ctx.beginPath()
-    ctx.moveTo(x + side * w * 0.22, top + h * 0.8)
-    ctx.lineTo(x + side * w * 0.3 + stride * side, top + h * 1.12)
+    ctx.moveTo(x + side * w * 0.16, top + h * 0.6)
+    ctx.lineTo(x + side * w * 0.2 + swing, top + h)
     ctx.stroke()
   }
 
-  ctx.fillStyle = mon.flash > 0 ? '#ffffff' : was.tint
-  if (mon.breed === 'spike') {
-    // A crown of spikes, drawn before the body so they sit behind it.
+  // Arms, out in front, swinging a little. This is the shape of the thing.
+  ctx.strokeStyle = skin
+  ctx.lineWidth = Math.max(2, w * (mon.breed === 'brute' ? 0.26 : 0.16))
+  for (const side of [-1, 1]) {
+    const reach = Math.sin(walk + side) * h * 0.06
     ctx.beginPath()
-    for (let i = 0; i < 7; i++) {
-      const a = Math.PI + (i / 6) * Math.PI
-      ctx.moveTo(x, top + h / 2)
-      ctx.lineTo(x + Math.cos(a) * w * 0.72, top + h / 2 + Math.sin(a) * h * 0.78)
-    }
-    ctx.strokeStyle = mon.flash > 0 ? '#ffffff' : was.tint
-    ctx.lineWidth = Math.max(2, scale * 0.14)
+    ctx.moveTo(x + side * w * 0.3, top + h * 0.34)
+    ctx.lineTo(x + side * w * 0.44 + lean * 0.4, top + h * 0.5 + reach)
+    ctx.lineTo(x + side * w * 0.34 + lean, top + h * 0.62 + reach)
     ctx.stroke()
   }
 
+  // Body: ragged clothing over the shoulders, skin showing at the neck.
+  ctx.fillStyle = was.rag
   ctx.beginPath()
-  ctx.ellipse(x, top + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2)
+  ctx.moveTo(x - w * 0.32 + sway, top + h * 0.3)
+  ctx.lineTo(x + w * 0.32 + sway, top + h * 0.3)
+  ctx.lineTo(x + w * 0.26 + sway, top + h * 0.68)
+  // A torn hem, which is most of what makes a rectangle look like rags.
+  ctx.lineTo(x + w * 0.1 + sway, top + h * 0.6)
+  ctx.lineTo(x - w * 0.04 + sway, top + h * 0.68)
+  ctx.lineTo(x - w * 0.26 + sway, top + h * 0.62)
+  ctx.closePath()
   ctx.fill()
 
-  // Eyes, both looking down the lane at you.
-  const eyeR = scale * (mon.breed === 'runner' ? 0.1 : 0.13)
-  for (const side of [-1, 1]) {
-    ctx.fillStyle = '#ffffff'
+  if (mon.breed === 'brute') {
+    /*
+     * A brute is a silhouette problem, not a size problem. Scaled up, the same
+     * drawing came out as a blob with wings and a head like a balloon — so it
+     * gets its own shape: shoulders half again as wide as its hips, a head sunk
+     * between them, and long arms hanging past its knees.
+     */
+    ctx.fillStyle = skin
     ctx.beginPath()
-    ctx.arc(x + side * w * 0.2, top + h * 0.38, eyeR, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = was.eye
-    ctx.beginPath()
-    ctx.arc(x + side * w * 0.2, top + h * 0.44, eyeR * 0.55, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  // A mouth, open, with a couple of teeth in it. Daft rather than grim.
-  ctx.fillStyle = was.eye
-  ctx.beginPath()
-  ctx.ellipse(x, top + h * 0.68, w * 0.2, h * 0.12, 0, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = '#ffffff'
-  for (const side of [-1, 1]) {
-    ctx.beginPath()
-    ctx.moveTo(x + side * w * 0.11, top + h * 0.62)
-    ctx.lineTo(x + side * w * 0.05, top + h * 0.62)
-    ctx.lineTo(x + side * w * 0.08, top + h * 0.7)
+    ctx.moveTo(x - w * 0.46 + sway, top + h * 0.32)
+    ctx.lineTo(x + w * 0.46 + sway, top + h * 0.32)
+    ctx.lineTo(x + w * 0.3 + sway, top + h * 0.46)
+    ctx.lineTo(x - w * 0.3 + sway, top + h * 0.46)
     ctx.closePath()
     ctx.fill()
+    ctx.strokeStyle = skin
+    ctx.lineWidth = Math.max(3, w * 0.22)
+    for (const side of [-1, 1]) {
+      const swing = Math.sin(walk + (side > 0 ? 1 : 0)) * w * 0.08
+      ctx.beginPath()
+      ctx.moveTo(x + side * w * 0.42 + sway, top + h * 0.36)
+      ctx.lineTo(x + side * w * 0.46 + swing, top + h * 0.78)
+      ctx.stroke()
+    }
+  }
+
+  // Head, tilted, with the eyes glowing out of it.
+  const headR = w * (mon.breed === 'brute' ? 0.17 : 0.2)
+  const headY = top + h * (mon.breed === 'brute' ? 0.24 : 0.17)
+  ctx.fillStyle = skin
+  ctx.beginPath()
+  ctx.ellipse(x + sway + lean * 0.3, headY, headR, headR * 1.15, sway * 0.2, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.fillStyle = hurt ? '#c23b3b' : was.eye
+  for (const side of [-1, 1]) {
+    ctx.beginPath()
+    ctx.ellipse(
+      x + sway + lean * 0.3 + side * headR * 0.42, headY - headR * 0.1,
+      headR * 0.22, headR * 0.3, 0, 0, Math.PI * 2,
+    )
+    ctx.fill()
+  }
+  if (mon.breed === 'brute') {
+    // And a pair of eyes that catch the light, so a brute is spotted in a crowd
+    // before its size has registered.
+    ctx.fillStyle = '#ffce5c'
+    for (const side of [-1, 1]) {
+      ctx.beginPath()
+      ctx.arc(x + sway + side * headR * 0.42, headY - headR * 0.12, headR * 0.12, 0, Math.PI * 2)
+      ctx.fill()
+    }
   }
 
   /*
-   * What it can still take, as a number on its chest and a bar under it.
+   * What it can still take, as a number over it and a bar under it.
    *
    * Both, not one: the bar is what tells you at a glance which of a crowd is
    * nearly done, and the number is what lets you work out how many more shots
    * that is — which is the arithmetic this game is made of.
    */
-  const size = Math.max(10, scale * 0.42)
-  shout(ctx, String(mon.health), x, top + h / 2 + scale * 0.02, size, '#ffffff')
+  const label = Math.max(9, scale * 0.34 * Math.min(1.5, size))
+  shout(ctx, String(mon.health), x, top - h * 0.08, label, '#ffffff')
 
   const barW = w * 0.9
-  const barH = scale * 0.12
-  const barY = top + h * 1.22
+  const barH = scale * 0.1 * Math.min(1.6, size)
+  const barY = top + h * 1.04
   ctx.fillStyle = 'rgba(8,10,18,0.75)'
   ctx.fillRect(x - barW / 2, barY, barW, barH)
   ctx.fillStyle = mon.health / mon.max > 0.45 ? '#7ae582' : '#ff8c8c'
@@ -264,104 +321,150 @@ export const shapeOf = (rung: number): 0 | 1 | 2 | 3 | 4 => {
   return 0
 }
 
-/** You: a gun on a little carriage, which gets heavier as the ladder goes up. */
+/**
+ * You: a soldier at the gate, holding whatever the ladder has got you to.
+ *
+ * A wagon with a barrel on it was what this was, and the note about it was
+ * fair — "change the shooting wagon into a real character, humanoid". So: boots
+ * braced apart, a coat, a helmet with a brim, and the weapon held across the
+ * body in two hands, shouldered and kicking when it fires.
+ *
+ * He is drawn facing away, up the bridge. That is deliberate and it is the
+ * cheap trick that makes this work at thumbnail size: a back view needs no
+ * face, never has to turn round, and reads instantly as *you* rather than as
+ * another character on the screen.
+ */
 export function drawGun(
   ctx: Ctx, x: number, y: number, scale: number, weapon: Gun, clock: number, firing: number,
   rung = 0,
 ): void {
   const shape = shapeOf(rung)
-  // The whole thing grows a little with the ladder as well as changing shape,
-  // so the difference is felt even between two rungs of the same shape.
-  const grow = 1 + shape * 0.1
-  const w = GUN_W * scale * grow
-  const h = scale * 0.75 * grow
-  const kick = Math.max(0, firing) * scale * 0.14
+  const grow = 1 + shape * 0.07
+  const h = scale * 1.85 * grow
+  const w = GUN_W * scale * 0.62 * grow
+  const kick = Math.max(0, firing) * scale * 0.1
+  const top = y - h * 0.82
+  const sway = Math.sin(clock * 2) * scale * 0.02
 
   ctx.save()
+  ctx.lineCap = 'round'
 
-  // --- the barrels ---
+  // Boots, planted apart. He is braced, not walking.
+  ctx.strokeStyle = '#2a3550'
+  ctx.lineWidth = Math.max(2.5, w * 0.34)
+  for (const side of [-1, 1]) {
+    ctx.beginPath()
+    ctx.moveTo(x + side * w * 0.22, top + h * 0.62)
+    ctx.lineTo(x + side * w * 0.42, top + h * 0.99)
+    ctx.stroke()
+  }
+
+  // Coat.
+  ctx.fillStyle = '#3f7fc4'
+  ctx.beginPath()
+  ctx.moveTo(x - w * 0.52 + sway, top + h * 0.26)
+  ctx.lineTo(x + w * 0.52 + sway, top + h * 0.26)
+  ctx.lineTo(x + w * 0.44 + sway, top + h * 0.72)
+  ctx.lineTo(x - w * 0.44 + sway, top + h * 0.72)
+  ctx.closePath()
+  ctx.fill()
+  // A belt, which is what stops a coat reading as a bin bag.
+  ctx.fillStyle = '#24406b'
+  ctx.fillRect(x - w * 0.5 + sway, top + h * 0.52, w, h * 0.07)
+
+  // Head and helmet, seen from behind.
+  ctx.fillStyle = '#e0a878'
+  ctx.beginPath()
+  ctx.arc(x + sway, top + h * 0.16, w * 0.3, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#4e7a3a'
+  ctx.beginPath()
+  ctx.arc(x + sway, top + h * 0.14, w * 0.34, Math.PI, 0)
+  ctx.fill()
+  ctx.fillRect(x - w * 0.38 + sway, top + h * 0.12, w * 0.76, h * 0.04)
+
+  // --- the weapon, held across him, which is the thing that changes ---
+  const bx = x + w * 0.52 + sway
+  const by = top + h * 0.3 + kick
   ctx.fillStyle = '#cfe6ff'
   ctx.strokeStyle = '#4a86b8'
-  ctx.lineWidth = Math.max(1, scale * 0.04)
-  const barrel = (at: number, fat: number, long: number) => {
+  ctx.lineWidth = Math.max(1, scale * 0.035)
+
+  const barrel = (dx: number, fat: number, long: number) => {
     ctx.beginPath()
-    ctx.roundRect(
-      x + at - scale * fat,
-      y - h * 0.4 - scale * long + kick,
-      scale * fat * 2,
-      scale * long,
-      scale * 0.05,
-    )
+    ctx.roundRect(bx + dx - scale * fat, by - scale * long, scale * fat * 2, scale * long, scale * 0.04)
     ctx.fill()
     ctx.stroke()
   }
 
-  if (shape === 0) barrel(0, 0.09, 0.72)
-  else if (shape === 1) { barrel(-scale * 0.16, 0.08, 0.78); barrel(scale * 0.16, 0.08, 0.78) }
+  // The stock, in both hands, whatever the gun is.
+  ctx.fillStyle = '#6b4a2f'
+  ctx.beginPath()
+  ctx.roundRect(bx - scale * 0.085, by - scale * 0.02, scale * 0.17, scale * 0.34, scale * 0.05)
+  ctx.fill()
+  ctx.fillStyle = '#cfe6ff'
+
+  if (shape === 0) barrel(0, 0.06, 0.62)
+  else if (shape === 1) { barrel(-scale * 0.08, 0.055, 0.68); barrel(scale * 0.08, 0.055, 0.68) }
   else if (shape === 2) {
-    barrel(0, 0.14, 0.8)
-    // A flared muzzle on the end of it, which is what says "this one is louder"
-    // without a word of text.
+    barrel(0, 0.1, 0.72)
     ctx.beginPath()
-    ctx.moveTo(x - scale * 0.26, y - h * 0.4 - scale * 0.8 + kick)
-    ctx.lineTo(x + scale * 0.26, y - h * 0.4 - scale * 0.8 + kick)
-    ctx.lineTo(x + scale * 0.14, y - h * 0.4 - scale * 0.58 + kick)
-    ctx.lineTo(x - scale * 0.14, y - h * 0.4 - scale * 0.58 + kick)
+    ctx.moveTo(bx - scale * 0.2, by - scale * 0.72)
+    ctx.lineTo(bx + scale * 0.2, by - scale * 0.72)
+    ctx.lineTo(bx + scale * 0.1, by - scale * 0.54)
+    ctx.lineTo(bx - scale * 0.1, by - scale * 0.54)
     ctx.closePath()
     ctx.fill()
     ctx.stroke()
   } else {
-    barrel(0, shape === 3 ? 0.2 : 0.26, shape === 3 ? 0.95 : 1.1)
-    // Bands round it, and at the top rung a brace either side: a barrel this
-    // size needs holding down, and showing that is cheaper than any label.
+    barrel(0, shape === 3 ? 0.14 : 0.18, shape === 3 ? 0.84 : 0.96)
     ctx.fillStyle = '#4a86b8'
-    for (const along of shape === 3 ? [0.45, 0.72] : [0.4, 0.62, 0.86]) {
+    for (const along of shape === 3 ? [0.4, 0.64] : [0.36, 0.56, 0.78]) {
       ctx.fillRect(
-        x - scale * (shape === 3 ? 0.24 : 0.3),
-        y - h * 0.4 - scale * along + kick,
-        scale * (shape === 3 ? 0.48 : 0.6),
-        scale * 0.08,
+        bx - scale * (shape === 3 ? 0.17 : 0.22), by - scale * along,
+        scale * (shape === 3 ? 0.34 : 0.44), scale * 0.06,
       )
     }
     if (shape === 4) {
+      // A brace down to the hip: at this end of the ladder he is holding on to
+      // the thing as much as aiming it.
       ctx.strokeStyle = '#4a86b8'
-      ctx.lineWidth = Math.max(2, scale * 0.07)
-      for (const side of [-1, 1]) {
-        ctx.beginPath()
-        ctx.moveTo(x + side * w * 0.42, y - h * 0.1)
-        ctx.lineTo(x + side * scale * 0.3, y - h * 0.4 - scale * 0.5 + kick)
-        ctx.stroke()
-      }
+      ctx.lineWidth = Math.max(2, scale * 0.05)
+      ctx.beginPath()
+      ctx.moveTo(bx - scale * 0.1, by - scale * 0.3)
+      ctx.lineTo(x - w * 0.2 + sway, top + h * 0.6)
+      ctx.stroke()
     }
   }
 
-  // --- the carriage ---
-  ctx.fillStyle = INK.gun
-  ctx.strokeStyle = INK.gunTrim
-  ctx.lineWidth = Math.max(1.5, scale * 0.06)
+  // Arms, over the top of the weapon, so it is held rather than floating.
+  ctx.strokeStyle = '#3f7fc4'
+  ctx.lineWidth = Math.max(2, w * 0.24)
   ctx.beginPath()
-  ctx.roundRect(x - w / 2, y - h / 2, w, h, scale * 0.18)
-  ctx.fill()
+  ctx.moveTo(x - w * 0.3 + sway, top + h * 0.34)
+  ctx.lineTo(bx - scale * 0.06, by + scale * 0.12)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(x + w * 0.36 + sway, top + h * 0.32)
+  ctx.lineTo(bx + scale * 0.02, by - scale * 0.12)
   ctx.stroke()
 
-  // Treads, turning, so standing still does not look broken. More of them as
-  // the gun gets heavier.
-  ctx.fillStyle = INK.gunTrim
-  const wheels = shape >= 3 ? [-0.34, 0, 0.34] : [-0.28, 0.28]
-  for (const side of wheels) {
-    const cx = x + side * w
-    const cy = y + h * 0.42
-    const r = scale * 0.16 * grow
+  // Muzzle flash, which is most of what makes firing feel like firing.
+  if (firing > 0.55) {
+    const flash = (firing - 0.55) / 0.45
+    const long = scale * (shape >= 3 ? 0.5 : 0.32) * flash
+    ctx.save()
+    ctx.globalAlpha = Math.min(1, flash * 1.4)
+    ctx.fillStyle = '#fff3c4'
     ctx.beginPath()
-    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.moveTo(bx, by - scale * (0.62 + shape * 0.08) - long)
+    ctx.lineTo(bx + long * 0.7, by - scale * (0.62 + shape * 0.08))
+    ctx.lineTo(bx - long * 0.7, by - scale * (0.62 + shape * 0.08))
+    ctx.closePath()
     ctx.fill()
-    ctx.strokeStyle = '#0a0d17'
-    ctx.lineWidth = Math.max(1, scale * 0.04)
-    ctx.beginPath()
-    ctx.moveTo(cx, cy)
-    ctx.lineTo(cx + Math.cos(clock * 6) * r * 0.9, cy + Math.sin(clock * 6) * r * 0.9)
-    ctx.stroke()
+    ctx.restore()
   }
+
   ctx.restore()
   void weapon
 }
@@ -391,53 +494,255 @@ function drawSaid(ctx: Ctx, said: Said, x: number, y: number, scale: number): vo
   ctx.restore()
 }
 
-/** The lane itself: the dark beyond the top, the walls, and the line. */
-function drawLane(ctx: Ctx, field: { x: number; y: number; scale: number }, view: View): void {
+/**
+ * Where this happens: a stone bridge out of the fog, and the gate at your end.
+ *
+ * It was a dark blue rectangle with lane markings, which is a diagram of a game
+ * rather than a place. A bridge does three jobs at once: it explains why they
+ * are coming at you in a column, it explains why you cannot simply walk away,
+ * and it gives the far end somewhere to come *from* — the fog at the top is
+ * doing more for the feel of this than anything else on the screen.
+ */
+function drawBridge(ctx: Ctx, field: { x: number; y: number; scale: number }, view: View): void {
   const { scale } = field
   const wide = LANE * scale
   const tall = TALL * scale
+  const clock = view.clock
 
-  ctx.fillStyle = INK.back
+  // The gorge below and behind: night, and a long way down.
+  const night = ctx.createLinearGradient(0, 0, 0, view.h)
+  night.addColorStop(0, '#05070f')
+  night.addColorStop(0.5, '#0a1020')
+  night.addColorStop(1, '#070a14')
+  ctx.fillStyle = night
   ctx.fillRect(0, 0, view.w, view.h)
 
-  const sky = ctx.createLinearGradient(0, field.y, 0, field.y + tall)
-  sky.addColorStop(0, '#0a1024')
-  sky.addColorStop(0.45, '#121a35')
-  sky.addColorStop(1, '#1a2345')
-  ctx.fillStyle = sky
+  // Hills either side of the gorge, so the bridge is over something.
+  ctx.fillStyle = '#0d1424'
+  for (const side of [-1, 1]) {
+    const base = side < 0 ? field.x : field.x + wide
+    ctx.beginPath()
+    ctx.moveTo(base, field.y + tall)
+    for (let i = 0; i <= 6; i++) {
+      const up = i / 6
+      ctx.lineTo(
+        base + side * (0.3 + Math.sin(i * 1.7 + (side as number)) * 0.25 + up * 0.5) * wide,
+        field.y + tall * (1 - up),
+      )
+    }
+    ctx.lineTo(base + side * wide, field.y)
+    ctx.closePath()
+    ctx.fill()
+  }
+
+  // The deck of the bridge: stone, with courses across it.
+  /*
+   * The deck: dark at the far end and lighter at your end, which is the whole
+   * of the perspective in here and enough of it. A flat grey rectangle of big
+   * tiles read as a brick wall seen face on.
+   */
+  const deck = ctx.createLinearGradient(0, field.y, 0, field.y + tall)
+  deck.addColorStop(0, '#141b2b')
+  deck.addColorStop(0.4, '#1d2537')
+  deck.addColorStop(1, '#2a3146')
+  ctx.fillStyle = deck
   ctx.fillRect(field.x, field.y, wide, tall)
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.045)'
+  ctx.strokeStyle = 'rgba(0,0,0,0.22)'
+  ctx.lineWidth = Math.max(1, scale * 0.035)
+  for (let i = 1; i < TALL; i += 1) {
+    ctx.beginPath()
+    ctx.moveTo(field.x, field.y + i * scale)
+    ctx.lineTo(field.x + wide, field.y + i * scale)
+    ctx.stroke()
+    // Staggered joints, like a real course of stones.
+    for (let j = 0; j <= 5; j++) {
+      const at = field.x + wide * ((j + (i % 2 === 1 ? 0.2 : 0.7)) / 6)
+      ctx.beginPath()
+      ctx.moveTo(at, field.y + i * scale)
+      ctx.lineTo(at, field.y + (i + 1) * scale)
+      ctx.stroke()
+    }
+  }
+
+  // The parapets: a wall each side with merlons along the top of it, which is
+  // also where the crates come down.
+  for (const side of [0, 1]) {
+    const at = field.x + side * (wide - scale * 1.5)
+    const parapet = ctx.createLinearGradient(at, 0, at + scale * 1.5, 0)
+    parapet.addColorStop(0, side === 0 ? '#39405a' : '#232a3e')
+    parapet.addColorStop(1, side === 0 ? '#232a3e' : '#39405a')
+    ctx.fillStyle = parapet
+    ctx.fillRect(at, field.y, scale * 1.5, tall)
+    ctx.fillStyle = '#4b5574'
+    for (let i = 0; i < TALL; i += 1.6) {
+      ctx.fillRect(at + scale * 0.1, field.y + i * scale, scale * 1.3, scale * 0.5)
+    }
+  }
+
+  // Fog at the far end, where they are coming from. Two slow layers of it, so
+  // the crowd walks out of something rather than appearing.
+  for (const [i, band] of [1.6, 3].entries()) {
+    const fog = ctx.createLinearGradient(0, field.y, 0, field.y + band * scale)
+    fog.addColorStop(0, `rgba(176,196,232,${0.5 - i * 0.2})`)
+    fog.addColorStop(1, 'rgba(176,196,232,0)')
+    ctx.save()
+    ctx.globalAlpha = 0.8 + Math.sin(clock * 0.4 + i) * 0.2
+    ctx.fillStyle = fog
+    ctx.fillRect(field.x, field.y, wide, band * scale)
+    ctx.restore()
+  }
+
+  // --- the gate at your end ---
+  const gateY = field.y + LINE_Y * scale
+  const thick = scale * 0.9
+
+  // Torches on the parapet beside the gate, guttering.
+  for (const side of [0, 1]) {
+    const at = field.x + (side === 0 ? scale * 0.75 : wide - scale * 0.75)
+    const flare = 0.7 + Math.sin(clock * 9 + side * 2) * 0.3
+    const glow = ctx.createRadialGradient(at, gateY - scale * 0.3, 0, at, gateY - scale * 0.3, scale * 2.4)
+    glow.addColorStop(0, `rgba(255,170,60,${0.3 * flare})`)
+    glow.addColorStop(1, 'rgba(255,170,60,0)')
+    ctx.fillStyle = glow
+    ctx.fillRect(at - scale * 2.4, gateY - scale * 2.7, scale * 4.8, scale * 4.8)
+    ctx.fillStyle = '#2a1f14'
+    ctx.fillRect(at - scale * 0.07, gateY - scale * 0.9, scale * 0.14, scale * 0.9)
+    ctx.fillStyle = `rgba(255,${160 + flare * 60},80,0.95)`
+    ctx.beginPath()
+    ctx.ellipse(at, gateY - scale * 1.05, scale * 0.16 * flare, scale * 0.3 * flare, 0, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // The gate itself: timbers, iron bands, and a line of sandbags in front.
+  const timber = ctx.createLinearGradient(0, gateY - thick, 0, gateY + thick)
+  timber.addColorStop(0, '#6b4a2f')
+  timber.addColorStop(1, '#3d2a1b')
+  ctx.fillStyle = timber
+  ctx.fillRect(field.x, gateY - thick / 2, wide, thick)
+  ctx.strokeStyle = '#241812'
   ctx.lineWidth = Math.max(1, scale * 0.04)
-  for (let i = 1; i < LANE; i++) {
+  for (let i = 0; i < LANE * 2; i++) {
     ctx.beginPath()
-    ctx.moveTo(field.x + i * scale, field.y)
-    ctx.lineTo(field.x + i * scale, field.y + tall)
+    ctx.moveTo(field.x + (i / 2) * scale, gateY - thick / 2)
+    ctx.lineTo(field.x + (i / 2) * scale, gateY + thick / 2)
     ctx.stroke()
   }
+  ctx.fillStyle = '#8d96b4'
+  ctx.fillRect(field.x, gateY - thick * 0.42, wide, scale * 0.1)
+  ctx.fillRect(field.x, gateY + thick * 0.32, wide, scale * 0.1)
 
-  ctx.strokeStyle = INK.edge
-  ctx.lineWidth = Math.max(2, scale * 0.09)
-  ctx.strokeRect(field.x, field.y, wide, tall)
+  ctx.fillStyle = '#5c6b4a'
+  for (let i = 0; i < 11; i++) {
+    const at = field.x + ((i + 0.5) / 11) * wide
+    ctx.beginPath()
+    ctx.roundRect(at - scale * 0.42, gateY + thick * 0.45, scale * 0.84, scale * 0.42, scale * 0.16)
+    ctx.fill()
+  }
+}
 
-  // The line they must not cross, as hazard stripes rather than a thin line: a
-  // thin red line reads as decoration and this is the whole stake.
-  const y = field.y + LINE_Y * scale
-  const thick = scale * 0.26
+/** One that has gone down: a heap, sinking into the stone. */
+export function drawGone(
+  ctx: Ctx, was: Gone, x: number, y: number, scale: number,
+): void {
+  const breed = BREED[was.breed]
+  const w = MON_W * scale * was.size
+  const fade = Math.min(1, was.life / 0.7)
   ctx.save()
+  ctx.globalAlpha = fade * 0.85
+  ctx.fillStyle = breed.rag
   ctx.beginPath()
-  ctx.rect(field.x, y - thick / 2, wide, thick)
-  ctx.clip()
-  ctx.fillStyle = 'rgba(255,95,122,0.22)'
-  ctx.fillRect(field.x, y - thick / 2, wide, thick)
-  ctx.strokeStyle = INK.line
-  ctx.lineWidth = thick * 0.5
-  for (let i = -1; i < LANE * 2; i++) {
+  ctx.ellipse(x, y + w * 0.3, w * 0.75, w * 0.26 * fade, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = breed.skin
+  ctx.beginPath()
+  ctx.arc(x - w * 0.5, y + w * 0.2, w * 0.2 * fade, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
+/** A thing falling, under a little parachute, to be caught. */
+export function drawFalling(
+  ctx: Ctx, drop: Falling, x: number, y: number, scale: number, clock: number,
+): void {
+  const was = CATCH[drop.kind]
+  const sway = Math.sin(clock * 2 + drop.id) * scale * 0.18
+  const w = scale * 0.8
+
+  ctx.save()
+  // Chute.
+  ctx.fillStyle = 'rgba(233,237,248,0.85)'
+  ctx.beginPath()
+  ctx.ellipse(x + sway, y - w * 0.95, w * 0.78, w * 0.5, 0, Math.PI, 0)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(233,237,248,0.6)'
+  ctx.lineWidth = Math.max(1, scale * 0.03)
+  for (const side of [-1, 1]) {
     ctx.beginPath()
-    ctx.moveTo(field.x + i * scale * 0.5, y + thick)
-    ctx.lineTo(field.x + (i + 0.6) * scale * 0.5, y - thick)
+    ctx.moveTo(x + sway + side * w * 0.72, y - w * 0.95)
+    ctx.lineTo(x + side * w * 0.3, y - w * 0.4)
     ctx.stroke()
   }
+
+  // The box, in the colour of what is in it.
+  ctx.fillStyle = was.tint
+  ctx.strokeStyle = 'rgba(10,13,23,0.7)'
+  ctx.lineWidth = Math.max(1.5, scale * 0.05)
+  ctx.beginPath()
+  ctx.roundRect(x - w * 0.42, y - w * 0.42, w * 0.84, w * 0.84, scale * 0.1)
+  ctx.fill()
+  ctx.stroke()
+
+  // A mark that says which it is without a word: a turret, a chevron, a star.
+  ctx.fillStyle = 'rgba(10,13,23,0.85)'
+  if (drop.kind === 'turret') {
+    ctx.fillRect(x - w * 0.06, y - w * 0.3, w * 0.12, w * 0.3)
+    ctx.beginPath()
+    ctx.roundRect(x - w * 0.22, y, w * 0.44, w * 0.2, scale * 0.05)
+    ctx.fill()
+  } else if (drop.kind === 'rapid') {
+    for (const up of [-0.26, -0.02, 0.22]) {
+      ctx.beginPath()
+      ctx.moveTo(x - w * 0.2, y + w * (up + 0.14))
+      ctx.lineTo(x, y + w * up)
+      ctx.lineTo(x + w * 0.2, y + w * (up + 0.14))
+      ctx.lineTo(x, y + w * (up + 0.07))
+      ctx.closePath()
+      ctx.fill()
+    }
+  } else {
+    ctx.beginPath()
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2
+      const r = i % 2 === 0 ? w * 0.3 : w * 0.12
+      ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r)
+    }
+    ctx.closePath()
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+/** A turret you caught, holding the line beside you until its time runs out. */
+export function drawTurret(
+  ctx: Ctx, left: number, x: number, y: number, scale: number, clock: number,
+): void {
+  ctx.save()
+  // It blinks out its last two seconds, so nobody is surprised when it goes.
+  if (left < 2) ctx.globalAlpha = 0.35 + 0.65 * Math.abs(Math.sin(clock * 9))
+  ctx.fillStyle = '#5c6b4a'
+  ctx.strokeStyle = '#2a3550'
+  ctx.lineWidth = Math.max(1.5, scale * 0.05)
+  ctx.beginPath()
+  ctx.roundRect(x - scale * 0.42, y - scale * 0.3, scale * 0.84, scale * 0.6, scale * 0.12)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = '#cfe6ff'
+  ctx.fillRect(x - scale * 0.07, y - scale * 0.95, scale * 0.14, scale * 0.7)
+  ctx.fillStyle = '#2a3550'
+  ctx.beginPath()
+  ctx.arc(x, y - scale * 0.2, scale * 0.16, 0, Math.PI * 2)
+  ctx.fill()
   ctx.restore()
 }
 
@@ -489,12 +794,17 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
   const { scale } = field
   const at = (x: number, y: number) => ({ x: field.x + x * scale, y: field.y + y * scale })
 
-  drawLane(ctx, field, view)
+  drawBridge(ctx, field, view)
 
   ctx.save()
   ctx.beginPath()
   ctx.rect(field.x, field.y, LANE * scale, TALL * scale)
   ctx.clip()
+
+  for (const was of run.gone) {
+    const spot = at(was.x, was.y)
+    drawGone(ctx, was, spot.x, spot.y, scale)
+  }
 
   for (const mon of run.crowd) {
     const spot = at(mon.x, mon.y)
@@ -504,6 +814,21 @@ export function drawRun(ctx: Ctx, run: Run, view: View): void {
   for (const crate of run.crates) {
     const spot = at(crate.x, crate.y)
     drawCrate(ctx, crate, spot.x, spot.y, scale, run.rung)
+  }
+
+  for (const crate of run.crates) {
+    const spot = at(crate.x, crate.y)
+    drawCrate(ctx, crate, spot.x, spot.y, scale, run.rung)
+  }
+
+  for (const drop of run.falling) {
+    const spot = at(drop.x, drop.y)
+    drawFalling(ctx, drop, spot.x, spot.y, scale, run.clock)
+  }
+
+  for (const turret of run.turrets) {
+    const spot = at(turret.x, GUN_Y)
+    drawTurret(ctx, turret.left, spot.x, spot.y, scale, run.clock)
   }
 
   const shape = shapeOf(run.rung)
@@ -542,31 +867,37 @@ export function drawTaste(ctx: Ctx, w: number, h: number, clock: number): void {
   const field = { x: (w - wide * scale) / 2, y: (h - tall * scale) / 2, scale }
   const at = (x: number, y: number) => ({ x: field.x + x * scale, y: field.y + y * scale })
 
-  const sky = ctx.createLinearGradient(0, 0, 0, h)
-  sky.addColorStop(0, '#0a1024')
-  sky.addColorStop(1, '#1b2446')
-  ctx.fillStyle = sky
-  ctx.fillRect(0, 0, w, h)
+  // The bridge itself, so the tile is the place as well as the people.
+  drawBridge(ctx, field, { w, h, clock })
+
+  const one = (
+    id: number, x: number, y: number, breed: Monster['breed'], health: number, max: number,
+  ): Monster => ({
+    id, x, y, breed, health, max,
+    pace: BREED[breed].pace, size: BREED[breed].size, flash: 0, step: id,
+  })
 
   const crowd: Monster[] = [
-    { id: 1, x: 1.5, y: 1.4, breed: 'blob', health: 6, max: 9, pace: 1, flash: 0 },
-    { id: 2, x: 4.6, y: 1.1, breed: 'spike', health: 11, max: 12, pace: 0.85, flash: 0 },
-    { id: 3, x: 3, y: 2.9, breed: 'runner', health: 3, max: 5, pace: 1.6, flash: 0 },
+    one(1, 1.6, 1.5, 'shambler', 6, 9),
+    one(2, 3.2, 1.1, 'runner', 3, 5),
+    one(3, 4.8, 1.6, 'shambler', 8, 9),
+    one(4, 2.4, 3.1, 'brute', 40, 54),
+    one(5, 4.4, 3.4, 'lurcher', 9, 14),
   ]
   for (const mon of crowd) {
     const spot = at(mon.x, mon.y)
     drawMonster(ctx, mon, spot.x, spot.y, scale, clock)
   }
 
-  const crate: Crate = { id: 4, x: 4.4, y: 4.4, need: 12, got: 4, step: 2, flash: 0 }
+  const crate: Crate = { id: 6, x: 0.6, y: 4.4, need: 12, got: 4, step: 2, flash: 0 }
   const box = at(crate.x, crate.y)
   drawCrate(ctx, crate, box.x, box.y, scale, 1)
 
-  for (const y of [5.1, 5.9]) {
-    const spot = at(1.9, y)
-    drawShot(ctx, { id: 9, x: 1.9, y }, spot.x, spot.y, scale, 1)
+  for (const y of [5.3, 6]) {
+    const spot = at(3.2, y)
+    drawShot(ctx, { id: 9, x: 3.2, y, hit: 4 }, spot.x, spot.y, scale, 1)
   }
 
-  const me = at(1.9, 6.7)
-  drawGun(ctx, me.x, me.y, scale, gunAt(4), clock, 0.4, 4)
+  const me = at(3.2, 6.8)
+  drawGun(ctx, me.x, me.y, scale, gunAt(4), clock, 0.9, 4)
 }

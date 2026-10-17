@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CRATE_H, GUNS, LANE, LINE_Y, MON_H, TOP_RUNG,
-  cratePair, gunAt, insideFor, monHealth, rateOf, walkSpeed, waveFor, waveSize,
+  brutesFor, cratePair, gunAt, insideFor, monHealth, rateOf, walkSpeed, waveFor, waveSize,
   type Crate, type Dice, type Monster,
 } from './level'
 import {
@@ -55,7 +55,8 @@ const drive = (run: Run, seconds: number, input: Input = NO_INPUT): Run => {
  * that drives for a second measures one step instead.
  */
 const KEEPER: Monster = {
-  id: 9000, x: LANE / 2, y: -80, breed: 'blob', health: 9999, max: 9999, pace: 1, flash: 0,
+  id: 9000, x: LANE / 2, y: -80, breed: 'shambler', health: 9999, max: 9999, pace: 1,
+  size: 1, flash: 0, step: 0,
 }
 
 const empty = (set: Partial<Run> = {}): Run => ({
@@ -65,11 +66,15 @@ const empty = (set: Partial<Run> = {}): Run => ({
   shots: [],
   says: [],
   cool: 999,
+  // No parachutes unless a test asks for one: a caught blast clears the lane,
+  // which is a surprising way for a test about something else to pass.
+  dropIn: 9999,
   ...set,
 })
 
 const monster = (set: Partial<Monster> = {}): Monster => ({
-  id: 1, x: 5, y: 6, breed: 'blob', health: 10, max: 10, pace: 1, flash: 0, ...set,
+  id: 1, x: 5, y: 6, breed: 'shambler', health: 10, max: 10, pace: 1, size: 1, flash: 0,
+  step: 0, ...set,
 })
 
 const crate = (set: Partial<Crate> = {}): Crate => ({
@@ -99,7 +104,7 @@ describe('shooting a monster', () => {
     // Two monsters in a line. One shot cannot take both.
     const run = empty({
       crowd: [KEEPER, monster({ id: 1, y: 7 }), monster({ id: 3, y: 5 })],
-      shots: [{ id: 50, x: 5, y: 9 }],
+      shots: [{ id: 50, x: 5, y: 9, hit: 1 }],
       cool: 999,
     })
     const after = drive(run, 0.35)
@@ -110,7 +115,7 @@ describe('shooting a monster', () => {
   it('never takes more than it has left, so the last hit is not wasted twice', () => {
     const run = empty({
       crowd: [KEEPER, monster({ health: 2, max: 20 })],
-      shots: [{ id: 50, x: 5, y: 7.2 }],
+      shots: [{ id: 50, x: 5, y: 7.2, hit: 9 }],
       rung: rungHitting(8),
       cool: 999,
       score: 0,
@@ -130,7 +135,7 @@ describe('shooting a monster', () => {
      */
     const run = empty({
       crowd: [KEEPER, monster({ y: 6 })],
-      shots: [{ id: 50, x: 5, y: 11 }],
+      shots: [{ id: 50, x: 5, y: 11, hit: 1 }],
       cool: 999,
     })
     const after = step(run, NO_INPUT, 0.4)
@@ -280,7 +285,7 @@ describe('the line at the bottom', () => {
   it('says the wave is cleared when the last one goes', () => {
     const run = empty({
       crowd: [monster({ id: 1, health: 1, y: 7 })],
-      shots: [{ id: 50, x: 5, y: 8 }],
+      shots: [{ id: 50, x: 5, y: 8, hit: 1 }],
       cool: 999,
     })
     const after = drive(run, 0.4)
@@ -375,12 +380,20 @@ describe('the ladder of waves', () => {
     expect(waveSize(12)).toBeGreaterThan(waveSize(1))
   })
 
-  it('starts every wave above the lane with nothing on the line', () => {
+  it('starts every wave with the crowd on the bridge and nothing on the line', () => {
     for (let level = 1; level <= 20; level++) {
       const crowd = waveFor(level, dice(level), idFrom(1))
-      expect(crowd.length).toBe(waveSize(level))
+      // The brutes are extra: they are dropped in among the crowd, not counted
+      // out of it.
+      expect(crowd.length).toBe(waveSize(level) + brutesFor(level))
       for (const mon of crowd) {
-        expect(mon.y).toBeLessThan(0)
+        /*
+         * On the bridge, not above it — the front row opens in view. Every row
+         * used to start off the top of the screen and walk in at half a unit a
+         * second, which made the first twenty seconds of every wave an empty
+         * bridge. What matters is that nothing opens on the line.
+         */
+        expect(mon.y + MON_H * mon.size).toBeLessThan(LINE_Y - 4)
         expect(mon.health).toBeGreaterThan(0)
         expect(mon.health).toBe(mon.max)
         expect(mon.x).toBeGreaterThan(0)
@@ -389,9 +402,9 @@ describe('the ladder of waves', () => {
     }
   })
 
-  it('opens with nothing but blobs, and brings the rest in later', () => {
+  it('opens with nothing but shamblers, and brings the rest in later', () => {
     const first = waveFor(1, dice(3), idFrom(1))
-    expect(new Set(first.map((m) => m.breed))).toEqual(new Set(['blob']))
+    expect(new Set(first.map((m) => m.breed))).toEqual(new Set(['shambler']))
     const later = waveFor(8, dice(3), idFrom(1))
     expect(new Set(later.map((m) => m.breed)).size).toBeGreaterThan(1)
   })
