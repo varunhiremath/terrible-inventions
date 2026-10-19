@@ -22,7 +22,7 @@ the money taken out.
 | **Papa Panic** | A maze, a lot of dots, four chasers | Between lives, and in the shop |
 | **The Caves** | Ten caves, a trophy in each, and a jetpack he has not tested | Between lives |
 | **The Swarm** | A bridge, a gate, and a crowd coming over it. You are the soldier holding it | On the bridge. Working out whether a crate fits in the time left *is* the game |
-| **The Pipes** | Run, jump, stomp, reach the flag | Between lives |
+| **The Pipes** | Run, jump, stomp, and catch the flagpole as high up as you can | Between lives |
 | **The Road** | Four lanes, six stages, and four of his machines racing you from a standing start | Between lives; a right answer is half a tank and a car back |
 | **The Long Way Out** | Fly to the eight real planets, in order, through what he has left in the way | None. Break things up for scrap, spend it at each world, and every world tells you something true |
 

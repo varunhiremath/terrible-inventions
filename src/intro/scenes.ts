@@ -1022,7 +1022,7 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     drawPipes(ctx, PIPE_RUN, view, w)
     drawItems(ctx, PIPE_RUN, view)
     drawEnemies(ctx, PIPE_RUN, view)
-    drawFlag(ctx, level, view, false, clock)
+    drawFlag(ctx, level, view, null, clock)
 
     // The apprentice, running along in front of the camera with a hop in him,
     // because a level in this game is read through what he can clear.

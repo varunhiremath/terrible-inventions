@@ -58,7 +58,10 @@ const NOISE: Record<PipeEvent, CueName> = {
   sprout: 'grow',
   die: 'fall',
   shrink: 'fall',
-  win: 'flag',
+  // Catching the pole is the little noise; the fanfare is the long one, and it
+  // plays once he is on his way down rather than the moment he touches it.
+  grab: 'flag',
+  win: 'fanfare',
   pipe: 'pipeDown',
 }
 
@@ -269,7 +272,7 @@ export function Pipes() {
         drawBackdrop(ctx, view, boardH)
         if (next.warp) drawHero(ctx, next.body, view, 0, clock.current)
         drawLevel(ctx, next, view, w)
-        drawFlag(ctx, next.level, view, next.status === 'won', clock.current)
+        drawFlag(ctx, next.level, view, next.flag, clock.current)
         drawItems(ctx, next, view)
         drawEnemies(ctx, next, view)
         /*

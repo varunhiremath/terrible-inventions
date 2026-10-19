@@ -1,0 +1,69 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>The flagpole</title>
+<style>body{margin:0;background:#5c94fc;font:13px ui-monospace,monospace}canvas{display:block;width:100%;height:100vh}</style>
+<canvas id="c"></canvas>
+<script type="module">
+  /*
+   * The real end of a real level, stepped with the real rules.
+   *
+   * The body is put on the pole at a chosen height — exactly what a jump from
+   * the staircase does — and then nothing is faked: `stepRun` runs the catch,
+   * the slide and the walk off, and the frames it produces are drawn with the
+   * game's own drawing.
+   */
+  import { drawFlag, drawLevel, drawSky, drawHero } from '/src/pipes/draw.ts'
+  import { newRun, stepRun } from '/src/pipes/run.ts'
+  import { LEVELS } from '/src/pipes/levels.ts'
+  import { newBody, NO_INPUT } from '/src/pipes/physics.ts'
+
+  const canvas = document.getElementById('c')
+  const ctx = canvas.getContext('2d')
+  const level = LEVELS[0]
+  const DT = 1 / 120
+
+  /** A run caught at `high` up the pole, stepped on for `seconds`. */
+  function at(high, seconds) {
+    const span = level.poleFoot - level.poleTop
+    let run = newRun(level, 1)
+    run = { ...run, body: { ...newBody(level.pole + 0.05, level.poleFoot - high * span), vx: 0, vy: 0 } }
+    for (let t = 0; t < seconds; t += DT) run = stepRun(run, NO_INPUT, DT)
+    return run
+  }
+
+  const frames = [
+    { label: 'about to catch it', run: (() => { const r = newRun(level, 1); return { ...r, body: { ...newBody(level.pole - 2.5, level.poleTop + 1) } } })() },
+    { label: 'caught at the top', run: at(0.95, 0.02) },
+    { label: 'half way down', run: at(0.95, 1.3) },
+    { label: 'at the footing', run: at(0.3, 3) },
+  ]
+
+  function frame(now) {
+    const dpr = Math.min(2, devicePixelRatio || 1)
+    canvas.width = innerWidth * dpr
+    canvas.height = innerHeight * dpr
+    const clock = now / 1000
+    const bandW = canvas.width / frames.length
+    frames.forEach((shot, i) => {
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(i * bandW, 0, bandW, canvas.height)
+      ctx.clip()
+      ctx.translate(i * bandW, 0)
+      const size = Math.min(bandW / 8, canvas.height / 15)
+      const view = { col: level.pole - 4.5, size, clock }
+      drawSky(ctx, bandW, canvas.height)
+      drawLevel(ctx, shot.run, view, bandW)
+      drawFlag(ctx, level, view, shot.run.flag, clock)
+      drawHero(ctx, shot.run.body, view, 0, clock)
+      ctx.fillStyle = '#0d1016'
+      ctx.font = `bold ${Math.round(size * 0.42)}px ui-monospace`
+      ctx.textAlign = 'left'
+      ctx.fillText(shot.label, 12, 22)
+      ctx.fillText(`score ${shot.run.score} · ${shot.run.status}`, 12, 22 + size * 0.6)
+      ctx.restore()
+    })
+    requestAnimationFrame(frame)
+  }
+  requestAnimationFrame(frame)
+</script>

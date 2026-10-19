@@ -2109,6 +2109,42 @@ export const PIPE_DOWN: Track = {
             pattern: 'C5 B4 A4 G4 F4 E4 D4 C4 .  . ' }],
 }
 
+/**
+ * The end of a level.
+ *
+ * Longer than anything else in here, and it has earned it: this is the one cue
+ * that plays when nothing is being asked of the player. Four bars of C major
+ * going up and landing on the octave — the shape of every level-end fanfare
+ * ever written, because the shape is the point. It plays over the slide down
+ * the pole and finishes about when he walks off.
+ */
+const FANFARE: Track = {
+  name: 'Fanfare',
+  beatsPerMinute: 170,
+  parts: [
+    {
+      wave: 'pluck',
+      gain: 0.08,
+      sustain: 0.8,
+      pattern: 'G4 C5 E5 G5 C6 .  E5 G5 C6 .  .  G5 C6 .  .  . ',
+    },
+    {
+      wave: 'pulse',
+      duty: 0.25,
+      gain: 0.045,
+      sustain: 0.5,
+      pattern: 'C3 .  C3 .  E3 .  E3 .  G3 .  G3 .  C4 .  .  . ',
+    },
+    {
+      wave: 'strings',
+      gain: 0.03,
+      sustain: 1,
+      chord: [0, 4, 7],
+      pattern: 'C4 .  .  .  E4 .  .  .  G4 .  .  .  C5 .  .  . ',
+    },
+  ],
+}
+
 export const PIPE_CUES = {
   coin: COIN,
   hop: HOP,
@@ -2117,6 +2153,7 @@ export const PIPE_CUES = {
   fall: FALL,
   flag: FLAG,
   pipeDown: PIPE_DOWN,
+  fanfare: FANFARE,
 } as const
 
 // Six sets, because each is held to its own scale — and each scale is the

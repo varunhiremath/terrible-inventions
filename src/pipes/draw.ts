@@ -383,17 +383,93 @@ export function drawHero(ctx: Ctx, body: Body, view: View, mercy: number, clock:
   ctx.restore()
 }
 
-export function drawFlag(ctx: Ctx, level: Level, view: View, won: boolean, clock: number): void {
+/**
+ * The flagpole: a shaft, a ball on top, and the flag that comes down it.
+ *
+ * The flag used to snap from the top to the bottom the instant the level ended,
+ * which is a state change rather than a moment. Now it rides down with him at
+ * the speed he slides, which is the thing worth having: the fun of a flagpole
+ * is the two seconds after you catch it, not the catching.
+ */
+export function drawFlag(
+  ctx: Ctx,
+  level: Level,
+  view: View,
+  flag: { high: number; points: number; down: number } | null,
+  clock: number,
+): void {
   const s = view.size
   const x = px(view, level.pole)
-  const top = py(view, VIEW_TOP)
-  ctx.fillStyle = won ? '#f4c430' : '#e0e0e0'
+  const top = py(view, level.poleTop)
+  const foot = py(view, level.poleFoot)
+
+  // The ball on top, which is what you are aiming at.
+  ctx.fillStyle = '#f4c430'
   ctx.beginPath()
-  ctx.moveTo(x + s * 0.56, top + (won ? s * 6 : s * 0.2) + Math.sin(clock * 3) * 2)
-  ctx.lineTo(x + s * 2.1, top + (won ? s * 6.4 : s * 0.6))
-  ctx.lineTo(x + s * 0.56, top + (won ? s * 7 : s * 1.2))
+  ctx.arc(x + s * 0.5, top - s * 0.1, s * 0.3, 0, Math.PI * 2)
+  ctx.fill()
+
+  /*
+   * Where the flag is. Hanging near the top before anybody gets there, then
+   * sliding down to the footing as he does — and a notch of it is left at the
+   * height he caught it, which is the part he can aim at next time.
+   */
+  const caught = flag ? foot - (foot - top) * flag.high : top + s * 0.4
+  const at = flag ? caught + (foot - s * 1.2 - caught) * flag.down : top + s * 0.4 + Math.sin(clock * 2) * 2
+
+  ctx.fillStyle = flag ? '#f4c430' : '#e0e0e0'
+  ctx.beginPath()
+  ctx.moveTo(x + s * 0.44, at)
+  ctx.lineTo(x + s * 2, at + s * 0.42)
+  ctx.lineTo(x + s * 0.44, at + s * 0.84)
   ctx.closePath()
   ctx.fill()
+
+  /*
+   * Hitting the very top sets the ball off.
+   *
+   * Only the top band gets it, because the whole point of a band you can aim
+   * at is that landing it feels different from not landing it. Eight spokes of
+   * light for half a second is the cheapest way to say "that was the good one"
+   * and it does not need reading.
+   */
+  if (flag && flag.points >= 5000 && flag.down < 0.6) {
+    const burst = 1 - flag.down / 0.6
+    ctx.save()
+    ctx.globalAlpha = burst
+    ctx.strokeStyle = '#fff3c4'
+    ctx.lineWidth = Math.max(2, s * 0.12)
+    ctx.lineCap = 'round'
+    for (let i = 0; i < 8; i++) {
+      const turn = (i / 8) * Math.PI * 2 + clock * 2
+      const from = s * (0.4 + (1 - burst) * 0.5)
+      const to = from + s * 0.5 * burst
+      ctx.beginPath()
+      ctx.moveTo(x + s * 0.5 + Math.cos(turn) * from, top - s * 0.1 + Math.sin(turn) * from)
+      ctx.lineTo(x + s * 0.5 + Math.cos(turn) * to, top - s * 0.1 + Math.sin(turn) * to)
+      ctx.stroke()
+    }
+    ctx.restore()
+  }
+
+  // What it was worth, floating up from where he caught it.
+  if (flag) {
+    const rise = flag.down * s * 1.6
+    ctx.save()
+    // Full strength for most of the slide, fading only at the very end: the
+    // number is the reward, and a reward that is already half gone by the time
+    // you look at it is not one.
+    ctx.globalAlpha = flag.down < 0.75 ? 1 : Math.max(0, 1 - (flag.down - 0.75) * 4)
+    ctx.font = `bold ${Math.round(s * 0.7)}px ui-monospace, Menlo, Consolas, monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.lineWidth = Math.max(2, s * 0.18)
+    ctx.strokeStyle = 'rgba(8,10,18,0.85)'
+    ctx.strokeText(String(flag.points), x + s * 0.5, caught - s * 0.8 - rise)
+    ctx.fillStyle = flag.points >= 5000 ? '#ffd166' : '#ffffff'
+    ctx.fillText(String(flag.points), x + s * 0.5, caught - s * 0.8 - rise)
+    ctx.restore()
+  }
 }
 
 /** The buttons, drawn where the pad says they are. */

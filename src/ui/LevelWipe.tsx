@@ -246,7 +246,15 @@ const SCENES: Record<WipeScene, Scene> = {
       drawPipeSky(ctx, bandW, s * rows)
       drawBackdrop(ctx, view, s * rows)
       drawPipes(ctx, run, view, bandW)
-      drawFlag(ctx, PIPE_RUN, view, x >= PIPE_WALK.to - 1, t * 2)
+      // Walking past the pole at the end of the strip pulls the flag down with
+      // him, the same way it does in the game now.
+      drawFlag(
+        ctx, PIPE_RUN, view,
+        x >= PIPE_WALK.to - 3
+          ? { high: 0.9, points: 5000, down: Math.min(1, (x - (PIPE_WALK.to - 3)) / 2) }
+          : null,
+        t * 2,
+      )
       drawHero(
         ctx,
         { ...newBody(x, PIPE_GROUND), onGround: true, facing: 1 },

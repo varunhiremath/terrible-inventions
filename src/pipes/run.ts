@@ -59,7 +59,51 @@ export interface Bumped {
   time: number
 }
 
-export type Status = 'playing' | 'dead' | 'won' | 'outOfTime'
+export type Status = 'playing' | 'flag' | 'dead' | 'won' | 'outOfTime'
+
+/**
+ * Catching the flagpole, and what it was worth.
+ *
+ * The whole of the end of a level lives in here. Nothing else moves while it
+ * runs — no clock, no goombas, no input — because this is the one moment in the
+ * game that is a reward rather than a test, and a koopa walking into him
+ * halfway down the pole would be the meanest death in the app.
+ */
+export interface Flagging {
+  /** How far up the pole he caught it, nought at the footing and one at the ball. */
+  high: number
+  /** What that was worth, decided the moment he touched it. */
+  points: number
+  /** How far down the pole the flag and he have got, nought to one. */
+  down: number
+  /** Then: how far through walking off to the right he is. */
+  off: number
+}
+
+/**
+ * What catching it is worth, by how high up the pole he got.
+ *
+ * Six bands rather than a sliding scale, which is what the original does and
+ * is right for a nine-year-old: a number that creeps up by eleven for a
+ * slightly better jump teaches nothing, and five bands you can *aim* at turns
+ * the last jump of every level into a decision. The top one needs the very top
+ * of the pole, which is the jump worth practising.
+ */
+export const FLAG_BANDS: readonly { at: number; points: number }[] = [
+  { at: 0.92, points: 5000 },
+  { at: 0.75, points: 2000 },
+  { at: 0.55, points: 800 },
+  { at: 0.35, points: 400 },
+  { at: 0.18, points: 200 },
+  { at: 0, points: 100 },
+]
+
+export const flagWorth = (high: number): number =>
+  FLAG_BANDS.find((band) => high >= band.at)?.points ?? 100
+
+/** How fast he slides down the pole, and how long he takes to walk off. */
+export const SLIDE_SPEED = 2.6
+export const WALK_OFF = 1.1
 
 export interface Run {
   level: Level
@@ -78,6 +122,8 @@ export interface Run {
   /** Counts down after a hit; while it runs he cannot be hurt again. */
   mercy: number
   status: Status
+  /** The end-of-level flag business, while it is happening. */
+  flag: Flagging | null
   /** Something worth a noise happened this step. Read and cleared by the screen. */
   events: PipeEvent[]
   /**
@@ -111,7 +157,7 @@ export const WARP_SECONDS = 0.55
  */
 export const EVENTS = [
   'coin', 'sprout', 'break', 'knock', 'jump', 'die', 'grow', 'stomp', 'kick', 'shrink', 'win',
-  'pipe',
+  'pipe', 'grab',
 ] as const
 export type PipeEvent = (typeof EVENTS)[number]
 
@@ -129,7 +175,9 @@ export type PipeEvent = (typeof EVENTS)[number]
  * games, with the unit suite green both times. `events.test.ts` reads this now.
  */
 export const LOUDEST: readonly PipeEvent[] = [
-  'win', 'die', 'shrink', 'grow', 'pipe', 'sprout', 'stomp', 'kick', 'break', 'knock',
+  // The fanfare first and the catch just behind it: both of them are the end of
+  // the level, and nothing that happens in the same frame matters more.
+  'win', 'grab', 'die', 'shrink', 'grow', 'pipe', 'sprout', 'stomp', 'kick', 'break', 'knock',
   'coin', 'jump',
 ]
 
@@ -166,6 +214,7 @@ export function newRun(level: Level, number: number, lives = 3, extraSeconds = 0
     seconds: LEVEL_SECONDS + extraSeconds,
     mercy: 0,
     status: 'playing',
+    flag: null,
     events: [],
     warp: null,
   }
@@ -360,6 +409,47 @@ export function stepRun(run: Run, input: Input, dt = FIXED): Run {
    * The road and the space run already did this, each after finding it the
    * hard way. There is a test over all six now.
    */
+  /*
+   * Down the pole and off to the side, which is the only thing happening.
+   *
+   * No clock, no enemies, no input — see `Flagging`. The run drives itself for
+   * these two seconds and then the level is over.
+   */
+  if (run.status === 'flag' && run.flag) {
+    const flag = { ...run.flag }
+    const { poleTop, poleFoot } = run.level
+    const span = Math.max(1, poleFoot - poleTop)
+
+    if (flag.down < 1) {
+      flag.down = Math.min(1, flag.down + (SLIDE_SPEED / span) * dt)
+      const from = poleFoot - flag.high * span
+      return {
+        ...run,
+        flag,
+        events: [],
+        // He rides down with the flag, which is the whole picture of it.
+        body: { ...run.body, y: from + (poleFoot - 0.9 - from) * flag.down },
+      }
+    }
+
+    flag.off = Math.min(1, flag.off + dt / WALK_OFF)
+    const walked = {
+      ...run,
+      flag,
+      events: flag.off >= 1 ? (['win'] as PipeEvent[]) : [],
+      body: { ...run.body, x: run.level.pole + flag.off * 2.4, y: poleFoot - 0.9 },
+    }
+    if (flag.off < 1) return walked
+
+    return {
+      ...walked,
+      status: 'won',
+      // The time he did not use, which is the other half of the reward: a
+      // level done quickly is worth more than the same level done carefully.
+      score: run.score + 2000 + Math.floor(run.seconds) * 10,
+    }
+  }
+
   if (run.status !== 'playing') {
     return run.events.length === 0 ? run : { ...run, events: [] }
   }
@@ -495,11 +585,25 @@ export function stepRun(run: Run, input: Input, dt = FIXED): Run {
 
   // --- the end of the level ------------------------------------------------
   if (next.body.x >= next.level.pole) {
+    /*
+     * How high he caught it. The pole runs from its footing up to the ball on
+     * top, and where he met it along that is the whole of the reward: a jump
+     * from the top of the staircase lands near the ball, a walk into the bottom
+     * of it is worth a twentieth as much.
+     */
+    const { poleTop, poleFoot } = next.level
+    const span = Math.max(1, poleFoot - poleTop)
+    const high = Math.max(0, Math.min(1, (poleFoot - next.body.y) / span))
+    const points = flagWorth(high)
+
     return {
       ...next,
-      status: 'won',
-      score: next.score + 2000 + Math.floor(next.seconds) * 10,
-      events: [...next.events, 'win'],
+      status: 'flag',
+      flag: { high, points, down: 0, off: 0 },
+      score: next.score + points,
+      // Parked on the pole, holding on, with everything else switched off.
+      body: { ...next.body, x: next.level.pole, vx: 0, vy: 0, onGround: false },
+      events: [...next.events, 'grab'],
     }
   }
 

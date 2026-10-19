@@ -101,6 +101,9 @@ export interface Level {
   spawns: Spawn[]
   /** Which column the flagpole is in, for knowing when the level is done. */
   pole: number
+  /** The top of the pole and the ground it stands on, in rows. */
+  poleTop: number
+  poleFoot: number
   /** Which pipes lead where. Possibly none. */
   warps: Warp[]
 }
@@ -211,7 +214,21 @@ export function readLevel(name: string, rows: readonly string[]): Level {
     if (at >= 0) pole = at
   })
 
-  return { name, rows: clean, spawns, pole, warps: pairUp(clean) }
+  /*
+   * How high the pole goes and where it is planted.
+   *
+   * Both are needed because catching it high is worth more than catching it
+   * low, and "high" has to mean something: the fraction of the pole above the
+   * footing that he has reached. Read off the level rather than assumed, so a
+   * short pole in an early level is still worth full marks at its own top.
+   */
+  const onPole = clean
+    .map((row, at) => (row[pole] === TILE.POLE ? at : -1))
+    .filter((at) => at >= 0)
+  const poleTop = onPole.length > 0 ? Math.min(...onPole) : 0
+  const poleFoot = onPole.length > 0 ? Math.max(...onPole) + 1 : clean.length - 1
+
+  return { name, rows: clean, spawns, pole, poleTop, poleFoot, warps: pairUp(clean) }
 }
 
 /** The ground under a column, for putting things on top of it. */

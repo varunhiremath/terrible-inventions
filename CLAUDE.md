@@ -63,6 +63,20 @@ These are not preferences. Breaking one defeats the point of the project.
 - The opening pause is not decoration — a level that begins mid-chase is unfair rather
   than exciting.
 
+## The pipes
+
+- **The end of a level is a reward, not a test.** While the flag sequence runs, nothing
+  else moves: no clock, no enemies, no input. A koopa walking into him halfway down the
+  pole would be the meanest death in the app, and a player who caught the top once and
+  died for it would never try for it again.
+- **The flag bands are bands on purpose.** Six of them, topping out at 5000 for the ball
+  itself. A sliding scale that creeps up by eleven for a slightly better jump teaches
+  nothing; a band you can aim at turns the last jump of every level into a decision.
+- **`win` fires exactly once**, at the end of the walk-off, and the fanfare is the
+  longest cue in the app. A status that re-announces itself every frame stacks hundreds
+  of copies of a cue past full scale — this project has fixed that buzz twice already,
+  and `flag.test.ts` counts the event over the whole sequence to keep it fixed.
+
 ## The swarm
 
 - **Two curves, one factor.** A wave's monsters are forty per cent tougher than the last
