@@ -21,8 +21,17 @@ import lengths from '../../public/spoken/index.json'
  * over it — drawn with the game's own code in the game's own colours, which is
  * what the old rule was really protecting against.
  */
+/*
+ * `meadow` and `getaway` are the two in this list that are painted rather
+ * than played, and they are in it anyway: that game is drawn with three.js,
+ * and a cutscene has to run in a terminal with no graphics card. What they
+ * paint is the game's own place in the game's own colours, and the arrow's
+ * flight is flown by the game's own gravity rather than drawn as a curve — so
+ * the one thing a player has to learn from the picture is true. See
+ * `src/archer/emblem.ts`.
+ */
 const LEVELS = ['maze', 'cave', 'dungeon', 'pipes', 'road', 'space', 'deep', 'garden', 'wall', 'flood',
-  'lane', 'oneline', 'throughit', 'joined']
+  'lane', 'oneline', 'throughit', 'joined', 'meadow', 'getaway']
 const CARDS = ['question', 'charms', 'forest']
 
 /**

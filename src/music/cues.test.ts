@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ARCHER_CUES,
   CAVE_CUES,
   CUES,
   DUNGEON_CUES,
@@ -111,6 +112,11 @@ const TICKS: CueName[] = [
   // passes a gate, and a squad of twenty into a row of blocks is three or four
   // of these in the same tenth of a second.
   'pop', 'bigger', 'smaller', 'thud', 'crumple',
+  // And the archer's three: the creak and the twang fire on every single shot,
+  // and an arrow into the grass follows most of them a second later.
+  'creak', 'twang', 'thump',
+  // And a decoy going: somebody spraying arrows pops three in two seconds.
+  'dud',
 ]
 
   it('are short enough to be cues rather than tunes', () => {
@@ -277,7 +283,7 @@ describe('every cue', () => {
      */
     const sets = [
       DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES, GARDEN_CUES,
-      BRICK_CUES, FLOOD_CUES, NOTEBOOK_CUES, MOB_CUES, WIPE_CUES,
+      BRICK_CUES, FLOOD_CUES, NOTEBOOK_CUES, MOB_CUES, ARCHER_CUES, WIPE_CUES,
     ]
     const seen = new Set<string>()
     for (const set of sets) {
@@ -453,6 +459,38 @@ describe('the swarm cues', () => {
     expect(downTo).toBeLessThan(downFrom)
     const [outFrom, outTo] = ends('routed')
     expect(outTo).toBeLessThan(outFrom)
+  })
+})
+
+/**
+ * E flat major — Eb F G Ab Bb C D — which is the meadow's, and the last key
+ * that was going spare.
+ */
+describe('the archer cues', () => {
+  const MAJOR = [3, 5, 7, 8, 10, 0, 2]
+
+  it('stay in E flat major', () => {
+    for (const name of Object.keys(ARCHER_CUES) as CueName[]) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          expect(MAJOR, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain(pitchClass(note.frequency))
+        }
+      }
+    }
+  })
+
+  it('sends a good pop up and a balloon getting away down', () => {
+    const ends = (name: CueName) => {
+      const notes = readPart(CUES[name].parts[0].pattern)
+      return [notes[0].frequency, notes[notes.length - 1].frequency]
+    }
+    const [popFrom, popTo] = ends('burst')
+    expect(popTo).toBeGreaterThan(popFrom)
+    const [goneFrom, goneTo] = ends('away')
+    expect(goneTo).toBeLessThan(goneFrom)
+    const [endFrom, endTo] = ends('outOfArrows')
+    expect(endTo).toBeLessThan(endFrom)
   })
 })
 

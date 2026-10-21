@@ -2036,6 +2036,60 @@ export const SWARM: Track = {
   ],
 }
 
+// --- the meadow --------------------------------------------------------------
+
+/**
+ * The meadow.
+ *
+ * E flat major, like the archer's cues. Slow, open and pastoral: this is the
+ * one game in here where nothing is chasing you, and a driving loop under it
+ * would turn an afternoon in a field into a fight. Mostly held strings with a
+ * plucked line wandering over the top, and no drums at all.
+ */
+const MEADOW_LEAD = [
+  'Bb4 .  .  G4 .  .  Eb4 . ',
+  'F4 .  .  .  G4 .  Ab4 . ',
+  'Bb4 .  .  C5 .  .  Bb4 . ',
+  'G4 .  .  .  .  .  .  . ',
+  'Eb5 .  .  D5 .  .  C5 . ',
+  'Bb4 .  .  .  G4 .  F4 . ',
+  'Ab4 .  .  G4 .  .  F4 . ',
+  'Eb4 .  .  .  .  .  .  . ',
+].join(' ')
+
+const MEADOW_BASS = [
+  'Eb2 .  .  .  Bb2 .  .  . ',
+  'Ab2 .  .  .  Eb3 .  .  . ',
+  'Bb2 .  .  .  F3 .  .  . ',
+  'Eb2 .  .  .  Bb2 .  .  . ',
+  'C3 .  .  .  G3 .  .  . ',
+  'Ab2 .  .  .  Eb3 .  .  . ',
+  'Bb2 .  .  .  F3 .  .  . ',
+  'Eb2 .  .  .  Bb2 .  .  . ',
+].join(' ')
+
+const MEADOW_BED = [
+  'Eb4 .  .  .  .  .  .  . ',
+  'Ab4 .  .  .  .  .  .  . ',
+  'Bb4 .  .  .  .  .  .  . ',
+  'Eb4 .  .  .  .  .  .  . ',
+  'C5 .  .  .  .  .  .  . ',
+  'Ab4 .  .  .  .  .  .  . ',
+  'Bb4 .  .  .  .  .  .  . ',
+  'Eb4 .  .  .  .  .  .  . ',
+].join(' ')
+
+export const MEADOW: Track = {
+  name: 'The Meadow',
+  beatsPerMinute: 92,
+  hotter: 10,
+  parts: [
+    { wave: 'pluck', gain: 0.06, sustain: 0.9, pattern: MEADOW_LEAD },
+    { wave: 'pluck', gain: 0.05, sustain: 0.8, pattern: MEADOW_BASS },
+    { wave: 'strings', gain: 0.032, sustain: 1, chord: [0, 7], pattern: MEADOW_BED },
+  ],
+}
+
 export const TRACKS = {
   chase: CHASE,
   garden: GARDEN,
@@ -2048,6 +2102,7 @@ export const TRACKS = {
   road: ROAD,
   space: SPACE,
   swarm: SWARM,
+  meadow: MEADOW,
 } as const
 export type TrackName = keyof typeof TRACKS
 
@@ -2880,8 +2935,105 @@ export const MOB_CUES = {
   boom: BOOM,
 } as const
 
+// --- and the noises a meadow makes -------------------------------------------
+
+/**
+ * The archer's set, all in E flat major.
+ *
+ * The one key nobody had: the dungeon is D Phrygian dominant, the pipes C
+ * major, space E Phrygian, the caves D minor, the garden G major, the wall D
+ * major, the flood A minor, the notebook A flat and the swarm F. A game that
+ * sounds like the one next door is the quickest way to make eleven games feel
+ * like one game in nine coats of paint.
+ *
+ * Open and soft, because this one is a meadow on a sunny afternoon rather than
+ * a fight: no pulses, mostly plucks and bells, and the two that fire on every
+ * shot are tiny.
+ */
+const CREAK: Track = {
+  name: 'Creak',
+  beatsPerMinute: 300,
+  parts: [{ wave: 'pluck', gain: 0.025, sustain: 0.3, pattern: 'Bb3 Eb4' }],
+}
+
+/** The string going. */
+const TWANG: Track = {
+  name: 'Twang',
+  beatsPerMinute: 270,
+  parts: [
+    { wave: 'pluck', gain: 0.055, sustain: 0.35, pattern: 'Eb4 Bb4' },
+    { wave: 'bell', gain: 0.025, sustain: 0.4, pattern: 'Eb5 .  ' },
+  ],
+}
+
+/** A balloon the round wanted. */
+const POPPED: Track = {
+  name: 'Popped',
+  beatsPerMinute: 240,
+  parts: [
+    { wave: 'bell', gain: 0.06, sustain: 0.6, pattern: 'Bb4 Eb5 G5 ' },
+    { wave: 'pluck', gain: 0.03, sustain: 0.4, pattern: 'Eb4 .   .  ' },
+  ],
+}
+
+/** And one it did not. Lower, shorter, and not a telling-off. */
+const DUD: Track = {
+  name: 'Dud',
+  beatsPerMinute: 260,
+  parts: [{ wave: 'pluck', gain: 0.04, sustain: 0.35, pattern: 'Ab4 F4 ' }],
+}
+
+/** An arrow into the grass. */
+const THUMP: Track = {
+  name: 'Thump',
+  beatsPerMinute: 280,
+  parts: [{ wave: 'pulse', duty: 0.125, gain: 0.03, sustain: 0.2, pattern: 'Eb3 Bb2' }],
+}
+
+/** One got over the trees. */
+const AWAY: Track = {
+  name: 'Away',
+  beatsPerMinute: 140,
+  parts: [
+    { wave: 'pluck', gain: 0.06, sustain: 0.7, pattern: 'G4 F4 Eb4 ' },
+    { wave: 'strings', gain: 0.028, sustain: 1, chord: [0, 7], pattern: 'Eb3 .  .   ' },
+  ],
+}
+
+/** The round done. */
+const QUIVER_DONE: Track = {
+  name: 'Quiver done',
+  beatsPerMinute: 165,
+  parts: [
+    { wave: 'pluck', gain: 0.075, sustain: 0.8, pattern: 'Eb4 G4 Bb4 Eb5 G5 ' },
+    { wave: 'strings', gain: 0.03, sustain: 1, chord: [0, 4, 7], pattern: 'Eb3 .  .   .   .  ' },
+  ],
+}
+
+/** And the end of the run. */
+const OUT_OF_ARROWS: Track = {
+  name: 'Out of arrows',
+  beatsPerMinute: 115,
+  parts: [
+    { wave: 'pluck', gain: 0.07, sustain: 0.85, pattern: 'Eb4 D4 C4 Bb3 Ab3 ' },
+    { wave: 'pulse', duty: 0.25, gain: 0.03, sustain: 0.6, pattern: 'Eb3 .  .  Ab2 .   ' },
+  ],
+}
+
+export const ARCHER_CUES = {
+  creak: CREAK,
+  twang: TWANG,
+  popped: POPPED,
+  dud: DUD,
+  thump: THUMP,
+  away: AWAY,
+  quiverDone: QUIVER_DONE,
+  outOfArrows: OUT_OF_ARROWS,
+} as const
+
 export const CUES = {
   ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES, ...SPACE_CUES,
-  ...GARDEN_CUES, ...BRICK_CUES, ...FLOOD_CUES, ...NOTEBOOK_CUES, ...MOB_CUES, ...WIPE_CUES,
+  ...GARDEN_CUES, ...BRICK_CUES, ...FLOOD_CUES, ...NOTEBOOK_CUES, ...MOB_CUES, ...ARCHER_CUES,
+  ...WIPE_CUES,
 } as const
 export type CueName = keyof typeof CUES

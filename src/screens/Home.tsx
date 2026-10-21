@@ -32,12 +32,13 @@ import {
   CAVE_FLOOR, CAVE_TUNNEL, MAZE_DOTS, MAZE_LANE, MAZE_STRIP, PIPE_GROUND, PIPE_RUN, PIPE_WALK,
 } from '../ui/wipeWorlds'
 import { drawTaste } from '../mob/draw'
+import { drawMeadow } from '../archer/emblem'
 import { fill } from '../config/profile'
 
 /**
  * The front door.
  *
- * Ten games, and nothing else on the screen. The app used to open straight
+ * Eleven games, and nothing else on the screen. The app used to open straight
  * into the maze, which quietly made that one the game and the other three
  * things you had to know were hidden in the settings.
  *
@@ -128,6 +129,22 @@ const TILES: Tile[] = [
         -1, 0, 0.3, MACHINE_INK('#e8503a'),
       )
       ctx.restore()
+    },
+  },
+  {
+    id: 'archer',
+    title: 'The Meadow',
+    blurb: 'Balloons going up, all round you. Pull the bow back and aim high.',
+    tint: '#1b3f63',
+    /*
+     * The only tile not drawn by the game's own code, because the game's own
+     * code is three.js: ten WebGL contexts on the front screen would cost more
+     * than everything else on it put together. So this is the meadow painted
+     * flat — but from the game's own colours and the game's own parts, down to
+     * the bow sitting in the corner of your view where it really sits.
+     */
+    emblem(ctx, w, h) {
+      drawMeadow(ctx, w, h, performance.now() / 1000)
     },
   },
   {
@@ -416,7 +433,7 @@ export function Home() {
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <p className="text-sm text-dim">
-          {fill('{papa}')} built ten terrible machines. Pick one.
+          {fill('{papa}')} built eleven terrible machines. Pick one.
         </p>
         {/* The front screen is the one place it is safe to reload, so this is
             the one place the update takes itself. */}

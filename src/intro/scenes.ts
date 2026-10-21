@@ -73,6 +73,7 @@ import {
   weaponOf as mobGun, type Run as MobRun,
 } from '../mob/run'
 import { drawRun as drawMob } from '../mob/draw'
+import { drawEscape as drawGetaway, drawFlight as drawArrow } from '../archer/emblem'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -1177,6 +1178,25 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     const film = laneFilm()
     const frame = film[Math.min(film.length - 1, Math.floor(clock * 10))]
     drawMob(ctx, frame, { w, h, clock })
+  },
+
+  /**
+   * The meadow: one shot, flown by the game's own arithmetic.
+   *
+   * The only pair of scenes in here that are painted rather than played, and
+   * `src/archer/emblem.ts` says why at length: that game is drawn with three.js
+   * and these have to work on a front-screen thumbnail and in a terminal with
+   * no graphics card. What is not painted is the part that matters — the
+   * arrow's arc is the real one, at the real speed, under the real gravity, so
+   * the lob the cutscene shows is the lob the game will ask for.
+   */
+  meadow({ ctx, w, h, t, clock }) {
+    drawArrow(ctx, w, h, t, clock)
+  },
+
+  /** And one you wanted, getting away over the trees behind you. */
+  getaway({ ctx, w, h, t, clock }) {
+    drawGetaway(ctx, w, h, t, clock)
   },
 
   /**

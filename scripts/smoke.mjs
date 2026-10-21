@@ -142,14 +142,14 @@ await page.goto(URL, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1500)
 
 /*
- * The ten tiles that have to be there. The Dungeon is deliberately not among
+ * The eleven tiles that have to be there. The Dungeon is deliberately not among
  * them any more — it is off the front screen until its bugs are dealt with —
  * and Papa Drowning is called Papa in Trouble now, which this list went on
  * believing for a fortnight because nothing runs it in CI.
  */
 const GAMES = [
-  'Papa Panic', 'The Caves', 'The Swarm', 'The Pipes', 'The Road', 'The Long Way Out',
-  'The Garden', 'The Wall', 'Papa in Trouble', 'The Notebook',
+  'Papa Panic', 'The Meadow', 'The Caves', 'The Swarm', 'The Pipes', 'The Road',
+  'The Long Way Out', 'The Garden', 'The Wall', 'Papa in Trouble', 'The Notebook',
 ]
 const homeText = await page.innerText('body')
 for (const game of GAMES) {
@@ -739,6 +739,68 @@ if (await enter('The Swarm')) {
   }
 }
 
+// --- the meadow: a bow, in three dimensions ---------------------------------
+if (await enter('The Meadow')) {
+  await page.waitForTimeout(1800)
+
+  /*
+   * The one game here that is not drawn on a 2D canvas, which gives it a
+   * failure nothing else has: if WebGL does not start, everything carries on
+   * working and the player is looking at an empty box. So the first thing
+   * asked is whether there is a canvas with anything on it at all.
+   */
+  const meadow = await page.locator('canvas').first().boundingBox()
+  if (!meadow) problems.push('the meadow never came up')
+  else {
+    const lit = await page.evaluate(() => {
+      const canvas = document.querySelector('canvas')
+      if (!canvas) return null
+      const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
+      return gl ? 'yes' : 'no'
+    })
+    if (lit !== 'yes') problems.push(`the meadow has no 3D context (${lit})`)
+
+    const sky = async () => (await page.locator('p.font-mono').allTextContents()).join(' ')
+    const opened = await sky()
+    if (!/round 1\b/i.test(opened)) problems.push('the meadow did not open on round 1')
+    if (!/POP THE/i.test(await page.innerText('body'))) {
+      problems.push('the meadow never says which balloons to pop')
+    }
+
+    /*
+     * Then the control, which is the thing unit tests cannot reach and the
+     * part of this game that is genuinely new: one finger does two jobs, and
+     * which one depends on whether it moved. A drag has to turn you and must
+     * not fire; a finger held still and lifted has to fire.
+     */
+    const spot = (fx, fy) => [meadow.x + meadow.width * fx, meadow.y + meadow.height * fy]
+    for (let i = 0; i < 14; i++) {
+      await page.mouse.move(...spot(0.5, 0.5))
+      await page.mouse.down()
+      await page.mouse.move(...spot(0.2 + (i % 4) * 0.1, 0.42), { steps: 10 })
+      await page.mouse.up()
+      await page.mouse.move(...spot(0.5, 0.6))
+      await page.mouse.down()
+      await page.waitForTimeout(620)
+      await page.mouse.up()
+      await page.waitForTimeout(400)
+    }
+
+    /*
+     * Fourteen arrows loosed in roughly the right half of the sky. Something
+     * has to have happened to the run by now — a score, a balloon popped, or a
+     * life gone — and if nothing has, the finger is not reaching the bow.
+     */
+    const after = await page.innerText('body')
+    const scored = Number((after.match(/\b(\d{6})\b/) ?? [])[1] ?? 0)
+    const got = Number((after.match(/round \d+ · (\d+)\//) ?? [])[1] ?? 0)
+    const lives = (after.match(/●/g) ?? []).length
+    if (scored === 0 && got === 0 && lives >= 3) {
+      problems.push('fourteen arrows in the meadow and nothing changed at all')
+    }
+  }
+}
+
 // --- the notebook -----------------------------------------------------------
 {
   /*
@@ -810,4 +872,4 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, dragged a line out of the flood, held the lane against the swarm, and traced a puzzle')
+console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, dragged a line out of the flood, held the lane against the swarm, loosed arrows over the meadow, and traced a puzzle')

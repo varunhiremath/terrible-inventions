@@ -149,6 +149,13 @@ These are not preferences. Breaking one defeats the point of the project.
   space-separated form; three.js does not, and silently renders white.
 - **A board game uses an orthographic camera.** Perspective makes the far side of a maze
   smaller than the near side, and the grid a player is reasoning about stops being square.
+- **A first-person view is composed for a phone held upright.** Portrait is about forty
+  degrees across and seventy down, so anything held in shot — a bow, a gun — needs
+  placing against the *narrow* axis. The meadow's bow was first put where it would sit
+  in a landscape window and filled the middle of the screen with a brown hoop; canting
+  it by turning the group parented to the camera then swung the whole thing off the
+  side, because that rotates it about your eye rather than about the bow. Tilt the mesh,
+  not the hands.
 - **Characters seen from overhead must be laid flat** (`buildVoxel(..., { flat: true })`).
   An upright sprite is five voxels thick and from above that is all you see.
 

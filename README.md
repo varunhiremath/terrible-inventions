@@ -22,6 +22,7 @@ the money taken out.
 | **Papa Panic** | A maze, a lot of dots, four chasers | Between lives, and in the shop |
 | **The Caves** | Ten caves, a trophy in each, and a jetpack he has not tested | Between lives |
 | **The Swarm** | A bridge, a gate, and a crowd coming over it. You are the soldier holding it | On the bridge. Working out whether a crate fits in the time left *is* the game |
+| **The Meadow** | A bow, a field, and balloons going up all around you. First person, in three dimensions | On the balloons. Each round names a rule and the numbers decide what is worth an arrow |
 | **The Pipes** | Run, jump, stomp, and catch the flagpole as high up as you can | Between lives |
 | **The Road** | Four lanes, six stages, and four of his machines racing you from a standing start | Between lives; a right answer is half a tank and a car back |
 | **The Long Way Out** | Fly to the eight real planets, in order, through what he has left in the way | None. Break things up for scrap, spend it at each world, and every world tells you something true |
@@ -58,6 +59,27 @@ a way through**. A screen with no gap in it is not difficulty, it is a coin toss
 Both games got that wrong first in the same way — a guarantee made when something is
 spawned does not survive anything moving relative to anything else afterwards — and both
 are fixed the same way, by freezing the relative geometry the moment it is laid down.
+
+The meadow is the one game here that is not a 2D canvas. You stand in a field, turn to
+look, and shoot at balloons that come up out of the grass in every direction — which
+makes the hardest thing in it the thing behind you. It is three.js, and it is built out
+of the same nothing as the rest: no models, no textures, no image files, a sky dome with
+the gradient painted into its vertices, hills that are fogged rather than coloured, a
+canvas of blotchy green tiled over the field, and a bow made of half a torus and two
+rods for a string.
+
+Two things in it are worth knowing about. The arrow is real: it leaves at the speed the
+draw gave it, along the line you were looking down, and falls the whole way, so a balloon
+twenty-five metres off has to be shot *above*. Nothing homes and nothing is nudged — the
+forgiveness is all in how big a balloon is, and a test flies a bot at every range to
+prove the arithmetic has not quietly started helping. And a hit is found by asking
+whether the *line the arrow travelled this frame* passed through a balloon rather than
+whether it is inside one now, because at full draw an arrow covers half a metre in a
+frame and a balloon is a metre and a quarter across.
+
+One finger does both jobs: drag and you are looking, hold still and you are pulling the
+string, let go and it flies. There is no fire button, because a fire button on a phone is
+a second thumb over the thing you are aiming at.
 
 The road is a race proper: a staggered grid painted on the tarmac, three red lights, and
 a clock that starts when they go out and does not stop for a crash. The drive that set

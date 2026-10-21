@@ -14,6 +14,7 @@ import { levelFor as keepLevel } from './arcade/dungeon/levels'
 import { newRun as newFlight, step as stepFlight, NO_INPUT as NO_FLY } from './space/run'
 import { newRun as newDrive, step as stepDrive, NO_INPUT as NO_DRIVE } from './road/run'
 import { LOUDEST as MOB, type MobEvent } from './mob/run'
+import { LOUDEST as ARCHER, type ArcherEvent } from './archer/run'
 
 /**
  * Every event a game can raise has a place in the order of importance.
@@ -55,6 +56,13 @@ describe('the order things are heard in', () => {
       'over', 'dropped', 'caught', 'blast',
     ]
     sameSet(MOB, all)
+  })
+
+  it('covers every event the archer can raise, exactly once', () => {
+    const all: ArcherEvent[] = [
+      'draw', 'loose', 'pop', 'wrong', 'thud', 'escape', 'lost', 'cleared', 'over',
+    ]
+    sameSet(ARCHER, all)
   })
 
   it('covers every event the space run can raise, exactly once', () => {

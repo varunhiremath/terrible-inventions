@@ -227,6 +227,29 @@ export const STORIES: Record<string, Story> = {
     ],
   },
 
+  /*
+   * The meadow is the first game here played by looking, so the story spends
+   * most of itself on the two things a first-person game has to teach before
+   * anything else can happen: that there is a world behind you, and that the
+   * arrow falls. The rule about the numbers comes last, because a player who
+   * cannot hit a balloon yet does not care which balloon it was.
+   */
+  archer: {
+    id: 'archer',
+    title: 'THE MEADOW',
+    beats: [
+      { seconds: 4.4, scene: 'meadow', voice: 'narrator', line: 'A meadow, and balloons coming up out of the grass.' },
+      { seconds: 4.2, scene: 'meadow', voice: 'papa', line: 'I blew up every single one of them myself!' },
+      { seconds: 5.2, scene: 'meadow', voice: 'narrator', line: 'Slide a finger to look round. They come up all about you.' },
+      { seconds: 5.0, scene: 'meadow', voice: 'narrator', line: 'Hold to pull the bow back, and let go to shoot.' },
+      { seconds: 5.0, scene: 'meadow', voice: 'narrator', line: 'The longer you hold it, the further the arrow goes.' },
+      { seconds: 5.0, scene: 'meadow', voice: 'narrator', line: 'Arrows drop as they fly. Aim high above a far one.' },
+      { seconds: 5.2, scene: 'meadow', voice: 'narrator', line: 'Each balloon has a number. The sign says which ones to pop.' },
+      { seconds: 5.2, scene: 'getaway', voice: 'narrator', line: 'Let one of those over the trees and it costs you a turn.' },
+      { seconds: 4.0, scene: 'meadow', voice: 'papa', line: 'The grey ones are not worth an arrow.' },
+    ],
+  },
+
   puzzles: {
     id: 'puzzles',
     title: 'THE NOTEBOOK',
@@ -252,4 +275,4 @@ export const STORIES: Record<string, Story> = {
  * so putting the tile back is a one-line change.
  */
 export const STORY_ORDER =
-  ['arcade', 'dave', 'pipes', 'road', 'space', 'snake', 'bricks', 'sums', 'mob', 'puzzles'] as const
+  ['arcade', 'archer', 'dave', 'pipes', 'road', 'space', 'snake', 'bricks', 'sums', 'mob', 'puzzles'] as const

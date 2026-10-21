@@ -10,6 +10,7 @@ import { Bricks } from './screens/Bricks'
 import { Sums } from './screens/Sums'
 import { Puzzles } from './screens/Puzzles'
 import { Mob } from './screens/Mob'
+import { Archer } from './screens/Archer'
 import { Snake } from './screens/Snake'
 import { Space } from './screens/Space'
 import { Workshop } from './screens/Workshop'
@@ -73,6 +74,7 @@ export default function App() {
       : screen === 'sums' ? 'flood'
       : screen === 'puzzles' ? 'notebook'
       : screen === 'mob' ? 'swarm'
+      : screen === 'archer' ? 'meadow'
       // The workshop gets the thinking tune: it is the one screen where
       // somebody is sitting still working something out.
       : screen === 'workshop' ? 'thinking'
@@ -114,6 +116,8 @@ export default function App() {
       return <Puzzles />
     case 'mob':
       return <Mob />
+    case 'archer':
+      return <Archer />
     case 'workshop':
       return <Workshop />
     case 'note':

@@ -412,9 +412,9 @@ export const LIVES = 3
  *
  * It was a rotating cast — Nan, the postman, the vicar — and then the game got
  * its name: it is Papa in there, every time. Which is better. The joke of the
- * whole app is that he built ten terrible machines; the tenth one has him
- * standing in it with the water coming up, being got out by somebody who can
- * do arithmetic faster than he can plumb.
+ * whole app is that every one of these is something he built; this one has
+ * him standing in it with the water coming up, being got out by somebody who
+ * can do arithmetic faster than he can plumb.
  *
  * The variety moved to what he says about it on the way out.
  */
