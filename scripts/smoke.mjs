@@ -770,34 +770,54 @@ if (await enter('The Meadow')) {
     /*
      * Then the control, which is the thing unit tests cannot reach and the
      * part of this game that is genuinely new: one finger does two jobs, and
-     * which one depends on whether it moved. A drag has to turn you and must
-     * not fire; a finger held still and lifted has to fire.
+     * which one it is depends on whether it moved.
+     *
+     * What is checked is that holding still *draws the bow*, by looking at the
+     * picture: a strip of the screen with the nocked arrow in it has to change
+     * while a finger is held down on it. Whether an arrow then hits anything
+     * is not asked here — a balloon is a few degrees across and a script
+     * cannot aim — and is proved properly in `scripts/archer-look.mjs`, which
+     * finds a balloon in the picture and shoots at it.
      */
     const spot = (fx, fy) => [meadow.x + meadow.width * fx, meadow.y + meadow.height * fy]
-    for (let i = 0; i < 14; i++) {
-      await page.mouse.move(...spot(0.5, 0.5))
-      await page.mouse.down()
-      await page.mouse.move(...spot(0.2 + (i % 4) * 0.1, 0.42), { steps: 10 })
-      await page.mouse.up()
-      await page.mouse.move(...spot(0.5, 0.6))
-      await page.mouse.down()
-      await page.waitForTimeout(620)
-      await page.mouse.up()
-      await page.waitForTimeout(400)
+    const bowStrip = {
+      x: meadow.x + meadow.width * 0.42,
+      y: meadow.y + meadow.height * 0.55,
+      width: Math.round(meadow.width * 0.4),
+      height: Math.round(meadow.height * 0.3),
     }
 
+    await page.mouse.move(...spot(0.5, 0.5))
+    await page.waitForTimeout(250)
+    const resting = await page.screenshot({ clip: bowStrip })
+    await page.mouse.down()
+    await page.waitForTimeout(700)
+    const drawn = await page.screenshot({ clip: bowStrip })
+    await page.mouse.up()
+    if (resting.equals(drawn)) problems.push('holding a finger down in the meadow does not draw the bow')
+
     /*
-     * Fourteen arrows loosed in roughly the right half of the sky. Something
-     * has to have happened to the run by now — a score, a balloon popped, or a
-     * life gone — and if nothing has, the finger is not reaching the bow.
+     * And that a drag looks around rather than firing. The view turning is the
+     * whole of the control, and it broke once in a way nothing would have
+     * caught: the test for "has this finger wandered" measured each pointer
+     * event instead of the whole drag, so a slow finger never turned the view
+     * at all and let an arrow go at the end of it.
      */
-    const after = await page.innerText('body')
-    const scored = Number((after.match(/\b(\d{6})\b/) ?? [])[1] ?? 0)
-    const got = Number((after.match(/round \d+ · (\d+)\//) ?? [])[1] ?? 0)
-    const lives = (after.match(/●/g) ?? []).length
-    if (scored === 0 && got === 0 && lives >= 3) {
-      problems.push('fourteen arrows in the meadow and nothing changed at all')
+    const facing = await page.screenshot({ clip: bowStrip })
+    await page.mouse.move(...spot(0.5, 0.5))
+    await page.mouse.down()
+    for (let i = 1; i <= 20; i++) {
+      await page.mouse.move(...spot(0.5 - i * 0.012, 0.5), { steps: 1 })
     }
+    await page.mouse.up()
+    await page.waitForTimeout(400)
+    const turned = await page.screenshot({ clip: bowStrip })
+    if (facing.equals(turned)) problems.push('a slow drag in the meadow does not turn the view')
+
+    // And that the sky keeps filling while all this is going on.
+    const air = (text) => Number(text.match(/(\d+) up there/)?.[1] ?? -1)
+    await page.waitForTimeout(4000)
+    if (air(await sky()) < 0) problems.push('the meadow stopped saying what is in the air')
   }
 }
 

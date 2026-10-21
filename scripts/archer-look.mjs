@@ -101,27 +101,200 @@ await page.waitForTimeout(700)
 await page.screenshot({ path: '/tmp/archer-flight.png' })
 
 /*
- * And then play it for a while: look a little, shoot, look a little, shoot.
- * Twenty shots is enough to hit something by accident even aiming blind, which
- * is what proves the score and the counters are wired to the shooting.
+ * And then play it properly for a while.
+ *
+ * Not to see whether a machine can aim — it cannot, it is firing at the sky on
+ * a pattern — but because over enough arrows even a blind one lands some, and
+ * a score that never moves at all means the finger is not reaching the bow.
+ * That is the one thing in this game no unit test can see: the simulation is
+ * proven by a bot that aims properly, and the screen between the glass and the
+ * simulation is proven only here.
  */
-let shots = 0
-for (let i = 0; i < 20; i++) {
-  const fx = 0.3 + (i % 5) * 0.1
+/*
+ * And then play it properly, by looking.
+ *
+ * Firing at the sky on a pattern proves nothing: a balloon is about seven
+ * degrees across at the range you meet it, and there is a whole sphere of sky
+ * to be wrong in, so forty blind arrows are expected to land about a third of
+ * one. The first two versions of this did exactly that, reported "nothing was
+ * ever hit", and were right for the wrong reason.
+ *
+ * So this one finds a balloon in the picture, works out how far off the middle
+ * of the screen it is, turns that into a drag, aims a little above it for the
+ * drop, and shoots. Which means it is testing the entire chain — a balloon is
+ * drawn where the simulation says it is, a finger moves the view by the amount
+ * it should, and an arrow loosed down the middle of the screen arrives. Any
+ * one of those three being wrong shows up here and nowhere else.
+ */
+const eyes = await browser.newPage()
+
+/** The most colourful thing in the sky, in pixels from the middle. */
+const spot = async () => {
+  const shot = (await page.screenshot({ clip: box })).toString('base64')
+  return eyes.evaluate(async (data) => {
+    const img = new Image()
+    img.src = 'data:image/png;base64,' + data
+    await img.decode()
+    const canvas = document.createElement('canvas')
+    canvas.width = img.width
+    canvas.height = img.height
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const { data: pixels, width, height } = ctx.getImageData(0, 0, img.width, img.height)
+
+    /*
+     * A balloon is a small thing that does not match what is beside it.
+     *
+     * "The most colourful thing in the sky" was the obvious test and it was
+     * wrong: the sky itself is a deep saturated blue at the top of the frame,
+     * so the aim settled on a patch of empty air and stayed there, converging
+     * beautifully onto nothing. Local contrast cannot make that mistake — the
+     * gradient is smooth across twenty pixels and a balloon is not.
+     */
+    const found = []
+    const span = 22
+    /*
+     * The sight and the rule across the top are drawn over the game, not in
+     * it, and a screenshot has them in it. The sight is a white cross in the
+     * exact middle of the picture with as much local contrast as anything in
+     * the sky, so without skipping it this aims at its own crosshair for ever
+     * — which it did, reporting a target nought pixels off, every time.
+     */
+    for (let y = 44; y < height * 0.58; y += 2) {
+      /*
+       * The right of the picture is the bow, and the string down it is a pale
+       * line against the sky with more contrast than any balloon. This looks
+       * at the half of the sky the bow is not in; when there is nothing there
+       * it turns, which is what a player does too.
+       */
+      for (let x = span + 2; x < width * 0.54; x += 2) {
+        if (Math.abs(x - width / 2) < 28 && Math.abs(y - height / 2) < 28) continue
+        const i = (y * width + x) * 4
+        const r = pixels[i]
+        const g = pixels[i + 1]
+        const b = pixels[i + 2]
+        if (g > r + 18 && g > b + 18) continue // grass and trees
+        const off = (at) => {
+          const j = (y * width + at) * 4
+          return Math.abs(r - pixels[j]) + Math.abs(g - pixels[j + 1]) + Math.abs(b - pixels[j + 2])
+        }
+        if (Math.min(off(x - span), off(x + span)) < 55) continue
+        found.push({ x, y })
+      }
+    }
+    if (found.length === 0) return null
+
+    // The one nearest the middle, and then the middle of everything near it,
+    // so the aim is the balloon rather than one pixel of its edge.
+    const cx = width / 2
+    const cy = height / 2
+    found.sort((a, b) =>
+      Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy))
+    const near = found.filter((p) =>
+      Math.hypot(p.x - found[0].x, p.y - found[0].y) < 26)
+    const at = near.reduce((sum, p) => ({ x: sum.x + p.x, y: sum.y + p.y }), { x: 0, y: 0 })
+    return { x: at.x / near.length - cx, y: at.y / near.length - cy, pixels: near.length }
+  }, shot)
+}
+
+/*
+ * Pixels to radians, from the camera the game builds: seventy-two degrees from
+ * top to bottom, and however much that works out to across at this shape of
+ * screen. And radians to a drag, from the one constant the screen turns a
+ * finger with.
+ */
+const TURN = 2.6
+const radDown = (72 * Math.PI) / 180 / box.height
+const radAcross = (2 * Math.atan(Math.tan((72 * Math.PI) / 180 / 2) * (box.width / box.height))) / box.width
+const dragPer = box.width / TURN
+/*
+ * And the few pixels every drag loses at the start of itself. The screen has
+ * to decide whether a finger is looking or pulling the string, and it decides
+ * by whether it has wandered — so the wander is spent before anything turns.
+ * Without putting it back every correction here came up a third short, the aim
+ * settled a couple of degrees under every balloon, and nothing was ever hit.
+ */
+const WANDER = 7
+
+/** Turn the view by a measured offset in pixels, lifted by `up` radians. */
+const aimAt = async (seen, up) => {
+  let dx = seen.x * radAcross * dragPer
+  let dy = (seen.y * radDown - up) * dragPer
+  const far = Math.hypot(dx, dy)
+  if (far > 0.01) {
+    dx += (dx / far) * WANDER
+    dy += (dy / far) * WANDER
+  }
   await page.mouse.move(...at(0.5, 0.5))
   await page.mouse.down()
-  await page.mouse.move(...at(fx, 0.45 + (i % 3) * 0.04), { steps: 12 })
+  await page.mouse.move(box.x + box.width * 0.5 + dx, box.y + box.height * 0.5 + dy, { steps: 10 })
   await page.mouse.up()
-  await page.mouse.move(...at(0.5, 0.6))
+  return { dx, dy }
+}
+// Lift for the drop on the way there and for the balloon rising while the bow
+// is being pulled: about five degrees between them.
+const LIFT = 0.12
+
+// One calibration shot: aim at something and see whether it ended up in the
+// middle. If this number is not near zero, nothing below means anything.
+for (let i = 0; i < 4; i++) {
+  const before = await spot()
+  if (!before) {
+    await page.mouse.move(...at(0.5, 0.5))
+    await page.mouse.down()
+    await page.mouse.move(...at(0.78, 0.5), { steps: 10 })
+    await page.mouse.up()
+    continue
+  }
+  const { dx, dy } = await aimAt(before, 0)
+  await page.waitForTimeout(250)
+  const after = await spot()
+  console.log(`aim: was ${before.x.toFixed(0)},${before.y.toFixed(0)} px off; dragged ${dx.toFixed(0)},${dy.toFixed(0)}; now ${after ? `${after.x.toFixed(0)},${after.y.toFixed(0)}` : 'nothing in view'}`)
+}
+
+let best = 0
+let shots = 0
+let aimed = 0
+for (let i = 0; i < 40; i++) {
+  const again = page.getByRole('button', { name: /Start again/i })
+  if (await again.count()) { await again.first().click(); await page.waitForTimeout(600) }
+
+  const seen = await spot()
+  if (seen === null) {
+    // Nothing in view: turn a fifth of the way round and look again.
+    await page.mouse.move(...at(0.5, 0.5))
+    await page.mouse.down()
+    await page.mouse.move(...at(0.78, 0.5), { steps: 10 })
+    await page.mouse.up()
+    await page.waitForTimeout(300)
+    continue
+  }
+  aimed++
+
+  // Put it in the middle, look again to see how well that went, then lift for
+  // the drop and the rise and let go.
+  await aimAt(seen, 0)
+  await page.waitForTimeout(90)
+  const again2 = await spot()
+  await aimAt(again2 ?? { x: 0, y: 0 }, LIFT)
+  await page.waitForTimeout(90)
+
+  await page.mouse.move(...at(0.5, 0.62))
   await page.mouse.down()
-  await page.waitForTimeout(650)
+  await page.waitForTimeout(620)
   await page.mouse.up()
   shots++
-  await page.waitForTimeout(450)
-  if (i === 9) await page.screenshot({ path: '/tmp/archer-play.png' })
+  await page.waitForTimeout(500)
+  if (i === 4) await page.screenshot({ path: '/tmp/archer-play.png' })
+
+  const now = Number(((await bar()).match(/\b(\d{6})\b/) ?? [])[1] ?? 0)
+  best = Math.max(best, now)
 }
+console.log(`${shots} arrows at something it could see (${aimed} aimed), best score ${best}`)
+if (best === 0) console.log('ARCHER FAILED: aimed at balloons forty times and never hit one')
+await eyes.close()
+
 await page.screenshot({ path: '/tmp/archer-after.png' })
-console.log(`${shots} shots later, bar: ${await bar()}`)
 
 if (problems.length === 0) console.log('ARCHER: nothing thrown')
 else for (const p of problems.slice(0, 8)) console.log(p)

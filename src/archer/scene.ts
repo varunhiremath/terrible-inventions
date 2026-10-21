@@ -21,7 +21,7 @@
  */
 import * as THREE from 'three'
 import { BALLOON_R, EYE, ESCAPE_Y, type Balloon } from './level'
-import type { Burst, Run } from './run'
+import { facing, type Burst, type Run } from './run'
 
 export interface Meadow {
   scene: THREE.Scene
@@ -82,9 +82,9 @@ function buildSky(): THREE.Mesh {
 function buildHills(): THREE.Group {
   const hills = new THREE.Group()
   const rings: { at: number; high: number; ink: string }[] = [
-    { at: 95, high: 16, ink: '#4e7a4a' },
-    { at: 150, high: 30, ink: '#5c8470' },
-    { at: 215, high: 48, ink: '#6f96ac' },
+    { at: 95, high: 16, ink: '#5f8a52' },
+    { at: 150, high: 30, ink: '#6a9279' },
+    { at: 215, high: 48, ink: '#7c9fb4' },
   ]
   for (const [layer, ring] of rings.entries()) {
     const shape = new THREE.BufferGeometry()
@@ -302,25 +302,35 @@ export function buildMeadow(width: number, height: number): Meadow {
   scene.add(sun)
   scene.add(new THREE.HemisphereLight('#cfe3f5', '#486b36', 2.0))
 
-  // The sun itself, so the light has somewhere to come from.
-  const disc = new THREE.Mesh(
-    new THREE.CircleGeometry(9, 24),
-    new THREE.MeshBasicMaterial({ color: '#fff6cf', fog: false }),
-  )
+  /*
+   * The sun itself, so the light has somewhere to come from.
+   *
+   * A soft blob rather than a disc with an edge. Drawn as a flat circle it
+   * came out as a big grey plate hanging in the sky — tone mapping flattens a
+   * pale yellow to very nearly the colour of the sky around it, and all that
+   * was left was the outline.
+   */
+  const sunFace = document.createElement('canvas')
+  sunFace.width = 128
+  sunFace.height = 128
+  const sunCtx = sunFace.getContext('2d')
+  if (sunCtx) {
+    const glow = sunCtx.createRadialGradient(64, 64, 0, 64, 64, 64)
+    glow.addColorStop(0, 'rgba(255,255,245,1)')
+    glow.addColorStop(0.12, 'rgba(255,248,214,0.95)')
+    glow.addColorStop(0.3, 'rgba(255,238,180,0.35)')
+    glow.addColorStop(1, 'rgba(255,236,176,0)')
+    sunCtx.fillStyle = glow
+    sunCtx.fillRect(0, 0, 128, 128)
+  }
+  const sunMap = new THREE.CanvasTexture(sunFace)
+  sunMap.colorSpace = THREE.SRGBColorSpace
+  const disc = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: sunMap, transparent: true, depthWrite: false, fog: false,
+  }))
   disc.position.set(-150, 190, -120)
-  disc.lookAt(0, EYE, 0)
+  disc.scale.setScalar(70)
   scene.add(disc)
-
-  // And the glow around it. Nothing in the sky has a hard edge.
-  const halo = new THREE.Mesh(
-    new THREE.CircleGeometry(34, 28),
-    new THREE.MeshBasicMaterial({
-      color: '#fff1bd', transparent: true, opacity: 0.28, fog: false, depthWrite: false,
-    }),
-  )
-  halo.position.copy(disc.position)
-  halo.lookAt(0, EYE, 0)
-  scene.add(halo)
 
   // --- the ground ----------------------------------------------------------
   /*
@@ -661,14 +671,26 @@ export function buildMeadow(width: number, height: number): Meadow {
   }
 
   // --- putting the run on the screen ----------------------------------------
-  const look = new THREE.Euler(0, 0, 0, 'YXZ')
   const spin = new THREE.Vector3()
   const nock = new THREE.Vector3()
 
   const update = (run: Run, alpha: number, clock: number) => {
     void alpha
-    look.set(run.pitch, run.yaw, 0)
-    camera.quaternion.setFromEuler(look)
+    /*
+     * Pointed by the same function the arrow is pointed by, which is the whole
+     * reason it is a function and not two copies of the same trigonometry.
+     *
+     * It was two copies, and they disagreed: an Euler of (pitch, yaw) turns a
+     * three.js camera the opposite way round from `facing`, so everything
+     * looked right and every arrow loosed while facing anywhere but due north
+     * flew off mirrored. Nothing could be hit and nothing said why — the
+     * balloons were where you saw them and the arrows were honest, they just
+     * did not agree about which way you were looking.
+     */
+    const look = facing(run.yaw, run.pitch)
+    camera.lookAt(
+      camera.position.x + look.x, camera.position.y + look.y, camera.position.z + look.z,
+    )
 
     /*
      * The draw. The nock comes back towards you, the string follows it into a

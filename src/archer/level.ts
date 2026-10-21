@@ -25,8 +25,16 @@ export interface Dice {
   pick<T>(items: readonly T[]): T
 }
 
-/** How many goes you get, before anything the workshop adds. */
-export const LIVES = 3
+/**
+ * How many goes you get, before anything the workshop adds.
+ *
+ * Five rather than the three every other game here gives, because this one
+ * takes a life for something you did not do rather than for something you did:
+ * a balloon you never got round to is gone whether you were looking the wrong
+ * way or simply had two of them up at once. Learning where to aim is worth a
+ * few more goes than learning not to walk into a spike.
+ */
+export const LIVES = 5
 
 /** Where your eyes are, in metres above the grass. */
 export const EYE = 1.6
@@ -42,8 +50,16 @@ export const GRAVITY = 9.8
  * away up the sky.
  */
 export const DRAW_TIME = 0.55
-export const SLOWEST = 28
-export const FASTEST = 52
+/*
+ * Slower than the first go at it, on purpose. At fifty metres a second an
+ * arrow crosses the whole meadow in half a second and falls about a metre, so
+ * the drop was smaller than the balloon and aiming high was something you
+ * could skip. At forty-two it falls two and a half metres over the same
+ * ground, which is the difference between a game about pointing and a game
+ * about judging a lob.
+ */
+export const SLOWEST = 24
+export const FASTEST = 42
 
 export const arrowSpeed = (draw: number): number =>
   SLOWEST + (FASTEST - SLOWEST) * Math.max(0, Math.min(1, draw))
@@ -61,6 +77,23 @@ export const ARROW_RANGE = 90
  */
 export const BALLOON_R = 0.62
 export const ARROW_R = 0.3
+
+/**
+ * How near an arrow has to pass, which grows with the range.
+ *
+ * The error a thumb makes is an *angle*, not a distance: being a degree out
+ * costs twenty centimetres at ten metres and most of a metre at thirty. A
+ * fixed radius therefore makes a far balloon several times harder than a near
+ * one for no reason the player can see, and a probe that aimed at balloons
+ * forty times running and hit none of them was the proof.
+ *
+ * So the forgiveness is about three quarters of a degree of it, added to the
+ * balloon — enough to pay for a thumb, and never enough to pay for a flat shot
+ * at something far off, which still falls short of it. Near shots stay honest; far ones stay possible; and the arrow
+ * itself is unchanged — it still arcs, still falls, and still has to be aimed
+ * above anything worth shooting.
+ */
+export const reachFor = (away: number): number => BALLOON_R + ARROW_R + away * 0.012
 
 /** Where they come up, how fast they climb, and when they are gone for good. */
 export const NEAR = 11
@@ -160,7 +193,12 @@ export const needFor = (round: number): number => 6 + round * 2
 
 /** How long between balloons, and how fast they climb. */
 export const gapFor = (round: number): number => Math.max(0.75, 2.1 - (round - 1) * 0.12)
-export const riseFor = (round: number): number => 1.1 + Math.min(1.6, (round - 1) * 0.12)
+/*
+ * How fast they climb. Gentle to start with: at the first speed this had, a
+ * balloon was over the trees fourteen seconds after it appeared, which is not
+ * long to notice it, turn round and work out whether its number counts.
+ */
+export const riseFor = (round: number): number => 0.85 + Math.min(1.7, (round - 1) * 0.12)
 
 /** Roughly how many of the balloons should be ones you actually want. */
 export const WANTED_SHARE = 0.55

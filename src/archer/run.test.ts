@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ARROW_R, BALLOON_R, DRAW_TIME, ESCAPE_Y, EYE, FAR, GRAVITY, NEAR,
-  arrowSpeed, biggest, fits, needFor, newBalloon, ruleFor, ruleSays,
+  DRAW_TIME, ESCAPE_Y, EYE, FAR, GRAVITY, NEAR,
+  arrowSpeed, biggest, fits, needFor, newBalloon, reachFor, ruleFor, ruleSays,
   type Balloon, type Dice, type Rule,
 } from './level'
 import {
@@ -179,7 +179,9 @@ describe('hitting a balloon', () => {
 
   it('knows a near miss from a hit', () => {
     const at = { x: 0, y: 2, z: -20 }
-    const reach = BALLOON_R + ARROW_R
+    // How near counts, at this balloon's range: the forgiveness is an angle,
+    // so it is not the same number for a near one and a far one.
+    const reach = reachFor(Math.hypot(at.x, at.y - EYE, at.z))
     expect(crosses(0, 2, -14, 0, 2, -26, at), 'straight through').toBe(true)
     expect(crosses(reach * 0.8, 2, -14, reach * 0.8, 2, -26, at), 'clipped it').toBe(true)
     expect(crosses(reach * 1.4, 2, -14, reach * 1.4, 2, -26, at), 'past it').toBe(false)

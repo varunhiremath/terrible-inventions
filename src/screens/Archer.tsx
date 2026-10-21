@@ -64,7 +64,9 @@ export function Archer() {
   const wrapRef = useRef<HTMLDivElement>(null)
   const runRef = useRef<Run | null>(null)
   const aim = useRef({ yaw: 0, pitch: 0.12 })
-  const touch = useRef<{ x: number; y: number; moved: boolean; id: number } | null>(null)
+  const touch = useRef<
+    { x: number; y: number; fromX: number; fromY: number; moved: boolean; id: number } | null
+  >(null)
   const pulling = useRef(false)
   const keys = useRef<Set<string>>(new Set())
   const spare = useRef(0)
@@ -210,7 +212,10 @@ export function Archer() {
 
   const down = (e: React.PointerEvent) => {
     if (asking || hud.status !== 'playing') return
-    touch.current = { x: e.clientX, y: e.clientY, moved: false, id: e.pointerId }
+    touch.current = {
+      x: e.clientX, y: e.clientY, fromX: e.clientX, fromY: e.clientY,
+      moved: false, id: e.pointerId,
+    }
     pulling.current = true
     ;(e.target as Element).setPointerCapture?.(e.pointerId)
   }
@@ -220,7 +225,17 @@ export function Archer() {
     if (!from) return
     const dx = e.clientX - from.x
     const dy = e.clientY - from.y
-    if (!from.moved && Math.hypot(dx, dy) > WANDER) {
+    /*
+     * How far the finger has come from where it went down — not how far it
+     * moved since the last event.
+     *
+     * Measured per event, a slow drag never turned the view at all: a finger
+     * crossing the screen in forty small steps reports seven pixels at a time
+     * and never trips the threshold, so the whole thing counted as holding
+     * still and let an arrow go at the end of it. Only a flick worked, and
+     * nothing on the screen said so.
+     */
+    if (!from.moved && Math.hypot(e.clientX - from.fromX, e.clientY - from.fromY) > WANDER) {
       // It is a look, not a pull. Put the string back without firing.
       from.moved = true
       pulling.current = false

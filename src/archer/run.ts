@@ -23,8 +23,8 @@
  * a real arrow answers.
  */
 import {
-  ARROW_R, ARROW_RANGE, BALLOON_R, DRAW_TIME, ESCAPE_Y, EYE, GRAVITY, LIVES,
-  arrowSpeed, gapFor, needFor, newBalloon, ruleFor,
+  ARROW_RANGE, DRAW_TIME, ESCAPE_Y, EYE, GRAVITY, LIVES,
+  arrowSpeed, gapFor, needFor, newBalloon, reachFor, ruleFor,
   type Arrow, type Balloon, type Dice, type Rule,
 } from './level'
 
@@ -365,7 +365,9 @@ export function crosses(
   const dy = y2 - y1
   const dz = z2 - z1
   const len = dx * dx + dy * dy + dz * dz
-  const reach = BALLOON_R + ARROW_R
+  // How near counts as a hit, which is a shade over a degree and a half at
+  // whatever range this balloon is: see `reachFor`.
+  const reach = reachFor(Math.hypot(at.x, at.y - EYE, at.z))
 
   if (len < 1e-9) {
     return Math.hypot(x1 - at.x, y1 - at.y, z1 - at.z) <= reach
