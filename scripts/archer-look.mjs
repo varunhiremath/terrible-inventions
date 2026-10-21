@@ -143,42 +143,45 @@ const spot = async () => {
     const { data: pixels, width, height } = ctx.getImageData(0, 0, img.width, img.height)
 
     /*
-     * A balloon is a small thing that does not match what is beside it.
+     * Balloons are found by their colour, which is the only thing about them a
+     * script can be sure of.
      *
-     * "The most colourful thing in the sky" was the obvious test and it was
-     * wrong: the sky itself is a deep saturated blue at the top of the frame,
-     * so the aim settled on a patch of empty air and stayed there, converging
-     * beautifully onto nothing. Local contrast cannot make that mistake — the
-     * gradient is smooth across twenty pixels and a balloon is not.
+     * Two cleverer tests came first and both failed in the same way, by
+     * finding something that was not a balloon and converging beautifully onto
+     * it. "The most saturated thing in the sky" aims at the sky, which is a
+     * deep blue at the top of the frame. "The thing that does not match what
+     * is beside it" aims at the sight, the bowstring, and the edge of a cloud.
+     *
+     * So: three of the five colours a wanted balloon can be, matched on the
+     * ratio between the channels rather than the values, because a balloon in
+     * shade is the same colour and darker. Three and not five, because in that
+     * ratio the pale blue one is the sky and the mint one is a sunlit hill —
+     * which is how this found a hillside fourteen pixels across and shot at
+     * it. Pink, yellow and lilac are nothing else in the meadow.
      */
+    const WANTED = [[1.00, 0.37, 0.48], [1.00, 0.82, 0.40], [0.76, 0.56, 1.00]]
     const found = []
-    const span = 22
-    /*
-     * The sight and the rule across the top are drawn over the game, not in
-     * it, and a screenshot has them in it. The sight is a white cross in the
-     * exact middle of the picture with as much local contrast as anything in
-     * the sky, so without skipping it this aims at its own crosshair for ever
-     * — which it did, reporting a target nought pixels off, every time.
-     */
     for (let y = 44; y < height * 0.58; y += 2) {
       /*
-       * The right of the picture is the bow, and the string down it is a pale
-       * line against the sky with more contrast than any balloon. This looks
-       * at the half of the sky the bow is not in; when there is nothing there
-       * it turns, which is what a player does too.
+       * And only the half of the sky the bow is not in. A sunlit bow limb is
+       * tan, and tan in these ratios is the yellow balloon — so this spent a
+       * dozen arrows shooting at its own bow.
        */
-      for (let x = span + 2; x < width * 0.54; x += 2) {
-        if (Math.abs(x - width / 2) < 28 && Math.abs(y - height / 2) < 28) continue
+      for (let x = 4; x < width * 0.52; x += 2) {
         const i = (y * width + x) * 4
         const r = pixels[i]
         const g = pixels[i + 1]
         const b = pixels[i + 2]
-        if (g > r + 18 && g > b + 18) continue // grass and trees
-        const off = (at) => {
-          const j = (y * width + at) * 4
-          return Math.abs(r - pixels[j]) + Math.abs(g - pixels[j + 1]) + Math.abs(b - pixels[j + 2])
+        const top = Math.max(r, g, b)
+        if (top < 110) continue
+        const nr = r / top
+        const ng = g / top
+        const nb = b / top
+        let near = false
+        for (const [wr, wg, wb] of WANTED) {
+          if (Math.abs(nr - wr) + Math.abs(ng - wg) + Math.abs(nb - wb) < 0.26) near = true
         }
-        if (Math.min(off(x - span), off(x + span)) < 55) continue
+        if (!near) continue
         found.push({ x, y })
       }
     }
@@ -192,8 +195,17 @@ const spot = async () => {
       Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy))
     const near = found.filter((p) =>
       Math.hypot(p.x - found[0].x, p.y - found[0].y) < 26)
+    // A couple of stray pixels is a tree edge catching the light, not a
+    // balloon forty feet up.
+    if (near.length < 8) return null
     const at = near.reduce((sum, p) => ({ x: sum.x + p.x, y: sum.y + p.y }), { x: 0, y: 0 })
-    return { x: at.x / near.length - cx, y: at.y / near.length - cy, pixels: near.length }
+    const mx = Math.round(at.x / near.length)
+    const my = Math.round(at.y / near.length)
+    const j = (my * width + mx) * 4
+    return {
+      x: mx - cx, y: my - cy, pixels: near.length,
+      ink: `${pixels[j]},${pixels[j + 1]},${pixels[j + 2]}`, at: `${mx},${my}`,
+    }
   }, shot)
 }
 
@@ -255,9 +267,14 @@ for (let i = 0; i < 4; i++) {
 let best = 0
 let shots = 0
 let aimed = 0
-for (let i = 0; i < 40; i++) {
+let restarts = 0
+for (let i = 0; i < 90; i++) {
   const again = page.getByRole('button', { name: /Start again/i })
-  if (await again.count()) { await again.first().click(); await page.waitForTimeout(600) }
+  if (await again.count()) {
+    restarts++
+    await again.first().click()
+    await page.waitForTimeout(700)
+  }
 
   const seen = await spot()
   if (seen === null) {
@@ -270,13 +287,26 @@ for (let i = 0; i < 40; i++) {
     continue
   }
   aimed++
+  if (i < 6) console.log(`saw ${seen.pixels}px of ${seen.ink} at ${seen.at} (${seen.x.toFixed(0)},${seen.y.toFixed(0)} off)`)
 
-  // Put it in the middle, look again to see how well that went, then lift for
-  // the drop and the rise and let go.
+  /*
+   * Put it in the middle, then lift for the drop and the climb and let go.
+   *
+   * The lift is a second drag rather than part of the first because the
+   * correction is measured from the picture and the lift is not. And nothing
+   * is re-measured in between on purpose: the sight sits in the middle of the
+   * screen and has to be skipped when reading the picture, so a balloon that
+   * has just been aimed at is in the one place this cannot see. Looking again
+   * found something else and turned away from the balloon it had just lined
+   * up, every time.
+   *
+   * A single correction leaves about an eighth of the error behind — the
+   * first few pixels of every drag are spent deciding it is a drag — so the
+   * lift carries that much of it again.
+   */
   await aimAt(seen, 0)
   await page.waitForTimeout(90)
-  const again2 = await spot()
-  await aimAt(again2 ?? { x: 0, y: 0 }, LIFT)
+  await aimAt({ x: seen.x * 0.13, y: seen.y * 0.13 }, LIFT)
   await page.waitForTimeout(90)
 
   await page.mouse.move(...at(0.5, 0.62))
@@ -287,11 +317,20 @@ for (let i = 0; i < 40; i++) {
   await page.waitForTimeout(500)
   if (i === 4) await page.screenshot({ path: '/tmp/archer-play.png' })
 
-  const now = Number(((await bar()).match(/\b(\d{6})\b/) ?? [])[1] ?? 0)
+  const line = await bar()
+  const now = Number((line.match(/\b(\d{6})\b/) ?? [])[1] ?? 0)
   best = Math.max(best, now)
+  if (aimed <= 8) console.log(`  after: ${line.replace(/\s+/g, ' ').slice(0, 86)}`)
+  /*
+   * One hit is the whole question. This is not trying to be good at the game —
+   * it loses its lives to balloons it never saw, because it only looks at half
+   * the sky and only knows three of the five colours — it is only here to show
+   * that an arrow aimed down the middle of the screen arrives.
+   */
+  if (best > 0) break
 }
-console.log(`${shots} arrows at something it could see (${aimed} aimed), best score ${best}`)
-if (best === 0) console.log('ARCHER FAILED: aimed at balloons forty times and never hit one')
+console.log(`${shots} arrows at something it could see (${aimed} aimed, ${restarts} restarts), best score ${best}`)
+if (best === 0) console.log('ARCHER FAILED: looked for balloons ninety times and never hit one')
 await eyes.close()
 
 await page.screenshot({ path: '/tmp/archer-after.png' })
