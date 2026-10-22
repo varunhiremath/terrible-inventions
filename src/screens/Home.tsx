@@ -158,12 +158,28 @@ const TILES: Tile[] = [
      * and blue trousers, and the brick is the caves' own brick.
      */
     emblem(ctx, w, h) {
+      /*
+       * Sized to fill the tile rather than to fit inside it.
+       *
+       * Fitting is the obvious thing and it was right while a tile was a wide
+       * strip. On a tall one it left a third of the tile as bare brown
+       * backing above and below a letterboxed cave, which is the one tile on
+       * the shelf that looked broken. Filling crops a couple of columns off
+       * the side of the passage instead, and nobody can tell.
+       */
       const cols = 11
-      const size = Math.min(w / cols, h / CAVE_TUNNEL.rows.length)
+      const size = Math.max(w / cols, h / CAVE_TUNNEL.rows.length)
       const view = { camera: 14, size, clock: 0 }
       const band = size * CAVE_TUNNEL.rows.length
+      /*
+       * And cropped around Dave rather than around the middle of the cave. A
+       * tile of this game with him not in it is a tile of some bricks, which
+       * is what a phone on its side was getting: the band it kept was the roof
+       * of the passage.
+       */
+      const onHim = h / 2 - (CAVE_FLOOR - 0.5) * size
       ctx.save()
-      ctx.translate(0, (h - band) / 2)
+      ctx.translate(0, Math.max(h - band, Math.min(0, onHim)))
       ctx.beginPath()
       ctx.rect(0, 0, w, band)
       ctx.clip()
@@ -433,7 +449,7 @@ export function Home() {
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <p className="text-sm text-dim">
-          {fill('{papa}')} built eleven terrible machines. Pick one.
+          {fill('{papa}')} built eleven terrible machines. Swipe and pick one.
         </p>
         {/* The front screen is the one place it is safe to reload, so this is
             the one place the update takes itself. */}
@@ -441,22 +457,42 @@ export function Home() {
       </div>
 
       {/*
-        * Six tiles, all the same size.
+        * The shelf: every game the same size, scrolled sideways.
         *
-        * It was two rows of two with six games in it, so the grid grew a third
-        * row that the row heights knew nothing about and the last tiles came
-        * out shorter than the rest. Rows are declared now: two across and
-        * three down held upright, three across and two down on a screen with
-        * no height to spare.
+        * This was a grid of two columns and three declared rows, which was
+        * right for the six games there were when it was written. At eleven it
+        * was wrong in a way that is easy to miss in code and impossible to
+        * miss on a phone: the rows were declared and the tiles were not, so
+        * everything after the sixth fell into rows the grid had never been
+        * told about, sized itself from its own contents, and came out shorter
+        * than the ones above it. The front screen looked like a list of
+        * mistakes.
+        *
+        * So the rows are the thing that is fixed now — two of them, always —
+        * and the games run off to the right for as long as there are games.
+        * The column width is a share of the screen rather than a share of the
+        * list, which is what makes every tile the same size no matter how many
+        * there are, and what means the twelfth game will cost nothing but
+        * itself.
+        *
+        * It snaps, so a swipe lands on a column rather than halfway across
+        * one, and the next column is always half in view, because a shelf that
+        * ends exactly at the edge of the screen looks like the end of the
+        * shelf.
         */}
-      <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-3 gap-3 short:grid-cols-3 short:grid-rows-2">
+      <div
+        className="shelf grid min-h-0 flex-1 snap-x snap-mandatory grid-flow-col grid-rows-2
+                   auto-cols-[44%] gap-3 overflow-x-auto overflow-y-hidden overscroll-x-contain
+                   scroll-px-1 sm:auto-cols-[31%]"
+      >
         {TILES.map((tile) => (
           <button
             key={tile.id}
             type="button"
             onClick={() => go(tile.id)}
             style={{ backgroundColor: tile.tint }}
-            className="block-btn flex min-h-0 flex-col justify-between overflow-hidden p-0 text-left"
+            className="block-btn flex min-h-0 snap-start flex-col justify-between overflow-hidden
+                       p-0 text-left"
           >
             <div className="min-h-0 flex-1 overflow-hidden">
               <Emblem tile={tile} />
@@ -465,7 +501,15 @@ export function Home() {
               <p className="font-mono text-xs font-bold uppercase tracking-wider text-chalk sm:text-sm">
                 {tile.title}
               </p>
-              <p className="mt-0.5 hidden text-xs leading-snug text-dim sm:block">{tile.blurb}</p>
+              {/*
+                * The blurb needs width to be worth reading and height to be
+                * worth the room. A phone on its side has the first and not the
+                * second: the caption took two thirds of a tile and left the
+                * picture of the game as a strip along the top.
+                */}
+              <p className="mt-0.5 hidden text-xs leading-snug text-dim sm:block short:hidden">
+                {tile.blurb}
+              </p>
             </div>
           </button>
         ))}

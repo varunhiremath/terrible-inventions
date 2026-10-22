@@ -139,6 +139,23 @@ These are not preferences. Breaking one defeats the point of the project.
   build that was still unplayable, because nothing told the player they existed. The
   smoke test asserts the on-screen pad is present and drives the game; keep it.
 
+## Layout
+
+- **Never declare a row count that encodes how many things there are.** The front
+  screen was `grid-cols-2 grid-rows-3`, which was exactly right for the six games it was
+  written for and quietly wrong at eleven: the extra tiles fell into rows the grid had
+  never been told about, sized themselves from their own contents, and came out shorter
+  than the ones above. Nothing failed and nothing was logged. Fix the shape of a cell
+  and let the list run off the edge — the front screen is a shelf of two fixed rows with
+  columns that are a share of the *screen*, so the twelfth game costs nothing but itself.
+- **A layout only breaks at a size, so check it at sizes.** `scripts/shelf-look.mjs`
+  measures every tile at phone, small phone, sideways and tablet; the smoke test
+  measures them too, because "they all look the same size" is not something to take
+  anyone's word for.
+- **A tile emblem fills its tile, and crops around the thing it is of.** Fitting the
+  drawing inside leaves bare backing when the tile changes shape, and cropping to the
+  middle of a level can leave a picture of the ceiling.
+
 ## Rendering
 
 - Characters are procedural sprites extruded into voxels. A new character costs a seed.

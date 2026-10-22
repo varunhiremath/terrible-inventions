@@ -156,6 +156,41 @@ for (const game of GAMES) {
   if (!new RegExp(game, 'i').test(homeText)) problems.push(`${game} is not on the front screen`)
 }
 /*
+ * And they are all the same size, and all of them can be got to.
+ *
+ * The front screen is a shelf that scrolls sideways, and the way it broke
+ * before was silent: a grid with its rows declared and its tiles not, so the
+ * games past the sixth sized themselves from their own contents and came out
+ * short. Nothing failed, nothing was logged, and it looked like a list of
+ * mistakes. Measuring the boxes is the only way to catch that.
+ */
+{
+  const tiles = page.locator('.shelf button')
+  const count = await tiles.count()
+  const boxes = []
+  for (let i = 0; i < count; i++) boxes.push(await tiles.nth(i).boundingBox())
+  const spread = (of) => {
+    const ns = boxes.map(of)
+    return Math.max(...ns) - Math.min(...ns)
+  }
+  if (count !== GAMES.length) problems.push(`the shelf holds ${count} tiles, not ${GAMES.length}`)
+  // A pixel of rounding is nobody's problem; a tile a different size is.
+  else if (spread((b) => b.width) > 2 || spread((b) => b.height) > 2) {
+    problems.push(
+      `the tiles are not all one size: ${Math.round(spread((b) => b.width))}px of width and ` +
+      `${Math.round(spread((b) => b.height))}px of height between the biggest and the smallest`,
+    )
+  }
+  const reach = await page.locator('.shelf').evaluate((el) => ({
+    seen: el.clientWidth, all: el.scrollWidth, last: el.scrollLeft,
+  }))
+  if (reach.all <= reach.seen + 4) {
+    problems.push('the shelf does not scroll, so the games past the edge cannot be reached')
+  }
+  void reach.last
+}
+
+/*
  * The workshop is allowed on the front screen; a gate is not.
  *
  * This used to forbid the word "shop" outright, from the days when maths

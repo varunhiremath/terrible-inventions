@@ -40,6 +40,28 @@
   }
 
   /*
+   * A shelf: tiles of one size, scrolled sideways.
+   *
+   * The front screen used to be a fixed grid, which worked while there were
+   * six games and quietly stopped working at eleven: the rows were declared
+   * and the tiles were not, so everything past the sixth landed in rows the
+   * layout knew nothing about and came out a different size from the rest.
+   *
+   * Two rows that never change, columns running off to the right, and every
+   * tile exactly the same shape. The next column is deliberately half in
+   * view — a row that ends cleanly at the edge of the screen looks like the
+   * end of the row.
+   */
+  .shelf {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .shelf::-webkit-scrollbar {
+    display: none;
+  }
+
+  /*
    * The question card.
    *
    * Everything here is motion the eye reads as one thing arriving rather than
