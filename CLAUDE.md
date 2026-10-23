@@ -152,6 +152,17 @@ These are not preferences. Breaking one defeats the point of the project.
   measures every tile at phone, small phone, sideways and tablet; the smoke test
   measures them too, because "they all look the same size" is not something to take
   anyone's word for.
+- **Something that moves too fast to photograph gets a bench page.** A scripted
+  browser takes about a third of a second to take a picture and an arrow crosses the
+  meadow in half of one, so three attempts to catch one side-on caught the frame after
+  it had gone. `meadow.html` puts real arrows at real distances in the real scene with
+  the clock stopped; that is how the streak behind them was found to be pointing the
+  wrong way.
+- **Something seen at twenty metres is not drawn at the size it really is.** A real
+  arrow is eight millimetres across, which at that range is two thirds of a pixel. The
+  ones in the air are four times life size and the one on the string is not, and the
+  thickness ramps up over the first few metres so that a shot does not start as a plank
+  across the screen. Nobody can see the join at forty-two metres a second.
 - **A tile emblem fills its tile, and crops around the thing it is of.** Fitting the
   drawing inside leaves bare backing when the tile changes shape, and cropping to the
   middle of a level can leave a picture of the ceiling.

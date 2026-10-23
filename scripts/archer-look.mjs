@@ -95,10 +95,35 @@ await page.mouse.down()
 await page.waitForTimeout(600)
 await page.screenshot({ path: '/tmp/archer-draw.png' })
 await page.mouse.up()
-await page.waitForTimeout(150)
-await page.screenshot({ path: '/tmp/archer-loose.png' })
-await page.waitForTimeout(700)
-await page.screenshot({ path: '/tmp/archer-flight.png' })
+
+/*
+ * And then follow the arrow out, which is a question of its own: can it be
+ * seen at the range it is being shot at? A burst of pictures as fast as they
+ * can be taken, because "it looks fine" usually means the one frame where it
+ * is a metre away and the size of a plank.
+ */
+const flightFrom = Date.now()
+for (let i = 0; i < 6; i++) {
+  await page.screenshot({ path: `/tmp/archer-flight-${i}.png` })
+  console.log(`  flight ${i}: ${Date.now() - flightFrom}ms out, about ` +
+    `${Math.round(((Date.now() - flightFrom) / 1000) * 42)}m`)
+}
+/*
+ * And one more shot watched from the side, by turning away as it goes. Dead
+ * astern an arrow is a dot coming at the horizon however thick it is; it is
+ * from the side that the streak behind it has to look like a streak and point
+ * the right way.
+ */
+await page.mouse.move(...at(0.5, 0.6))
+await page.mouse.down()
+await page.waitForTimeout(620)
+await page.mouse.up()
+await page.mouse.move(...at(0.5, 0.5))
+await page.mouse.down()
+await page.mouse.move(...at(0.64, 0.5), { steps: 4 })
+await page.mouse.up()
+for (let i = 0; i < 3; i++) await page.screenshot({ path: `/tmp/archer-sideon-${i}.png` })
+await page.waitForTimeout(600)
 
 /*
  * And then play it properly for a while.
@@ -161,7 +186,11 @@ const spot = async () => {
      */
     const WANTED = [[1.00, 0.37, 0.48], [1.00, 0.82, 0.40], [0.76, 0.56, 1.00]]
     const found = []
-    for (let y = 44; y < height * 0.58; y += 2) {
+    // Down to below the horizon, because a balloon that has only just come up
+    // is against the grass rather than against the sky — and the colours it
+    // is looking for are nothing like grass, so there is no need to stop at
+    // the skyline.
+    for (let y = 44; y < height * 0.72; y += 2) {
       /*
        * And only the half of the sky the bow is not in. A sunlit bow limb is
        * tan, and tan in these ratios is the yellow balloon — so this spent a
@@ -268,7 +297,7 @@ let best = 0
 let shots = 0
 let aimed = 0
 let restarts = 0
-for (let i = 0; i < 90; i++) {
+for (let i = 0; i < 120; i++) {
   const again = page.getByRole('button', { name: /Start again/i })
   if (await again.count()) {
     restarts++
@@ -330,7 +359,7 @@ for (let i = 0; i < 90; i++) {
   if (best > 0) break
 }
 console.log(`${shots} arrows at something it could see (${aimed} aimed, ${restarts} restarts), best score ${best}`)
-if (best === 0) console.log('ARCHER FAILED: looked for balloons ninety times and never hit one')
+if (best === 0) console.log('ARCHER FAILED: looked for balloons a hundred and twenty times and never hit one')
 await eyes.close()
 
 await page.screenshot({ path: '/tmp/archer-after.png' })

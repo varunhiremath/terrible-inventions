@@ -509,38 +509,126 @@ export function buildMeadow(width: number, height: number): Meadow {
   }
 
   // --- arrows ---------------------------------------------------------------
-  const shaft = new THREE.CylinderGeometry(0.012, 0.012, 1.0, 6)
-  shaft.rotateX(Math.PI / 2)
-  const head = new THREE.ConeGeometry(0.024, 0.11, 6)
-  head.rotateX(Math.PI / 2)
-  head.translate(0, 0, 0.55)
   /*
-   * Flights, at the size flights are. These began as a hand's-breadth square
-   * and the nocked arrow put a maroon flag across a third of the screen — the
-   * sort of thing that is obvious the moment you look and invisible until you
-   * do.
+   * An arrow, in two sizes, and the reason there are two.
+   *
+   * A real arrow is eight millimetres across. On the string that is right in
+   * front of your eye and looks like an arrow; twenty metres out it is two
+   * thirds of one pixel, which is not something anybody can follow. The whole
+   * game is watching where a shot went and aiming the next one higher, so an
+   * arrow you lose sight of the moment it leaves is a game that cannot be
+   * learned.
+   *
+   * So the one on the string is the real thing and the ones in the air are
+   * about four times as thick, with a bright head, bright flights, and enough
+   * polish to catch the sun. Nobody sees the two side by side: a loosed arrow
+   * is ten metres away before the next frame is drawn.
    */
-  const fletch = new THREE.PlaneGeometry(0.045, 0.14)
-  fletch.rotateX(Math.PI / 2)
-  fletch.translate(0, 0, -0.4)
-  const arrowShapes = new Map<number, THREE.Group>()
+  const arrowBits = (thick: number, long: number) => {
+    const shaft = new THREE.CylinderGeometry(0.012 * thick, 0.012 * thick, long, 8)
+    shaft.rotateX(Math.PI / 2)
+    const head = new THREE.ConeGeometry(0.024 * thick, 0.11 * Math.sqrt(thick), 8)
+    head.rotateX(Math.PI / 2)
+    head.translate(0, 0, long * 0.55)
+    /*
+     * Flights, at the size flights are — on the string, anyway. These began as
+     * a hand's-breadth square and the nocked arrow put a maroon flag across a
+     * third of the screen, the sort of thing that is obvious the moment you
+     * look and invisible until you do.
+     */
+    const fletch = new THREE.PlaneGeometry(0.045 * thick, 0.14 * Math.sqrt(thick))
+    fletch.rotateX(Math.PI / 2)
+    fletch.translate(0, 0, -long * 0.4)
+    return { shaft, head, fletch }
+  }
 
-  const makeArrow = (): THREE.Group => {
+  const NOCKED = arrowBits(1, 1)
+  const FLYING = arrowBits(4.2, 1.1)
+
+  /*
+   * The streak behind a flying one.
+   *
+   * Thickness alone is not enough: a bright speck crossing a bright sky is
+   * still a speck, and what the eye actually follows is a line. Two crossed
+   * ribbons a metre and a half long, fading out behind, give it one from any
+   * angle — at twenty metres that is a finger's width of warm colour against
+   * the blue instead of a dot. It is the arrow's own amber rather than white,
+   * because white disappears into the sky it is meant to show up against.
+   */
+  const streakFace = document.createElement('canvas')
+  streakFace.width = 8
+  streakFace.height = 64
+  const streakCtx = streakFace.getContext('2d')
+  if (streakCtx) {
+    /*
+     * Brightest at the arrow and fading away behind it — which means brightest
+     * at the *top* of this canvas, because a texture's first row is the far
+     * end of the ribbon once it has been turned to lie along the flight. Drawn
+     * the way round it reads on the page, the streak comes out glowing at the
+     * tail and vanishing at the arrowhead, like something being sucked
+     * backwards.
+     */
+    const fade = streakCtx.createLinearGradient(0, 0, 0, 64)
+    fade.addColorStop(0, 'rgba(255,224,164,0.85)')
+    fade.addColorStop(0.25, 'rgba(255,190,96,0.55)')
+    fade.addColorStop(1, 'rgba(255,176,72,0)')
+    streakCtx.fillStyle = fade
+    streakCtx.fillRect(0, 0, 8, 64)
+  }
+  const streakMap = new THREE.CanvasTexture(streakFace)
+  streakMap.colorSpace = THREE.SRGBColorSpace
+  const STREAK = 1.6
+  const streakGeometry = new THREE.PlaneGeometry(0.1, STREAK)
+  streakGeometry.rotateX(Math.PI / 2)
+  streakGeometry.translate(0, 0, -STREAK / 2)
+
+  const arrowShapes = new Map<number, { group: THREE.Group; streak: THREE.Group }>()
+
+  const makeArrow = (flying: boolean): { group: THREE.Group; streak: THREE.Group } => {
+    const bits = flying ? FLYING : NOCKED
     const group = new THREE.Group()
-    group.add(new THREE.Mesh(shaft, new THREE.MeshLambertMaterial({ color: '#c8a269' })))
-    group.add(new THREE.Mesh(head, new THREE.MeshPhongMaterial({
-      color: '#9aa3ad', shininess: 90, specular: '#ffffff',
+    group.add(new THREE.Mesh(bits.shaft, new THREE.MeshPhongMaterial({
+      // Polished rather than matt, so it turns over in the light on the way
+      // out and is not one flat stick against one flat sky.
+      color: flying ? '#e8b35c' : '#c8a269',
+      shininess: flying ? 70 : 20,
+      specular: '#fff3d0',
+      emissive: flying ? new THREE.Color('#e8b35c').multiplyScalar(0.22) : new THREE.Color(0x000000),
     })))
-    for (const turn of [0, Math.PI / 2]) {
-      const vane = new THREE.Mesh(
-        fletch,
-        new THREE.MeshLambertMaterial({ color: '#e05c5c', side: THREE.DoubleSide }),
-      )
+    group.add(new THREE.Mesh(bits.head, new THREE.MeshPhongMaterial({
+      color: flying ? '#e6edf6' : '#9aa3ad',
+      shininess: 120,
+      specular: '#ffffff',
+      emissive: flying ? new THREE.Color('#aebccf').multiplyScalar(0.3) : new THREE.Color(0x000000),
+    })))
+    // Three vanes on a flying one, two on the nocked: a third costs two
+    // triangles and means there is always one turned towards you.
+    for (const turn of flying ? [0, Math.PI / 3, (Math.PI * 2) / 3] : [0, Math.PI / 2]) {
+      const vane = new THREE.Mesh(bits.fletch, new THREE.MeshPhongMaterial({
+        color: flying ? '#ff6b3d' : '#e05c5c',
+        side: THREE.DoubleSide,
+        shininess: 40,
+        emissive: flying ? new THREE.Color('#ff6b3d').multiplyScalar(0.3) : new THREE.Color(0x000000),
+      }))
       vane.rotation.z = turn
       group.add(vane)
     }
+
+    const streak = new THREE.Group()
+    if (flying) {
+      for (const turn of [0, Math.PI / 2]) {
+        const ribbon = new THREE.Mesh(streakGeometry, new THREE.MeshBasicMaterial({
+          map: streakMap, transparent: true, depthWrite: false, fog: false,
+          side: THREE.DoubleSide,
+        }))
+        ribbon.rotation.z = turn
+        streak.add(ribbon)
+      }
+      group.add(streak)
+    }
+
     scene.add(group)
-    return group
+    return { group, streak }
   }
 
   // --- the bow, in your hands ----------------------------------------------
@@ -628,7 +716,7 @@ export function buildMeadow(width: number, height: number): Meadow {
     return rod
   })
 
-  const nocked = makeArrow()
+  const nocked = makeArrow(false).group
   scene.remove(nocked)
   hands.add(nocked)
   nocked.scale.setScalar(0.85)
@@ -740,20 +828,40 @@ export function buildMeadow(width: number, height: number): Meadow {
       flying.add(arrow.id)
       let shape = arrowShapes.get(arrow.id)
       if (!shape) {
-        shape = makeArrow()
+        shape = makeArrow(true)
         arrowShapes.set(arrow.id, shape)
       }
-      shape.position.set(arrow.x, arrow.y, arrow.z)
+      shape.group.position.set(arrow.x, arrow.y, arrow.z)
       // Pointing the way it is going, which for a falling arrow means nose
       // down by the end — the clearest sign in the game that gravity is real.
       spin.set(arrow.vx, arrow.vy, arrow.vz)
       if (spin.lengthSq() > 0.001) {
-        shape.lookAt(arrow.x + spin.x, arrow.y + spin.y, arrow.z + spin.z)
+        shape.group.lookAt(arrow.x + spin.x, arrow.y + spin.y, arrow.z + spin.z)
       }
+      /*
+       * The streak grows over the first few hundredths of a second and goes
+       * out the moment the arrow stops. Without the first, every shot starts
+       * with a metre and a half of smear across your own bow; without the
+       * second, an arrow stuck in the grass trails one behind it for ever.
+       */
+      shape.streak.visible = !arrow.stuck
+      const out = Math.min(1, arrow.age / 0.05)
+      shape.streak.scale.set(1, 1, out)
+      /*
+       * And it comes up to its full thickness over the first few metres. A
+       * flying arrow is four times life size so that it can still be seen at
+       * twenty-five metres; at arm's length that same arrow is a plank across
+       * the screen, and the frame or two just after a shot is at arm's length.
+       * It is slim where it would be huge and fat where it would be a speck,
+       * which is the whole trick and is invisible at forty-two metres a
+       * second.
+       */
+      const fat = 0.3 + 0.7 * Math.min(1, arrow.age / 0.07)
+      shape.group.scale.set(fat, fat, 1)
     }
     for (const [id, shape] of arrowShapes) {
       if (flying.has(id)) continue
-      scene.remove(shape)
+      scene.remove(shape.group)
       arrowShapes.delete(id)
     }
 

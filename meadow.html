@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>The arrow</title>
+<style>body{margin:0;background:#0b1020;font:13px ui-monospace,monospace;color:#e8ebf5}
+canvas{display:block;width:100%;height:100vh}</style>
+<canvas id="c"></canvas>
+<script type="module">
+  /*
+   * An arrow, held still, so it can actually be looked at.
+   *
+   * Everything else about this game can be judged from a screenshot of it
+   * being played. The arrow cannot: it crosses the whole meadow in half a
+   * second, and a browser being driven by a script takes a third of one to
+   * take a picture — so every attempt to photograph a shot from the side
+   * caught the frame after it had gone. Three goes at that was enough.
+   *
+   * So this puts real arrows at real distances in the real scene, with the
+   * clock stopped, and looks at them side-on. It is the only way to see
+   * whether the streak points the way it should, and how big an arrow is at
+   * the range it is being shot at.
+   */
+  import * as THREE from 'three'
+  import { buildMeadow } from '/src/archer/scene.ts'
+  import { newRun } from '/src/archer/run.ts'
+
+  const canvas = document.getElementById('c')
+  const renderer = new THREE.WebGLRenderer({ antialias: true, canvas })
+  renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1))
+  renderer.toneMapping = THREE.ACESFilmicToneMapping
+  renderer.toneMappingExposure = 1.05
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+
+  const meadow = buildMeadow(innerWidth, innerHeight)
+
+  // Three arrows crossing in front of you, left to right, at the near, middle
+  // and far end of the range balloons turn up at.
+  const SPEED = 42
+  const arrows = [8, 16, 26].map((away, i) => ({
+    id: i + 1,
+    x: (i - 1) * 3.2,
+    y: 2.6 + i * 1.4,
+    z: -away,
+    vx: SPEED, vy: 0, vz: 0,
+    age: 1,
+    stuck: false,
+  }))
+
+  const base = newRun(1)
+  const run = { ...base, yaw: 0, pitch: 0.16, draw: 0.6, arrows, bursts: [] }
+
+  function frame(now) {
+    const dpr = Math.min(2, devicePixelRatio || 1)
+    if (canvas.width !== innerWidth * dpr) {
+      renderer.setSize(innerWidth, innerHeight, false)
+      meadow.resize(innerWidth, innerHeight)
+    }
+    meadow.update(run, 0, now / 1000)
+    renderer.render(meadow.scene, meadow.camera)
+    requestAnimationFrame(frame)
+  }
+  requestAnimationFrame(frame)
+</script>
