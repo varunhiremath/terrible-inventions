@@ -15,6 +15,7 @@ import { newRun as newFlight, step as stepFlight, NO_INPUT as NO_FLY } from './s
 import { newRun as newDrive, step as stepDrive, NO_INPUT as NO_DRIVE } from './road/run'
 import { LOUDEST as MOB, type MobEvent } from './mob/run'
 import { LOUDEST as ARCHER, type ArcherEvent } from './archer/run'
+import { LOUDEST as OUTPOST, type OutpostEvent } from './outpost/run'
 
 /**
  * Every event a game can raise has a place in the order of importance.
@@ -63,6 +64,14 @@ describe('the order things are heard in', () => {
       'draw', 'loose', 'pop', 'wrong', 'thud', 'escape', 'lost', 'cleared', 'over',
     ]
     sameSet(ARCHER, all)
+  })
+
+  it('covers every event the outpost can raise, exactly once', () => {
+    const all: OutpostEvent[] = [
+      'fire', 'hit', 'down', 'bolt', 'hurt', 'spotted',
+      'pick', 'refused', 'open', 'done', 'over',
+    ]
+    sameSet(OUTPOST, all)
   })
 
   it('covers every event the space run can raise, exactly once', () => {

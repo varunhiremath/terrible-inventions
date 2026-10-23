@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ARCHER_CUES,
+  ARCHER_CUES, OUTPOST_CUES,
   CAVE_CUES,
   CUES,
   DUNGEON_CUES,
@@ -115,6 +115,10 @@ const TICKS: CueName[] = [
   // And the archer's three: the creak and the twang fire on every single shot,
   // and an arrow into the grass follows most of them a second later.
   'creak', 'twang', 'thump',
+  // And the outpost's three. The rifle goes four times a second with the
+  // trigger held, every shot that lands rings, and a machine that has seen you
+  // fires about as often as you do.
+  'rifle', 'spang', 'sizzle',
   // And a decoy going: somebody spraying arrows pops three in two seconds.
   'dud',
 ]
@@ -283,7 +287,7 @@ describe('every cue', () => {
      */
     const sets = [
       DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES, GARDEN_CUES,
-      BRICK_CUES, FLOOD_CUES, NOTEBOOK_CUES, MOB_CUES, ARCHER_CUES, WIPE_CUES,
+      BRICK_CUES, FLOOD_CUES, NOTEBOOK_CUES, MOB_CUES, ARCHER_CUES, OUTPOST_CUES, WIPE_CUES,
     ]
     const seen = new Set<string>()
     for (const set of sets) {
@@ -491,6 +495,47 @@ describe('the archer cues', () => {
     expect(goneTo).toBeLessThan(goneFrom)
     const [endFrom, endTo] = ends('outOfArrows')
     expect(endTo).toBeLessThan(endFrom)
+  })
+})
+
+/**
+ * The outpost's cues are held to D minor — the first minor key in the app, for
+ * the only game in it that happens at night with something hunting you. One
+ * stray note is the easiest way to make a whole set sound wrong while every
+ * cue in it still sounds fine on its own.
+ */
+describe('the outpost cues', () => {
+  const MINOR = [2, 4, 5, 7, 9, 10, 0]
+
+  it('stays in D minor, bar the one that is meant to be a relief', () => {
+    for (const name of Object.keys(OUTPOST_CUES) as CueName[]) {
+      // The chopper is allowed its major third: the whole mission has been in
+      // the minor and that is the one moment that is not.
+      if (name === 'liftOff') continue
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          expect(MINOR, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain(pitchClass(note.frequency))
+        }
+      }
+    }
+  })
+
+  it('sends being seen up and being hit down', () => {
+    const ends = (name: CueName) => {
+      const notes = readPart(CUES[name].parts[0].pattern)
+      return [notes[0].frequency, notes[notes.length - 1].frequency]
+    }
+    const [seenFrom, seenTo] = ends('seen')
+    expect(seenTo, 'an alarm goes up').toBeGreaterThan(seenFrom)
+    const [hurtFrom, hurtTo] = ends('winded')
+    expect(hurtTo, 'a knock goes down').toBeLessThan(hurtFrom)
+    const [downFrom, downTo] = ends('toppled')
+    expect(downTo, 'and so does something falling over').toBeLessThan(downFrom)
+    const [outFrom, outTo] = ends('missionOver')
+    expect(outTo).toBeLessThan(outFrom)
+    const [upFrom, upTo] = ends('liftOff')
+    expect(upTo, 'and going home goes up').toBeGreaterThan(upFrom)
   })
 })
 

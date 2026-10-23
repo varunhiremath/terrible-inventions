@@ -1,0 +1,113 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>The outpost</title>
+<style>body{margin:0;background:#0b1020;font:13px ui-monospace,monospace;color:#e8ebf5}
+canvas{display:block;width:100%;height:100vh}</style>
+<canvas id="c"></canvas>
+<script type="module">
+  /*
+   * The compound, stood still and looked at.
+   *
+   * Same reason as the meadow's bench page: a mission is a thing that happens
+   * to you at four metres a second in the dark, and judging how it looks from
+   * screenshots of it being played means judging whichever frame the script
+   * managed to catch. This puts the camera where you want it, with the clock
+   * stopped, and lets the compound be looked at properly.
+   *
+   * ?seed= and ?mission= choose the map; ?at= chooses the vantage point:
+   * drop (where you land), yard (the middle), cage (the thing you came for).
+   */
+  import * as THREE from 'three'
+  import { buildOutpost } from '/src/outpost/scene.ts'
+  import { newRun } from '/src/outpost/run.ts'
+  import { middleOf } from '/src/outpost/level.ts'
+
+  const q = new URLSearchParams(location.search)
+  const run = newRun(Number(q.get('mission') ?? 2), 5, 0, Number(q.get('seed') ?? 3))
+
+  const canvas = document.getElementById('c')
+  const renderer = new THREE.WebGLRenderer({ antialias: true, canvas })
+  renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1))
+  renderer.toneMapping = THREE.ACESFilmicToneMapping
+  renderer.toneMappingExposure = 1.3
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+
+  const world = buildOutpost(run, innerWidth, innerHeight)
+
+  const cage = middleOf(run.map.cage)
+  const pad = middleOf(run.map.pad)
+
+  /*
+   * A place to stand, found rather than guessed.
+   *
+   * The vantage points here were worked out with arithmetic on the cage's
+   * position and two of the three put the camera inside a building — half the
+   * screen filled with the inside of a wall. The map says where the floor is;
+   * ask it.
+   */
+  function standNear(spot, want) {
+    let best = null
+    for (let y = 1; y < run.map.tall - 1; y++) {
+      for (let x = 1; x < run.map.wide - 1; x++) {
+        if (run.map.cells[y * run.map.wide + x] !== 'floor') continue
+        const where = middleOf({ x, y })
+        const far = Math.hypot(where.x - spot.x, where.z - spot.z)
+        const off = Math.abs(far - want)
+        if (!best || off < best.off) best = { off, x: where.x, z: where.z }
+      }
+    }
+    return {
+      x: best.x, z: best.z,
+      yaw: Math.atan2(spot.x - best.x, -(spot.z - best.z)),
+      pitch: 0,
+    }
+  }
+
+  const mid = standNear(
+    middleOf({ x: Math.floor(run.map.wide / 2), y: Math.floor(run.map.tall / 2) }), 2,
+  )
+  const spots = {
+    drop: { x: pad.x, z: pad.z, yaw: Math.atan2(cage.x - pad.x, -(cage.z - pad.z)), pitch: 0.04 },
+    yard: { ...mid, yaw: 2.2 },
+    cage: standNear(cage, 11),
+  }
+  const spot = spots[q.get('at') ?? 'drop']
+
+  // A machine or two put where they can be seen, and a fuse on the floor, so
+  // the things the game is made of are in the picture rather than wherever the
+  // generator happened to scatter them.
+  const ahead = { x: spot.x + Math.sin(spot.yaw) * 9, z: spot.z - Math.cos(spot.yaw) * 9 }
+  run.machines[0] = { ...run.machines[0], x: ahead.x, z: ahead.z, facing: spot.yaw + Math.PI, alert: 1 }
+  if (run.machines[1]) {
+    run.machines[1] = {
+      ...run.machines[1],
+      x: spot.x + Math.sin(spot.yaw + 0.5) * 16,
+      z: spot.z - Math.cos(spot.yaw + 0.5) * 16,
+      facing: spot.yaw + Math.PI + 0.6, alert: 0,
+    }
+  }
+  run.fuses = [{
+    id: 9001, x: spot.x + Math.sin(spot.yaw - 0.3) * 5, z: spot.z - Math.cos(spot.yaw - 0.3) * 5,
+    number: 7, age: 0, cool: 0,
+  }]
+  run.bolts = [{
+    id: 9002, x: ahead.x, y: 1.1, z: ahead.z,
+    vx: Math.sin(spot.yaw + Math.PI) * 17, vy: 0, vz: -Math.cos(spot.yaw + Math.PI) * 17, age: 0,
+  }]
+  run.x = spot.x
+  run.z = spot.z
+  run.yaw = spot.yaw
+  run.pitch = spot.pitch
+
+  function frame(now) {
+    const dpr = Math.min(2, devicePixelRatio || 1)
+    if (canvas.width !== innerWidth * dpr) {
+      renderer.setSize(innerWidth, innerHeight, false)
+      world.resize(innerWidth, innerHeight)
+    }
+    world.update(run, now / 1000)
+    renderer.render(world.scene, world.camera)
+    requestAnimationFrame(frame)
+  }
+  requestAnimationFrame(frame)
+</script>

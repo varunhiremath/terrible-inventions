@@ -142,13 +142,13 @@ await page.goto(URL, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1500)
 
 /*
- * The eleven tiles that have to be there. The Dungeon is deliberately not among
+ * The twelve tiles that have to be there. The Dungeon is deliberately not among
  * them any more — it is off the front screen until its bugs are dealt with —
  * and Papa Drowning is called Papa in Trouble now, which this list went on
  * believing for a fortnight because nothing runs it in CI.
  */
 const GAMES = [
-  'Papa Panic', 'The Meadow', 'The Caves', 'The Swarm', 'The Pipes', 'The Road',
+  'Papa Panic', 'The Meadow', 'The Caves', 'The Outpost', 'The Swarm', 'The Pipes', 'The Road',
   'The Long Way Out', 'The Garden', 'The Wall', 'Papa in Trouble', 'The Notebook',
 ]
 const homeText = await page.innerText('body')
@@ -856,6 +856,62 @@ if (await enter('The Meadow')) {
   }
 }
 
+// --- the outpost: two thumbs, in the dark ----------------------------------
+if (await enter('The Outpost')) {
+  await page.waitForTimeout(2000)
+
+  const yard = await page.locator('div.relative.min-h-0').first().boundingBox()
+  if (!yard) problems.push('the outpost never came up')
+  else {
+    // The same failure the meadow has and nothing else does: if WebGL does not
+    // start, everything carries on working and the player is looking at a box.
+    const lit = await page.evaluate(() => {
+      const canvas = document.querySelector('canvas')
+      if (!canvas) return null
+      return (canvas.getContext('webgl2') ?? canvas.getContext('webgl')) ? 'yes' : 'no'
+    })
+    if (lit !== 'yes') problems.push(`the outpost has no 3D context (${lit})`)
+
+    const hud = async () =>
+      (await page.locator('p.font-mono, span.font-mono').allTextContents()).join(' ')
+    const said = await hud()
+    if (!/mission 1\b/i.test(said)) problems.push('the outpost did not open on mission 1')
+    if (!/CAGE NEEDS \d+/i.test(said)) problems.push('the outpost never says what the cage wants')
+
+    /*
+     * And then the two thumbs, which are the whole of what is new here and the
+     * part no unit test can reach. The stick has to walk you — measured off
+     * the distance to the cage, which is the one number on the screen that
+     * says where you are standing — and a drag has to turn you.
+     */
+    const spot = (fx, fy) => [yard.x + yard.width * fx, yard.y + yard.height * fy]
+    const away = async () => Number(((await hud()).match(/(\d+)m/) ?? [])[1] ?? -1)
+
+    const before = await away()
+    await page.mouse.move(...spot(0.2, 0.75))
+    await page.mouse.down()
+    await page.mouse.move(...spot(0.2, 0.58), { steps: 6 })
+    await page.waitForTimeout(2200)
+    await page.mouse.up()
+    const after = await away()
+    if (before < 0) problems.push('the outpost does not say how far off the cage is')
+    else if (Math.abs(after - before) < 2) {
+      problems.push(`the outpost's stick moved you ${Math.abs(after - before)}m in two seconds`)
+    }
+
+    const facing = await page.screenshot({ clip: yard })
+    await page.mouse.move(...spot(0.75, 0.45))
+    await page.mouse.down()
+    for (let i = 1; i <= 16; i++) {
+      await page.mouse.move(...spot(0.75 - i * 0.02, 0.45), { steps: 1 })
+    }
+    await page.mouse.up()
+    await page.waitForTimeout(400)
+    const turned = await page.screenshot({ clip: yard })
+    if (facing.equals(turned)) problems.push('a slow drag in the outpost does not turn the view')
+  }
+}
+
 // --- the notebook -----------------------------------------------------------
 {
   /*
@@ -927,4 +983,5 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, dragged a line out of the flood, held the lane against the swarm, loosed arrows over the meadow, and traced a puzzle')
+console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, dragged a line out of the flood, held the lane against the swarm, loosed arrows over the meadow, walked into the outpost, and \
+traced a puzzle')

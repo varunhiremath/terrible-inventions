@@ -250,6 +250,28 @@ export const STORIES: Record<string, Story> = {
     ],
   },
 
+  /*
+   * The outpost's story has one more job than the others: it is the first game
+   * here you walk around in, and a player who does not know that the left
+   * thumb moves them will stand in the drop zone turning on the spot. So the
+   * controls get a beat of their own, early, before anything about fuses.
+   */
+  outpost: {
+    id: 'outpost',
+    title: 'THE OUTPOST',
+    beats: [
+      { seconds: 4.6, scene: 'yard', voice: 'narrator', line: 'A compound in the dark. {papa} built this one too.' },
+      { seconds: 4.0, scene: 'yard', voice: 'papa', line: 'Nobody gets in and nobody gets out!' },
+      { seconds: 4.4, scene: 'yard', voice: 'narrator', line: 'Your nan is locked in the middle of it.' },
+      { seconds: 5.2, scene: 'yard', voice: 'narrator', line: 'Left thumb to walk. Drag to look. The button fires.' },
+      { seconds: 5.0, scene: 'yard', voice: 'narrator', line: 'Every machine carries a fuse with a number on it.' },
+      { seconds: 5.2, scene: 'yard', voice: 'narrator', line: 'The cage wants a total. Two fuses that make it.' },
+      { seconds: 5.0, scene: 'yard', voice: 'narrator', line: 'It says what you still need. Go and find that one.' },
+      { seconds: 5.0, scene: 'homeward', voice: 'narrator', line: 'Then walk her back to the chopper. She follows you.' },
+      { seconds: 3.8, scene: 'yard', voice: 'papa', line: 'Mind the big ones. They do not walk about.' },
+    ],
+  },
+
   puzzles: {
     id: 'puzzles',
     title: 'THE NOTEBOOK',
@@ -275,4 +297,7 @@ export const STORIES: Record<string, Story> = {
  * so putting the tile back is a one-line change.
  */
 export const STORY_ORDER =
-  ['arcade', 'archer', 'dave', 'pipes', 'road', 'space', 'snake', 'bricks', 'sums', 'mob', 'puzzles'] as const
+  [
+    'arcade', 'archer', 'dave', 'outpost', 'pipes', 'road', 'space', 'snake', 'bricks', 'sums',
+    'mob', 'puzzles',
+  ] as const

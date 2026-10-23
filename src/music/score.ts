@@ -2090,8 +2090,62 @@ export const MEADOW: Track = {
   ],
 }
 
+
+/*
+ * The outpost, at night.
+ *
+ * D minor, slow, and mostly held notes rather than a tune — a mission is spent
+ * listening for something behind you, and a melody you can hum is a melody
+ * covering it up. The bass walks, because the one thing the music is for here
+ * is keeping your feet moving.
+ */
+const OUTPOST_LEAD = [
+  'D4 .  .  .  .  .  A3 . ',
+  'F4 .  .  .  .  .  .  . ',
+  'E4 .  .  .  .  .  C4 . ',
+  'D4 .  .  .  .  .  .  . ',
+  'A4 .  .  .  G4 .  F4 . ',
+  'E4 .  .  .  .  .  .  . ',
+  'F4 .  .  E4 .  .  D4 . ',
+  'D4 .  .  .  .  .  .  . ',
+].join(' ')
+
+const OUTPOST_BASS = [
+  'D2 .  A2 .  D2 .  F2 . ',
+  'D2 .  A2 .  D2 .  F2 . ',
+  'C2 .  G2 .  C2 .  E2 . ',
+  'D2 .  A2 .  D2 .  F2 . ',
+  'Bb2 . F2 .  Bb2 . D2 . ',
+  'C2 .  G2 .  C2 .  E2 . ',
+  'D2 .  A2 .  D2 .  F2 . ',
+  'A2 .  E2 .  A2 .  C2 . ',
+].join(' ')
+
+const OUTPOST_BED = [
+  'D3 .  .  .  .  .  .  . ',
+  'D3 .  .  .  .  .  .  . ',
+  'C3 .  .  .  .  .  .  . ',
+  'D3 .  .  .  .  .  .  . ',
+  'Bb2 . .  .  .  .  .  . ',
+  'C3 .  .  .  .  .  .  . ',
+  'D3 .  .  .  .  .  .  . ',
+  'A2 .  .  .  .  .  .  . ',
+].join(' ')
+
+export const OUTPOST: Track = {
+  name: 'The Outpost',
+  beatsPerMinute: 84,
+  hotter: 12,
+  parts: [
+    { wave: 'pluck', gain: 0.05, sustain: 1, pattern: OUTPOST_LEAD },
+    { wave: 'pluck', gain: 0.055, sustain: 0.6, pattern: OUTPOST_BASS },
+    { wave: 'strings', gain: 0.034, sustain: 1, chord: [0, 7], pattern: OUTPOST_BED },
+  ],
+}
+
 export const TRACKS = {
   chase: CHASE,
+  outpost: OUTPOST,
   garden: GARDEN,
   wall: WALL,
   flood: FLOOD,
@@ -3031,9 +3085,145 @@ export const ARCHER_CUES = {
   outOfArrows: OUT_OF_ARROWS,
 } as const
 
+
+/*
+ * The outpost's noises, in D minor.
+ *
+ * A key of its own, like every other game here, and a minor one for the first
+ * time in a while — this is the only game in the app that happens at night and
+ * the only one where something is hunting you. The whole set is built out of
+ * D, F and A, which is a plain minor triad, so the gun, the hit and the alarm
+ * are all obviously the same compound talking.
+ *
+ * Nothing in here is harsh. A nine-year-old is holding the phone and the thing
+ * shooting back at him is a machine with a lamp for a face: the alarm is two
+ * notes going up rather than a klaxon, and being hit is a low thump rather
+ * than a scream.
+ */
+
+/** The rifle. Fires four times a second, so it is barely a sound at all. */
+const RIFLE: Track = {
+  name: 'Rifle',
+  beatsPerMinute: 340,
+  parts: [{ wave: 'pluck', gain: 0.045, sustain: 0.18, pattern: 'D3 A3 ' }],
+}
+
+/** A shot landing on something. The one piece of good news in a fight. */
+const SPANG: Track = {
+  name: 'Spang',
+  beatsPerMinute: 320,
+  parts: [{ wave: 'bell', gain: 0.04, sustain: 0.25, pattern: 'A5 D6 ' }],
+}
+
+/** A machine going over. */
+const TOPPLED: Track = {
+  name: 'Toppled',
+  beatsPerMinute: 200,
+  parts: [
+    { wave: 'pluck', gain: 0.06, sustain: 0.5, pattern: 'D5 A4 F4 D4 ' },
+    { wave: 'strings', gain: 0.028, sustain: 0.8, chord: [0, 7], pattern: 'D3 .  .  .  ' },
+  ],
+}
+
+/** One of theirs, coming the other way. */
+const SIZZLE: Track = {
+  name: 'Sizzle',
+  beatsPerMinute: 330,
+  parts: [{ wave: 'pluck', gain: 0.04, sustain: 0.2, pattern: 'A3 F3 ' }],
+}
+
+/** And one of theirs arriving. Low, short, and not a telling-off. */
+const WINDED: Track = {
+  name: 'Winded',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'pluck', gain: 0.07, sustain: 0.6, pattern: 'F3 D3 ' },
+    { wave: 'strings', gain: 0.03, sustain: 0.9, chord: [0, 7], pattern: 'D2 .  ' },
+  ],
+}
+
+/**
+ * Being seen, which is the most important noise in the game.
+ *
+ * Two notes going up, quick, and then out of the way: it has to be heard over
+ * whatever else is happening and it has to be over before you have had time to
+ * react to it, because reacting to it is the next two seconds of your life.
+ */
+const SEEN: Track = {
+  name: 'Seen',
+  beatsPerMinute: 230,
+  parts: [
+    { wave: 'bell', gain: 0.055, sustain: 0.4, pattern: 'A4 D5 A4 D5 ' },
+  ],
+}
+
+/** A fuse off the floor. */
+const FUSE: Track = {
+  name: 'Fuse',
+  beatsPerMinute: 260,
+  parts: [{ wave: 'bell', gain: 0.05, sustain: 0.45, pattern: 'D5 F5 A5 ' }],
+}
+
+/** The door saying no. Not a buzzer: a latch not turning. */
+const LOCKED: Track = {
+  name: 'Locked',
+  beatsPerMinute: 155,
+  parts: [{ wave: 'pluck', gain: 0.045, sustain: 0.4, pattern: 'E3 D3 ' }],
+}
+
+/** And the door going. */
+const UNLOCKED: Track = {
+  name: 'Unlocked',
+  beatsPerMinute: 190,
+  parts: [
+    { wave: 'bell', gain: 0.07, sustain: 0.7, pattern: 'D4 F4 A4 D5 ' },
+    { wave: 'strings', gain: 0.03, sustain: 1, chord: [0, 7], pattern: 'D3 .  .  .  ' },
+  ],
+}
+
+/**
+ * The chopper leaving with both of you on it.
+ *
+ * The one cue in this set that is allowed to be major: the whole mission has
+ * been in D minor and this is the one moment that is not, which is older than
+ * any of us and still works.
+ */
+const LIFT_OFF: Track = {
+  name: 'Lift off',
+  beatsPerMinute: 160,
+  parts: [
+    { wave: 'bell', gain: 0.08, sustain: 0.9, pattern: 'D4 F4 A4 D5 F5 A5 D6 ' },
+    { wave: 'strings', gain: 0.032, sustain: 1, chord: [0, 7], pattern: 'D3 .  .  .  .  .  .  ' },
+  ],
+}
+
+/** And the end of a run. */
+const MISSION_OVER: Track = {
+  name: 'Mission over',
+  beatsPerMinute: 120,
+  parts: [
+    { wave: 'pluck', gain: 0.07, sustain: 0.85, pattern: 'D4 C4 Bb3 A3 F3 ' },
+    { wave: 'strings', gain: 0.03, sustain: 1, chord: [0, 7], pattern: 'D2 .  .  .  .  ' },
+  ],
+}
+
+export const OUTPOST_CUES = {
+  rifle: RIFLE,
+  spang: SPANG,
+  toppled: TOPPLED,
+  sizzle: SIZZLE,
+  winded: WINDED,
+  seen: SEEN,
+  fuse: FUSE,
+  locked: LOCKED,
+  unlocked: UNLOCKED,
+  liftOff: LIFT_OFF,
+  missionOver: MISSION_OVER,
+} as const
+
 export const CUES = {
   ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES, ...SPACE_CUES,
   ...GARDEN_CUES, ...BRICK_CUES, ...FLOOD_CUES, ...NOTEBOOK_CUES, ...MOB_CUES, ...ARCHER_CUES,
-  ...WIPE_CUES,
+  ...OUTPOST_CUES, ...WIPE_CUES,
 } as const
 export type CueName = keyof typeof CUES

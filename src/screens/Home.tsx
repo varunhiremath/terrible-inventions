@@ -33,12 +33,13 @@ import {
 } from '../ui/wipeWorlds'
 import { drawTaste } from '../mob/draw'
 import { drawMeadow } from '../archer/emblem'
+import { drawCompound } from '../outpost/emblem'
 import { fill } from '../config/profile'
 
 /**
  * The front door.
  *
- * Eleven games, and nothing else on the screen. The app used to open straight
+ * Twelve games, and nothing else on the screen. The app used to open straight
  * into the maze, which quietly made that one the game and the other three
  * things you had to know were hidden in the settings.
  *
@@ -208,6 +209,22 @@ const TILES: Tile[] = [
      */
     emblem(ctx, w, h) {
       drawTaste(ctx, w, h, performance.now() / 1000)
+    },
+  },
+  {
+    id: 'outpost',
+    title: 'The Outpost',
+    blurb: 'Night, a walled compound, and somebody locked in it.',
+    tint: '#111a2c',
+    /*
+     * Painted rather than played, for the same reason the meadow's is: that
+     * game is three.js and a tile is a thumbnail. What is in the picture is
+     * what is in the compound — the wall, a lamp, the lit cage with her in it,
+     * a machine with its eye up and the number it is carrying, a fuse on the
+     * floor and the rifle in the corner of your eye.
+     */
+    emblem(ctx, w, h) {
+      drawCompound(ctx, w, h, performance.now() / 1000)
     },
   },
   {
@@ -449,7 +466,7 @@ export function Home() {
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <p className="text-sm text-dim">
-          {fill('{papa}')} built eleven terrible machines. Swipe and pick one.
+          {fill('{papa}')} built twelve terrible machines. Swipe and pick one.
         </p>
         {/* The front screen is the one place it is safe to reload, so this is
             the one place the update takes itself. */}

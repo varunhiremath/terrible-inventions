@@ -74,6 +74,7 @@ import {
 } from '../mob/run'
 import { drawRun as drawMob } from '../mob/draw'
 import { drawEscape as drawGetaway, drawFlight as drawArrow } from '../archer/emblem'
+import { drawHomeward, drawYard } from '../outpost/emblem'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -1197,6 +1198,23 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
   /** And one you wanted, getting away over the trees behind you. */
   getaway({ ctx, w, h, t, clock }) {
     drawGetaway(ctx, w, h, t, clock)
+  },
+
+  /**
+   * The compound: a machine coming at you and the cage lit up behind it.
+   *
+   * Painted, like the meadow's two and for the same reason — that game is
+   * three.js, and a cutscene has to draw in a terminal with no graphics card.
+   * What is in the picture is what is in the compound: the wall, the lamps,
+   * the numbers on the machines, the number on the cage.
+   */
+  yard({ ctx, w, h, t, clock }) {
+    drawYard(ctx, w, h, t, clock)
+  },
+
+  /** And the way out: the cage open, her behind you, the pad ahead. */
+  homeward({ ctx, w, h, t, clock }) {
+    drawHomeward(ctx, w, h, t, clock)
   },
 
   /**

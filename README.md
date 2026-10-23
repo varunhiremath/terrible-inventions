@@ -23,6 +23,7 @@ the money taken out.
 | **The Caves** | Ten caves, a trophy in each, and a jetpack he has not tested | Between lives |
 | **The Swarm** | A bridge, a gate, and a crowd coming over it. You are the soldier holding it | On the bridge. Working out whether a crate fits in the time left *is* the game |
 | **The Meadow** | A bow, a field, and balloons going up all around you. First person, in three dimensions | On the balloons. Each round names a rule and the numbers decide what is worth an arrow |
+| **The Outpost** | Night, a walled compound, a soldier and somebody locked in the middle of it | On the lock. Every machine carries a numbered fuse and the cage wants a total |
 | **The Pipes** | Run, jump, stomp, and catch the flagpole as high up as you can | Between lives |
 | **The Road** | Four lanes, six stages, and four of his machines racing you from a standing start | Between lives; a right answer is half a tank and a car back |
 | **The Long Way Out** | Fly to the eight real planets, in order, through what he has left in the way | None. Break things up for scrap, spend it at each world, and every world tells you something true |
@@ -80,6 +81,39 @@ frame and a balloon is a metre and a quarter across.
 One finger does both jobs: drag and you are looking, hold still and you are pulling the
 string, let go and it flies. There is no fire button, because a fire button on a phone is
 a second thumb over the thing you are aiming at.
+
+The outpost is the other three-dimensional one, and the first game here you can walk
+around in. You are dropped into a walled compound at night with somebody's nan locked in
+a cage at the far end of it, and you have to shoot your way to her and walk her back to
+the chopper.
+
+**You are not shooting people.** This app had that conversation once already — the
+swarm's first build put a crowd of little figures in front of a gun and the verdict was
+immediate, "it seems like I'm shooting people, that's not the idea" — and the answer
+here is the thing the whole app is about. {papa} builds machines; the compound is full
+of them; they clatter, spark and power down. The only person inside the wire is the one
+you have come to get out.
+
+The arithmetic is the lock on her cage. Every machine carries a fuse with a number
+glowing on its back, the cage door wants a total, and you have to work out which of the
+fuses on your belt make it — and which number you are still missing. That last part is
+the whole trick: a door that only says "no" teaches nothing, so this one says *you have
+nine, find six*, and sends a nine-year-old back out into the dark looking for a six. It
+is a sum with legs.
+
+The compound is generated and never cut in two: buildings are stamped into the yard one
+at a time and taken straight back out again if they wall anything off. A bot plays whole
+missions in the tests — shooting what it sees, fetching the numbers it is short of,
+opening the cage and walking her home — across a dozen maps nobody has ever looked at,
+because the standing promise in this project is that there is always a way through and
+the only way to keep a promise like that is to send somebody through. Missions come out
+at about a minute each, which is what that bot is really measuring.
+
+Two thumbs, both drawn on the screen: a stick that appears wherever your left thumb
+lands, the right-hand side of the picture to look with, and a trigger. And an arrow at
+the top pointing at whatever you are supposed to be doing next, because a dark compound
+with eleven ways out of every yard is atmospheric for about ninety seconds and is then
+just lost.
 
 The road is a race proper: a staggered grid painted on the tarmac, three red lights, and
 a clock that starts when they go out and does not stop for a crash. The drive that set
