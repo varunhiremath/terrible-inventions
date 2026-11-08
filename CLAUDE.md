@@ -167,6 +167,16 @@ These are not preferences. Breaking one defeats the point of the project.
   drawing inside leaves bare backing when the tile changes shape, and cropping to the
   middle of a level can leave a picture of the ceiling.
 
+- **A game whose subject is the maths still may not ask a sum.** The scales are the one
+  game here built around arithmetic, and it works because the arithmetic is the
+  machine: the rack is a binary number, so putting weights on a pan *is* the
+  conversion, and carrying is a thumb-tap that visibly does not change what the pan
+  weighs. Nothing in it asks "what is 45 in binary". The moment one of these games
+  shows a question and a box, it has stopped being a game.
+- **Teach a number system against the language's own.** `scales/run.test.ts` checks
+  every number the rack can hold against `n.toString(2)`. A game that quietly teaches
+  the wrong binary is worse than no game, and nothing else would catch it.
+
 ## Rendering
 
 - Characters are procedural sprites extruded into voxels. A new character costs a seed.

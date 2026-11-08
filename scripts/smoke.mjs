@@ -142,14 +142,14 @@ await page.goto(URL, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1500)
 
 /*
- * The twelve tiles that have to be there. The Dungeon is deliberately not among
+ * The thirteen tiles that have to be there. The Dungeon is deliberately not among
  * them any more — it is off the front screen until its bugs are dealt with —
  * and Papa Drowning is called Papa in Trouble now, which this list went on
  * believing for a fortnight because nothing runs it in CI.
  */
 const GAMES = [
   'Papa Panic', 'The Meadow', 'The Caves', 'The Outpost', 'The Swarm', 'The Pipes', 'The Road',
-  'The Long Way Out', 'The Garden', 'The Wall', 'Papa in Trouble', 'The Notebook',
+  'The Scales', 'The Long Way Out', 'The Garden', 'The Wall', 'Papa in Trouble', 'The Notebook',
 ]
 const homeText = await page.innerText('body')
 for (const game of GAMES) {
@@ -912,6 +912,51 @@ if (await enter('The Outpost')) {
   }
 }
 
+// --- the scales: brass, and the arithmetic behind it ------------------------
+if (await enter('The Scales')) {
+  await page.waitForTimeout(1400)
+
+  /*
+   * One crate, weighed the way the game means it to be weighed: take the
+   * number off the machine, subtract the biggest weight that fits, press it,
+   * repeat. Which is the algorithm the whole game exists to teach — so if the
+   * rack is not wired to the pan, or the pan is not wired to the beam, the
+   * score never moves and this says so.
+   */
+  const said = async () => (await page.locator('p.sr-only').first().innerText()) ?? ''
+  const bar = async () =>
+    (await page.locator('p.font-mono, span.font-mono').allTextContents()).join(' ')
+  const score = async () => Number(((await bar()).match(/\b(\d{6})\b/) ?? [])[1] ?? -1)
+
+  const opened = await bar()
+  if (!/level 1\b/i.test(opened)) problems.push('the scales did not open on level 1')
+  if ((await score()) !== 0) problems.push('the scales did not open on nothing')
+
+  const crate = await said()
+  const load = Number((crate.match(/Crate (\d+)/) ?? [])[1] ?? 0)
+  if (!load) problems.push(`the scales never said what the crate weighs (${crate})`)
+  else {
+    let rest = load
+    const want = []
+    for (const weight of [128, 64, 32, 16, 8, 4, 2, 1]) {
+      if (rest >= weight) { want.push(weight); rest -= weight }
+    }
+    for (const weight of want) {
+      const button = page.getByRole('button', { name: new RegExp(`^${weight}(,|$)`) })
+      if (await button.count() === 0) {
+        problems.push(`the scales have no ${weight} weight on the rack`)
+        break
+      }
+      await button.first().click()
+      await page.waitForTimeout(160)
+    }
+    await page.waitForTimeout(400)
+    if ((await score()) <= 0) {
+      problems.push(`${load} = ${want.join('+')} did not balance the scales`)
+    }
+  }
+}
+
 // --- the notebook -----------------------------------------------------------
 {
   /*
@@ -983,5 +1028,5 @@ if (problems.length) {
   console.error(`SMOKE FAILED:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, dragged a line out of the flood, held the lane against the swarm, loosed arrows over the meadow, walked into the outpost, and \
-traced a puzzle')
+console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, dragged a line out of the flood, held the lane against the swarm, loosed arrows over the meadow, walked into the outpost, weighed a crate out \
+in brass, and traced a puzzle')

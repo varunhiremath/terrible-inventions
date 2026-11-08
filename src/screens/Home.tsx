@@ -34,12 +34,15 @@ import {
 import { drawTaste } from '../mob/draw'
 import { drawMeadow } from '../archer/emblem'
 import { drawCompound } from '../outpost/emblem'
+import { drawRun as drawScales } from '../scales/draw'
+import { newRun as newScales } from '../scales/run'
+import { panFor as scalePan } from '../scales/level'
 import { fill } from '../config/profile'
 
 /**
  * The front door.
  *
- * Twelve games, and nothing else on the screen. The app used to open straight
+ * Thirteen games, and nothing else on the screen. The app used to open straight
  * into the maze, which quietly made that one the game and the other three
  * things you had to know were hidden in the settings.
  *
@@ -317,6 +320,30 @@ const TILES: Tile[] = [
     },
   },
   {
+    id: 'scales',
+    title: 'The Scales',
+    blurb: 'Brass weights, powers of two. Balance the crate.',
+    tint: '#231a16',
+    /*
+     * The machine itself, drawn by the game's own drawing with a crate on it
+     * part way through being balanced — 45 wanted, 40 on the pan, the beam
+     * still down on the crate's side and the bits written underneath. Which
+     * is the whole game in one picture, and true: every pixel of it comes out
+     * of `src/scales/draw.ts`.
+     */
+    emblem(ctx, w, h) {
+      const base = newScales(4, 3, 0, 7)
+      drawScales(ctx, {
+        ...base,
+        crate: { id: 1, job: 'weigh', load: 45, pan: [], seconds: 30 },
+        pan: scalePan(40),
+        clock: 22,
+        left: 4,
+        beam: -0.16,
+      }, { w, h, clock: performance.now() / 1000 })
+    },
+  },
+  {
     id: 'snake',
     title: 'The Garden',
     blurb: 'Grow. Mind the others. Ring one and it is yours.',
@@ -466,7 +493,7 @@ export function Home() {
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <p className="text-sm text-dim">
-          {fill('{papa}')} built twelve terrible machines. Swipe and pick one.
+          {fill('{papa}')} built thirteen terrible machines. Swipe and pick one.
         </p>
         {/* The front screen is the one place it is safe to reload, so this is
             the one place the update takes itself. */}

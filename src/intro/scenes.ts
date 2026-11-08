@@ -75,6 +75,9 @@ import {
 import { drawRun as drawMob } from '../mob/draw'
 import { drawEscape as drawGetaway, drawFlight as drawArrow } from '../archer/emblem'
 import { drawHomeward, drawYard } from '../outpost/emblem'
+import { drawRun as drawScales } from '../scales/draw'
+import { newRun as newScales } from '../scales/run'
+import { panFor as scalePan, WEIGHTS as SCALE_WEIGHTS } from '../scales/level'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -1210,6 +1213,54 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
    */
   yard({ ctx, w, h, t, clock }) {
     drawYard(ctx, w, h, t, clock)
+  },
+
+/**
+   * The scales, with a crate actually being balanced.
+   *
+   * The real machine, drawn by the game's own drawing — this game is a 2D
+   * canvas like most of them, so there is nothing to paint by hand and no
+   * excuse for an approximation. The pan fills up over the beat in the order
+   * anybody fills it: biggest weight that fits, then the next.
+   */
+  weighing({ ctx, w, h, t, clock }) {
+    const base = newScales(5, 3, 0, 4)
+    // Forty-five, one weight at a time: 32, then 40, then 44, then 45.
+    const steps = [0, 32, 40, 44, 45]
+    const got = steps[Math.min(steps.length - 1, Math.floor(t * steps.length))]
+    drawScales(ctx, {
+      ...base,
+      crate: { id: 1, job: 'weigh', load: 45, pan: [], seconds: 30 },
+      pan: scalePan(got),
+      clock: 24,
+      left: 5,
+      // Tipping towards the crate until the last weight goes on, then level.
+      beam: Math.max(-1, (got - 45) / 28),
+      cheer: got === 45 ? 0.9 : 0,
+    }, { w, h, clock })
+  },
+
+  /** And the other half: a pile with two of a kind on it, being tidied. */
+  carrying({ ctx, w, h, t, clock }) {
+    const base = newScales(5, 3, 0, 6)
+    // Two eights, two fours and a one — forty-five again, the untidy way —
+    // carried up a step at a time.
+    const piles: number[][] = [
+      [1, 0, 2, 2, 0, 1, 0, 0],
+      [1, 0, 2, 0, 1, 1, 0, 0],
+      [1, 0, 0, 1, 1, 1, 0, 0],
+      [...scalePan(45)],
+    ]
+    const pan = piles[Math.min(piles.length - 1, Math.floor(t * piles.length))]
+    drawScales(ctx, {
+      ...base,
+      crate: { id: 1, job: 'carry', load: 45, pan: [...pan], seconds: 30 },
+      pan: [...pan],
+      clock: 20,
+      left: 4,
+      beam: 0,
+    }, { w, h, clock })
+    void SCALE_WEIGHTS
   },
 
   /** And the way out: the cage open, her behind you, the pad ahead. */

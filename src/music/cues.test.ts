@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ARCHER_CUES, OUTPOST_CUES,
+  ARCHER_CUES, OUTPOST_CUES, SCALES_CUES,
   CAVE_CUES,
   CUES,
   DUNGEON_CUES,
@@ -119,6 +119,10 @@ const TICKS: CueName[] = [
   // trigger held, every shot that lands rings, and a machine that has seen you
   // fires about as often as you do.
   'rifle', 'spang', 'sizzle',
+  // And the scales' three: a weight going on, a weight coming off, and a pile
+  // being tidied — somebody who knows what they are doing taps eight of these
+  // in four seconds.
+  'clink', 'offPan', 'swapUp',
   // And a decoy going: somebody spraying arrows pops three in two seconds.
   'dud',
 ]
@@ -287,7 +291,7 @@ describe('every cue', () => {
      */
     const sets = [
       DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES, GARDEN_CUES,
-      BRICK_CUES, FLOOD_CUES, NOTEBOOK_CUES, MOB_CUES, ARCHER_CUES, OUTPOST_CUES, WIPE_CUES,
+      BRICK_CUES, FLOOD_CUES, NOTEBOOK_CUES, MOB_CUES, ARCHER_CUES, OUTPOST_CUES, SCALES_CUES, WIPE_CUES,
     ]
     const seen = new Set<string>()
     for (const set of sets) {
@@ -536,6 +540,46 @@ describe('the outpost cues', () => {
     expect(outTo).toBeLessThan(outFrom)
     const [upFrom, upTo] = ends('liftOff')
     expect(upTo, 'and going home goes up').toBeGreaterThan(upFrom)
+  })
+})
+
+/**
+ * The scales' cues are held to A major, the brightest key in the app, for the
+ * one game in it where nothing is chasing anybody. One stray note is the
+ * easiest way to make a whole set sound wrong while every cue in it still
+ * sounds fine on its own.
+ */
+describe('the scales cues', () => {
+  const MAJOR = [9, 11, 1, 2, 4, 6, 8]
+
+  it('stays in A major', () => {
+    for (const name of Object.keys(SCALES_CUES) as CueName[]) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          expect(MAJOR, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain(pitchClass(note.frequency))
+        }
+      }
+    }
+  })
+
+  it('sends a weight on up and everything that went wrong gently down', () => {
+    const ends = (name: CueName) => {
+      const notes = readPart(CUES[name].parts[0].pattern)
+      return [notes[0].frequency, notes[notes.length - 1].frequency]
+    }
+    const [onFrom, onTo] = ends('clink')
+    expect(onTo, 'a weight going down should go up').toBeGreaterThan(onFrom)
+    const [offFrom, offTo] = ends('offPan')
+    expect(offTo).toBeLessThan(offFrom)
+    const [carryFrom, carryTo] = ends('swapUp')
+    expect(carryTo, 'two becoming the next one up is a step up').toBeGreaterThan(carryFrom)
+    const [missFrom, missTo] = ends('notQuite')
+    expect(missTo).toBeLessThan(missFrom)
+    const [doneFrom, doneTo] = ends('weighed')
+    expect(doneTo).toBeGreaterThan(doneFrom)
+    const [endFrom, endTo] = ends('shutDown')
+    expect(endTo).toBeLessThan(endFrom)
   })
 })
 

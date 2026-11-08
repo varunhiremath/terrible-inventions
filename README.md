@@ -26,6 +26,7 @@ the money taken out.
 | **The Outpost** | Night, a walled compound, a soldier and somebody locked in the middle of it | On the lock. Every machine carries a numbered fuse and the cage wants a total |
 | **The Pipes** | Run, jump, stomp, and catch the flagpole as high up as you can | Between lives |
 | **The Road** | Four lanes, six stages, and four of his machines racing you from a standing start | Between lives; a right answer is half a tank and a car back |
+| **The Scales** | A weighing machine, a rack of brass weights, and crates coming along a belt | All of it. The weights are the powers of two and the pan is a binary number |
 | **The Long Way Out** | Fly to the eight real planets, in order, through what he has left in the way | None. Break things up for scrap, spend it at each world, and every world tells you something true |
 
 **The Dungeon is not on the front screen.** Thirteen floors and an hour on the clock,
@@ -114,6 +115,34 @@ lands, the right-hand side of the picture to look with, and a trigger. And an ar
 the top pointing at whatever you are supposed to be doing next, because a dark compound
 with eleven ways out of every yard is atmospheric for about ninety seconds and is then
 just lost.
+
+The scales are the one game here that is *about* its maths rather than carrying some
+along. A beam balance, a rack of brass weights marked 1, 2, 4, 8, 16, 32, 64, 128 —
+one of each and no more than one — and crates coming along a belt to be balanced.
+
+Which weights are on the pan is a binary number, biggest on the left, exactly as it is
+written down. So making 45 is not a procedure to remember, it is four weights and a
+beam that tips to tell you which way you are wrong; and the row of 1s and 0s under the
+bench writes down what your hands just did. Four kinds of crate come along the belt:
+
+- **weigh** — it says 45, make it. Decimal into binary.
+- **name** — the weights are already on and the crate is a mystery. Binary back into
+  decimal, typed on the pad that replaces the rack.
+- **power** — it says 2⁶ and wants exactly that weight, not 64 made of smaller ones.
+- **carry** — the pan arrives with two 8s on it, and the machine takes one of each.
+  Tap them together and they become a 16. That is the carry rule of binary addition as
+  a move you make with your thumb, and the pan visibly weighs the same before and
+  after.
+
+The rack grows a weight a level: four of them to begin with, which is nought to
+fifteen, and eight by the fifth, which is 255. A wrong answer costs two seconds and
+nothing else — no life, no buzzer, and the number you typed is rubbed out so the next
+go starts clean. The only thing that can actually beat you is the belt.
+
+The arithmetic is checked against the language's own for every number the rack can
+hold, carrying is checked to never change what the pan weighs, and a bot clears whole
+levels doing the conversions itself rather than reading the answers off the crates —
+because a game that quietly teaches that 45 is 101110 would be worse than no game.
 
 The road is a race proper: a staggered grid painted on the tarmac, three red lights, and
 a clock that starts when they go out and does not stop for a crash. The drive that set

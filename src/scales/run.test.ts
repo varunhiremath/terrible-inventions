@@ -1,0 +1,437 @@
+import { describe, expect, it } from 'vitest'
+import {
+  LIVES, WEIGHTS,
+  bitsFor, bitsOf, carriesLeft, carry, cratesFor, jobsFor, newCrate, onBits, panFor,
+  tidy, topFor, uncarry, weighs,
+  type Dice,
+} from './level'
+import {
+  FIXED, finished, newRun, nudge, onPan, step, type Move, type Run,
+} from './run'
+
+/** The same dice the game uses, so a test seed is a game seed. */
+function dice(seed: number): Dice {
+  let state = (seed * 2654435761) >>> 0 || 1
+  const next = () => {
+    state ^= state << 13
+    state ^= state >>> 17
+    state ^= state << 5
+    state >>>= 0
+    return state / 4294967296
+  }
+  return { next, int: (min, max) => min + Math.floor(next() * (max - min + 1)) }
+}
+
+/** Steps a run on, keeping every event that happened on the way. */
+function drive(run: Run, seconds: number, move: Move | null = null) {
+  const heard: string[] = []
+  for (let t = 0; t < seconds; t += FIXED) {
+    run = step(run, t === 0 ? move : null, FIXED)
+    heard.push(...run.events)
+    if (run.status !== 'playing') break
+  }
+  return { run, heard }
+}
+
+/*
+ * The arithmetic, first and on its own.
+ *
+ * Everything else in this game is a machine wrapped round these few
+ * functions, and this is the only part of it that can be wrong in a way
+ * nobody notices: a game that quietly teaches that 45 is 101110 is worse than
+ * no game at all. So the conversion is checked against the language's own,
+ * for every number the rack can hold.
+ */
+describe('the arithmetic', () => {
+  it('writes every number the way the rest of the world writes it', () => {
+    for (let n = 0; n <= 255; n++) {
+      const pan = panFor(n)
+      expect(weighs(pan), `${n} came back as ${weighs(pan)}`).toBe(n)
+      expect(tidy(pan), `${n} needed two of something`).toBe(true)
+      expect(bitsOf(pan, 8), `${n} in eight bits`).toBe(n.toString(2).padStart(8, '0'))
+    }
+  })
+
+  it('has one weight for each power of two, in order', () => {
+    expect(WEIGHTS).toEqual([1, 2, 4, 8, 16, 32, 64, 128])
+    for (const [i, weight] of WEIGHTS.entries()) expect(weight).toBe(Math.pow(2, i))
+  })
+
+  it('counts the bits that are set', () => {
+    expect(onBits(0)).toBe(0)
+    expect(onBits(255)).toBe(8)
+    expect(onBits(45)).toBe(4)
+  })
+
+  it('carries without changing what the pan weighs', () => {
+    /*
+     * The lesson the carry job exists to teach, as a test: two 8s and one 16
+     * are the same amount of brass. If this ever stopped being true the game
+     * would be teaching that carrying loses you something.
+     */
+    for (let n = 1; n <= 255; n++) {
+      const pan = panFor(n)
+      for (let i = 0; i < 6; i++) uncarry(pan, 1 + (i % 7))
+      expect(weighs(pan), `${n} after un-carrying`).toBe(n)
+      let guard = 0
+      while (carriesLeft(pan) > 0 && guard++ < 200) {
+        const bit = pan.findIndex((many) => many >= 2)
+        carry(pan, bit)
+      }
+      expect(weighs(pan), `${n} after carrying back`).toBe(n)
+      expect(pan, `${n} did not tidy to the same thing`).toEqual(panFor(n))
+    }
+  })
+
+  it('will not carry off the top of the rack', () => {
+    const pan = panFor(0)
+    pan[WEIGHTS.length - 1] = 2
+    expect(carry(pan, WEIGHTS.length - 1)).toBe(false)
+  })
+
+  it('will not carry a pile of one', () => {
+    const pan = panFor(8)
+    expect(carry(pan, 3)).toBe(false)
+  })
+})
+
+describe('what comes along the belt', () => {
+  it('only sends jobs the player has met', () => {
+    expect(jobsFor(1)).toEqual(['weigh'])
+    expect(jobsFor(2)).toContain('name')
+    expect(jobsFor(3)).toContain('power')
+    expect(jobsFor(4)).toContain('carry')
+  })
+
+  it('grows the rack a weight at a time', () => {
+    expect(bitsFor(1)).toBe(4)
+    expect(topFor(1)).toBe(15)
+    expect(topFor(5)).toBe(255)
+    expect(bitsFor(99)).toBe(8)
+  })
+
+  it('is always something that can be done', () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      for (const level of [1, 2, 3, 4, 6]) {
+        const crate = newCrate(1, level, dice(seed))
+        const where = `level ${level} seed ${seed} ${crate.job} ${crate.load}`
+        expect(crate.load, where).toBeGreaterThan(0)
+        expect(crate.load, where).toBeLessThanOrEqual(topFor(level))
+        // Whatever it is, the rack it is being asked of can hold the answer.
+        const want = panFor(crate.load)
+        for (let bit = bitsFor(level); bit < WEIGHTS.length; bit++) {
+          expect(want[bit], `${where} needs a weight that is not out yet`).toBe(0)
+        }
+        if (crate.job === 'carry') {
+          expect(weighs(crate.pan), `${where}: the pile is not the load`).toBe(crate.load)
+          expect(carriesLeft(crate.pan), `${where}: nothing to carry`).toBeGreaterThan(0)
+        }
+        if (crate.job === 'name') {
+          expect(crate.pan, `${where}: the machine put the wrong weights on`)
+            .toEqual(panFor(crate.load))
+        }
+        if (crate.job === 'power') {
+          expect(WEIGHTS, where).toContain(crate.load)
+          expect(crate.load, `${where}: a power job asking for 1 or 2`).toBeGreaterThan(2)
+        }
+      }
+    }
+  })
+
+  it('is worth doing: no crate is one weight in disguise', () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      for (const level of [1, 3, 5]) {
+        const crate = newCrate(1, level, dice(seed))
+        if (crate.job === 'power') continue
+        expect(onBits(crate.load), `level ${level} seed ${seed}: ${crate.load} is one weight`)
+          .toBeGreaterThanOrEqual(2)
+      }
+    }
+  })
+})
+
+describe('the machine', () => {
+  const weighing = (load: number, level = 4): Run => {
+    const base = newRun(level, LIVES, 0, 5)
+    return {
+      ...base,
+      crate: { id: 1, job: 'weigh', load, pan: WEIGHTS.map(() => 0), seconds: 30 },
+      pan: WEIGHTS.map(() => 0),
+      clock: 30,
+    }
+  }
+
+  it('balances when the weights come to the load', () => {
+    let run = weighing(45)
+    // 45 is 101101: thirty-two, eight, four and one.
+    for (const bit of [0, 2, 3]) run = step(run, { kind: 'tap', bit }, FIXED)
+    expect(onPan(run), 'part way there').toBe(13)
+    run = step(run, { kind: 'tap', bit: 5 }, FIXED)
+    expect(run.events).toContain('balanced')
+    // And the next crate is already on the machine, which is why there is no
+    // point looking at the pan here.
+    expect(run.done).toBe(1)
+  })
+
+  it('does not balance when they do not', () => {
+    let run = weighing(45)
+    for (const bit of [0, 2, 3]) run = step(run, { kind: 'tap', bit }, FIXED)
+    expect(onPan(run)).toBe(13)
+    expect(finished(run)).toBe(false)
+  })
+
+  it('takes a weight off when you tap it again', () => {
+    let run = weighing(45)
+    run = step(run, { kind: 'tap', bit: 5 }, FIXED)
+    expect(onPan(run)).toBe(32)
+    run = step(run, { kind: 'tap', bit: 5 }, FIXED)
+    expect(onPan(run)).toBe(0)
+    expect(run.events).toContain('lift')
+  })
+
+  it('will not hand out a weight that is not on the rack yet', () => {
+    // Four weights on the first level, so there is no 128 to reach for.
+    let run = { ...weighing(9, 1) }
+    run = step(run, { kind: 'tap', bit: 7 }, FIXED)
+    expect(onPan(run)).toBe(0)
+  })
+
+  it('wants one weight and not four for a power job', () => {
+    const base = newRun(3, LIVES, 0, 5)
+    let run: Run = {
+      ...base,
+      crate: { id: 1, job: 'power', load: 32, power: 5, pan: WEIGHTS.map(() => 0), seconds: 30 },
+      pan: WEIGHTS.map(() => 0),
+      clock: 30,
+    }
+    // Sixteen and sixteen is thirty-two, and it is not what was asked for —
+    // but it cannot even be built, because the machine takes one of each.
+    run = step(run, { kind: 'tap', bit: 4 }, FIXED)
+    run = step(run, { kind: 'tap', bit: 4 }, FIXED)
+    expect(finished(run)).toBe(false)
+    run = step(run, { kind: 'tap', bit: 5 }, FIXED)
+    expect(run.events).toContain('balanced')
+  })
+
+  it('tidies a pile by carrying, and the pile never changes weight', () => {
+    const base = newRun(4, LIVES, 0, 5)
+    const pile = panFor(44)
+    uncarry(pile, 5)
+    uncarry(pile, 3)
+    let run: Run = {
+      ...base,
+      crate: { id: 1, job: 'carry', load: 44, pan: [...pile], seconds: 30 },
+      pan: [...pile],
+      clock: 30,
+    }
+    expect(onPan(run), 'the pile should already weigh the load').toBe(44)
+    let guard = 0
+    let tidied: number[] = []
+    while (run.done === 0 && guard++ < 20) {
+      const bit = run.pan.findIndex((many) => many >= 2)
+      tidied = [...run.pan]
+      run = step(run, { kind: 'carry', bit }, FIXED)
+      // Only while the crate is still on the machine: once it is done the
+      // next one is already there and the pan is its, not this one's.
+      if (run.done === 0) expect(onPan(run), 'carrying changed the weight').toBe(44)
+    }
+    expect(run.events).toContain('balanced')
+    expect(carriesLeft(tidied), 'it finished before it was tidy').toBeLessThanOrEqual(1)
+  })
+})
+
+describe('naming a weight', () => {
+  const naming = (load: number): Run => {
+    const base = newRun(2, LIVES, 0, 7)
+    return {
+      ...base,
+      crate: { id: 1, job: 'name', load, pan: panFor(load), seconds: 30 },
+      pan: panFor(load),
+      clock: 30,
+      typed: '',
+    }
+  }
+
+  it('takes the right number', () => {
+    let run = naming(37)
+    for (const digit of ['3', '7']) run = step(run, { kind: 'type', digit }, FIXED)
+    run = step(run, { kind: 'say' }, FIXED)
+    expect(run.events).toContain('balanced')
+  })
+
+  it('costs time and nothing else for a wrong one', () => {
+    let run = naming(37)
+    const had = run.clock
+    for (const digit of ['3', '8']) run = step(run, { kind: 'type', digit }, FIXED)
+    run = step(run, { kind: 'say' }, FIXED)
+    expect(run.events, 'a wrong answer must never cost a life').not.toContain('dropped')
+    expect(run.lives).toBe(LIVES)
+    expect(run.clock).toBeLessThan(had)
+    expect(run.typed, 'the next go should start clean').toBe('')
+  })
+
+  it('will not let you move the machine’s own weights', () => {
+    let run = naming(37)
+    run = step(run, { kind: 'tap', bit: 0 }, FIXED)
+    expect(onPan(run), 'the question was rubbed out').toBe(37)
+  })
+
+  it('rubs a digit out', () => {
+    let run = naming(37)
+    for (const digit of ['3', '9']) run = step(run, { kind: 'type', digit }, FIXED)
+    run = step(run, { kind: 'rub' }, FIXED)
+    run = step(run, { kind: 'type', digit: '7' }, FIXED)
+    run = step(run, { kind: 'say' }, FIXED)
+    expect(run.events).toContain('balanced')
+  })
+})
+
+describe('the belt', () => {
+  it('costs a go when a crate goes over the end, and brings the next one', () => {
+    const run = newRun(1, LIVES, 0, 3)
+    const { run: after, heard } = drive({ ...run, clock: 0.2 }, 1)
+    expect(heard).toContain('dropped')
+    expect(heard).toContain('arrive')
+    expect(after.lives).toBe(LIVES - 1)
+    expect(after.clock, 'the next crate needs its own time').toBeGreaterThan(1)
+  })
+
+  it('is over when the last go goes', () => {
+    const run = newRun(1, 1, 0, 3)
+    const { run: after, heard } = drive({ ...run, clock: 0.2 }, 1)
+    expect(heard).toContain('over')
+    expect(after.status).toBe('over')
+  })
+
+  it('says nothing more once it is over', () => {
+    const run = newRun(1, 1, 0, 3)
+    const { run: after } = drive({ ...run, clock: 0.2 }, 1)
+    const again = step(after, null, FIXED)
+    expect(again.events).toEqual([])
+  })
+})
+
+/*
+ * And a whole level, played by somebody who can do the maths.
+ *
+ * The bot converts the numbers itself — it does not read the answer off the
+ * crate — so what this says is that a player who can turn 45 into 101101, read
+ * 101101 back, name a power of two and carry a pile can clear a level without
+ * running out of time. Which is the only promise this game makes.
+ */
+function solve(run: Run): Move | null {
+  const crate = run.crate
+  if (crate.job === 'name') {
+    const want = String(crate.load)
+    if (run.typed.length < want.length) {
+      return { kind: 'type', digit: want[run.typed.length] }
+    }
+    return { kind: 'say' }
+  }
+  if (crate.job === 'carry') {
+    const bit = run.pan.findIndex((many) => many >= 2)
+    return bit >= 0 ? { kind: 'carry', bit } : null
+  }
+  // Weigh and power are the same move: make the pan match the number, and
+  // worked out here the long way round rather than with panFor, so that the
+  // bot is doing the arithmetic rather than agreeing with the game's.
+  const want: number[] = WEIGHTS.map(() => 0)
+  let rest = crate.load
+  for (let bit = WEIGHTS.length - 1; bit >= 0; bit--) {
+    if (rest >= WEIGHTS[bit]) {
+      want[bit] = 1
+      rest -= WEIGHTS[bit]
+    }
+  }
+  for (let bit = 0; bit < WEIGHTS.length; bit++) {
+    if (want[bit] !== (run.pan[bit] > 0 ? 1 : 0)) return { kind: 'tap', bit }
+  }
+  return null
+}
+
+describe('a level', () => {
+  /** Plays it at a human sort of pace: one move every third of a second. */
+  const play = (run: Run, pace = 0.34) => {
+    let since = 0
+    for (let t = 0; t < 400; t += FIXED) {
+      since += FIXED
+      let move: Move | null = null
+      if (since >= pace) {
+        move = solve(run)
+        since = 0
+      }
+      run = step(run, move, FIXED)
+      if (run.status !== 'playing') break
+    }
+    return run
+  }
+
+  it('can be cleared by somebody who can do the maths', () => {
+    for (const level of [1, 2, 3, 4, 5, 7]) {
+      for (const seed of [1, 2, 3]) {
+        const run = play(newRun(level, LIVES, 0, seed))
+        const said = `level ${level} seed ${seed}: ${run.status}, ` +
+          `${run.done} done, ${run.missed} missed`
+        expect(run.status, said).toBe('cleared')
+        expect(run.missed, said).toBe(0)
+        expect(run.done, said).toBe(cratesFor(level))
+      }
+    }
+  }, 60_000)
+
+  it('cannot be cleared by doing nothing', () => {
+    const run = play(newRun(1, LIVES, 0, 4), 999)
+    expect(run.status).toBe('over')
+  })
+
+  it('is tight enough that the clock is not decoration', () => {
+    /*
+     * Three seconds a move still clears a level, and that is the right answer
+     * — this is a thinking game and the clock is there to keep it moving, not
+     * to catch anybody out. Ten seconds a move does not, which is what says
+     * the clock exists at all.
+     */
+    expect(play(newRun(4, LIVES, 0, 2), 3).status, 'a thoughtful pace should still get there')
+      .toBe('cleared')
+    expect(play(newRun(4, LIVES, 0, 2), 10).status).not.toBe('cleared')
+  }, 60_000)
+
+  it('pays more for a quick one', () => {
+    const quick = play(newRun(2, LIVES, 0, 2), 0.2)
+    const dawdled = play(newRun(2, LIVES, 0, 2), 0.9)
+    expect(quick.score).toBeGreaterThan(dawdled.score)
+  }, 30_000)
+
+  it('plays the same way twice', () => {
+    const once = play(newRun(3, LIVES, 0, 9))
+    const twice = play(newRun(3, LIVES, 0, 9))
+    expect(twice.score).toBe(once.score)
+    expect(twice.done).toBe(once.done)
+  }, 30_000)
+})
+
+describe('the nudge', () => {
+  it('points at a weight that actually helps', () => {
+    const base = newRun(4, LIVES, 0, 5)
+    const run: Run = {
+      ...base,
+      crate: { id: 1, job: 'weigh', load: 45, pan: WEIGHTS.map(() => 0), seconds: 30 },
+      pan: panFor(32),
+      clock: 3,
+    }
+    const bit = nudge(run)
+    expect(bit, 'nothing suggested').not.toBeNull()
+    expect(panFor(45)[bit as number], 'suggested a weight the answer does not want').toBe(1)
+  })
+
+  it('keeps out of a naming job, where it would be the answer', () => {
+    const base = newRun(2, LIVES, 0, 5)
+    const run: Run = {
+      ...base,
+      crate: { id: 1, job: 'name', load: 21, pan: panFor(21), seconds: 30 },
+      pan: panFor(21),
+      clock: 2,
+    }
+    expect(nudge(run)).toBeNull()
+  })
+})

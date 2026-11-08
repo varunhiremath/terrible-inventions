@@ -2143,9 +2143,64 @@ export const OUTPOST: Track = {
   ],
 }
 
+
+/*
+ * The scales, at work.
+ *
+ * A major, and the most cheerful thing in the app — it is the only game here
+ * where nothing is chasing you, and the music is allowed to say so. A tick in
+ * the bass like a workshop clock, because the one pressure in this game is
+ * the clock, and a lead that mostly gets out of the way of somebody counting
+ * under their breath.
+ */
+const SCALES_LEAD = [
+  'A4 .  .  C#5 .  .  E5 . ',
+  'D5 .  .  .   C#5 . B4 . ',
+  'A4 .  .  B4  .  .  C#5 . ',
+  'A4 .  .  .   .  .  .  . ',
+  'E5 .  .  D5  .  .  C#5 . ',
+  'B4 .  .  .   A4 .  G#4 . ',
+  'A4 .  .  C#5 .  .  E5 . ',
+  'A4 .  .  .   .  .  .  . ',
+].join(' ')
+
+const SCALES_BASS = [
+  'A2 .  E3 .  A2 .  C#3 . ',
+  'D3 .  A3 .  D3 .  F#3 . ',
+  'E3 .  B3 .  E3 .  G#3 . ',
+  'A2 .  E3 .  A2 .  C#3 . ',
+  'F#2 . C#3 . F#2 . A2 . ',
+  'D3 .  A3 .  D3 .  F#3 . ',
+  'E3 .  B3 .  E3 .  G#3 . ',
+  'A2 .  E3 .  A2 .  E3 . ',
+].join(' ')
+
+const SCALES_BED = [
+  'A3 .  .  .  .  .  .  . ',
+  'D4 .  .  .  .  .  .  . ',
+  'E4 .  .  .  .  .  .  . ',
+  'A3 .  .  .  .  .  .  . ',
+  'F#3 . .  .  .  .  .  . ',
+  'D4 .  .  .  .  .  .  . ',
+  'E4 .  .  .  .  .  .  . ',
+  'A3 .  .  .  .  .  .  . ',
+].join(' ')
+
+export const SCALES: Track = {
+  name: 'The Scales',
+  beatsPerMinute: 104,
+  hotter: 14,
+  parts: [
+    { wave: 'pluck', gain: 0.05, sustain: 0.8, pattern: SCALES_LEAD },
+    { wave: 'pluck', gain: 0.05, sustain: 0.5, pattern: SCALES_BASS },
+    { wave: 'strings', gain: 0.03, sustain: 1, chord: [0, 7], pattern: SCALES_BED },
+  ],
+}
+
 export const TRACKS = {
   chase: CHASE,
   outpost: OUTPOST,
+  scales: SCALES,
   garden: GARDEN,
   wall: WALL,
   flood: FLOOD,
@@ -3221,9 +3276,111 @@ export const OUTPOST_CUES = {
   missionOver: MISSION_OVER,
 } as const
 
+
+/*
+ * The scales' noises, in A major.
+ *
+ * A key of its own, like every other game here, and the brightest one in the
+ * app: this is a workshop with a lamp over the bench and nothing in it is
+ * chasing anybody. The whole set is built out of A, C sharp and E, so the
+ * weight going down and the crate being finished are obviously the same
+ * machine.
+ *
+ * Nothing here is a buzzer. A wrong number gets two notes going gently down
+ * and the next go starts clean — being told off by a xylophone is still being
+ * told off, and this is the game he is meant to want to be wrong in.
+ */
+
+/** A weight going down on the pan. Fires on every tap, so barely a sound. */
+const CLINK: Track = {
+  name: 'Clink',
+  beatsPerMinute: 330,
+  parts: [{ wave: 'bell', gain: 0.035, sustain: 0.22, pattern: 'A4 E5 ' }],
+}
+
+/** And one coming off again. The same thing, backwards and lower. */
+const OFF_PAN: Track = {
+  name: 'Off the pan',
+  beatsPerMinute: 330,
+  parts: [{ wave: 'pluck', gain: 0.03, sustain: 0.2, pattern: 'E4 A3 ' }],
+}
+
+/** Two of a kind becoming the next one up: a little step up the scale. */
+const SWAP_UP: Track = {
+  name: 'Swap up',
+  beatsPerMinute: 340,
+  parts: [{ wave: 'bell', gain: 0.045, sustain: 0.28, pattern: 'A4 C#5 E5 ' }],
+}
+
+/** The beam going level. The noise the game is played for. */
+const LEVEL: Track = {
+  name: 'Level',
+  beatsPerMinute: 210,
+  parts: [
+    { wave: 'bell', gain: 0.07, sustain: 0.65, pattern: 'A4 C#5 E5 A5 ' },
+    { wave: 'strings', gain: 0.03, sustain: 0.9, chord: [0, 7], pattern: 'A3 .  .   .  ' },
+  ],
+}
+
+/** Not that number. Gentle, downwards, and over before you have winced. */
+const NOT_QUITE: Track = {
+  name: 'Not quite',
+  beatsPerMinute: 165,
+  parts: [{ wave: 'pluck', gain: 0.04, sustain: 0.4, pattern: 'F#4 D4 ' }],
+}
+
+/** The belt bringing the next one along. */
+const BELT: Track = {
+  name: 'Belt',
+  beatsPerMinute: 168,
+  parts: [{ wave: 'pluck', gain: 0.035, sustain: 0.35, pattern: 'E3 A3 ' }],
+}
+
+/** And one going over the end of it. Sympathetic rather than scolding. */
+const OVER_END: Track = {
+  name: 'Over the end',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'pluck', gain: 0.06, sustain: 0.6, pattern: 'E4 C#4 A3 ' },
+    { wave: 'strings', gain: 0.028, sustain: 0.9, chord: [0, 7], pattern: 'A2 .   .  ' },
+  ],
+}
+
+/** A whole level weighed. */
+const WEIGHED: Track = {
+  name: 'Weighed',
+  beatsPerMinute: 170,
+  parts: [
+    { wave: 'bell', gain: 0.08, sustain: 0.85, pattern: 'A4 C#5 E5 A5 C#6 E6 ' },
+    { wave: 'strings', gain: 0.032, sustain: 1, chord: [0, 4, 7], pattern: 'A3 .   .  .  .   .  ' },
+  ],
+}
+
+/** And the end of a run. */
+const SHUT_DOWN: Track = {
+  name: 'Shut down',
+  beatsPerMinute: 125,
+  parts: [
+    { wave: 'pluck', gain: 0.07, sustain: 0.85, pattern: 'A4 G#4 F#4 E4 D4 ' },
+    { wave: 'strings', gain: 0.03, sustain: 1, chord: [0, 7], pattern: 'A2 .   .   .  .  ' },
+  ],
+}
+
+export const SCALES_CUES = {
+  clink: CLINK,
+  offPan: OFF_PAN,
+  swapUp: SWAP_UP,
+  level: LEVEL,
+  notQuite: NOT_QUITE,
+  belt: BELT,
+  overEnd: OVER_END,
+  weighed: WEIGHED,
+  shutDown: SHUT_DOWN,
+} as const
+
 export const CUES = {
   ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES, ...SPACE_CUES,
   ...GARDEN_CUES, ...BRICK_CUES, ...FLOOD_CUES, ...NOTEBOOK_CUES, ...MOB_CUES, ...ARCHER_CUES,
-  ...OUTPOST_CUES, ...WIPE_CUES,
+  ...OUTPOST_CUES, ...SCALES_CUES, ...WIPE_CUES,
 } as const
 export type CueName = keyof typeof CUES

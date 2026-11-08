@@ -31,7 +31,8 @@ import lengths from '../../public/spoken/index.json'
  * `src/archer/emblem.ts`.
  */
 const LEVELS = ['maze', 'cave', 'dungeon', 'pipes', 'road', 'space', 'deep', 'garden', 'wall', 'flood',
-  'lane', 'oneline', 'throughit', 'joined', 'meadow', 'getaway', 'yard', 'homeward']
+  'lane', 'oneline', 'throughit', 'joined', 'meadow', 'getaway', 'yard', 'homeward',
+  'weighing', 'carrying']
 const CARDS = ['question', 'charms', 'forest']
 
 /**

@@ -272,6 +272,29 @@ export const STORIES: Record<string, Story> = {
     ],
   },
 
+  /*
+   * The scales' story has one thing to get across and it is not a rule, it is
+   * a shape: every weight is double the one before it. Everything else in the
+   * game follows from that, so the beat that says it comes third, before a
+   * single crate is balanced, and the beats after it show the same number
+   * being made twice — once by picking weights and once by tidying a pile.
+   */
+  scales: {
+    id: 'scales',
+    title: 'THE SCALES',
+    beats: [
+      { seconds: 4.4, scene: 'weighing', voice: 'narrator', line: 'A weighing machine, and a rack of brass weights.' },
+      { seconds: 3.8, scene: 'weighing', voice: 'papa', line: 'One of each! I only made one of each!' },
+      { seconds: 5.0, scene: 'weighing', voice: 'narrator', line: 'Every weight is double the one before. One, two, four, eight.' },
+      { seconds: 5.2, scene: 'weighing', voice: 'narrator', line: 'A crate says forty-five. Tap weights until the beam is level.' },
+      { seconds: 4.2, scene: 'weighing', voice: 'narrator', line: 'Thirty-two, then eight, then four, then one.' },
+      { seconds: 4.8, scene: 'weighing', voice: 'narrator', line: 'The lights underneath are that same number in binary.' },
+      { seconds: 4.4, scene: 'carrying', voice: 'narrator', line: 'Some crates arrive with two of a kind on the pan.' },
+      { seconds: 5.6, scene: 'carrying', voice: 'narrator', line: 'Tap a pair. Two eights make a sixteen, and it weighs the same.' },
+      { seconds: 4.4, scene: 'weighing', voice: 'papa', line: 'And some I never got round to labelling. You tell me.' },
+    ],
+  },
+
   puzzles: {
     id: 'puzzles',
     title: 'THE NOTEBOOK',
@@ -298,6 +321,6 @@ export const STORIES: Record<string, Story> = {
  */
 export const STORY_ORDER =
   [
-    'arcade', 'archer', 'dave', 'outpost', 'pipes', 'road', 'space', 'snake', 'bricks', 'sums',
-    'mob', 'puzzles',
+    'arcade', 'archer', 'dave', 'outpost', 'pipes', 'road', 'scales', 'space', 'snake',
+    'bricks', 'sums', 'mob', 'puzzles',
   ] as const
