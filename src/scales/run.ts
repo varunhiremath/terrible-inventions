@@ -13,14 +13,14 @@
  */
 import {
   LIVES, WEIGHTS,
-  bitsFor, carriesLeft, carry, cratesFor, newCrate, panFor, tidy, weighs,
+  bitsFor, carriesLeft, carry, cratesFor, newCrate, panFor, split, tidy, weighs,
   type Crate, type Dice,
 } from './level'
 
 export const FIXED = 1 / 60
 
 export type ScalesEvent =
-  | 'place' | 'lift' | 'carried' | 'balanced' | 'wrong' | 'arrive'
+  | 'place' | 'lift' | 'carried' | 'split' | 'balanced' | 'wrong' | 'arrive'
   | 'dropped' | 'cleared' | 'over'
 
 /**
@@ -32,7 +32,8 @@ export type ScalesEvent =
  * is silent for ever with nothing to notice.
  */
 export const LOUDEST: readonly ScalesEvent[] = [
-  'over', 'cleared', 'dropped', 'balanced', 'wrong', 'carried', 'arrive', 'place', 'lift',
+  'over', 'cleared', 'dropped', 'balanced', 'wrong', 'carried', 'split', 'arrive',
+  'place', 'lift',
 ]
 
 export type Status = 'playing' | 'cleared' | 'over'
@@ -122,6 +123,8 @@ export type Move =
   | { kind: 'tap'; bit: number }
   /** Tap a pile of two or more, which carries one up. */
   | { kind: 'carry'; bit: number }
+  /** Break one weight into two of the next one down. Borrowing. */
+  | { kind: 'split'; bit: number }
   /** Type a digit, rub one out, or say that is the answer. */
   | { kind: 'type'; digit: string }
   | { kind: 'rub' }
@@ -140,7 +143,10 @@ export type Move =
  *  - a carry is done when the machine will accept the pile, which is when
  *    there is one of each at most — and note that it is *already* the right
  *    weight the whole time. Carrying does not change what the pan weighs, and
- *    seeing that is most of the lesson.
+ *    seeing that is most of the lesson;
+ *  - a borrow is done when the pan has come *down* to the load and the
+ *    machine will accept it, which is the only job here where both halves of
+ *    that sentence are work.
  */
 export function finished(run: Run): boolean {
   const { crate, pan } = run
@@ -150,14 +156,27 @@ export function finished(run: Run): boolean {
   if (crate.job === 'power') {
     return pan[crate.power ?? 0] === 1 && weighs(pan) === crate.load
   }
-  // A weigh, a double and a carry are all the same question in the end: does
-  // the pan come to what the crate says it should.
+  // Everything else is the same question in the end: does the pan come to
+  // what the crate says it should, with one of each weight at most.
   return weighs(pan) === crate.load
 }
 
 /** Whether this crate is answered with the number pad rather than the rack. */
 export const typedAt = (run: Run): boolean =>
   run.crate.job === 'name' || run.crate.job === 'exponent'
+
+/**
+ * Whether the weights on the pan belong to the machine rather than to you.
+ *
+ * On these jobs the pan is the question. A naming crate's weights *are* the
+ * thing being asked, so moving them would be rubbing the question out; a
+ * carry crate's pile is the machine's arithmetic and the only thing you may
+ * do to it is tidy it; and a borrow crate's load is what you are taking a
+ * number off, so you may break it up and lift pieces off but you may never
+ * add brass that the crate did not bring.
+ */
+export const locked = (job: Crate['job']): boolean =>
+  job === 'name' || job === 'exponent' || job === 'carry' || job === 'borrow'
 
 /** What the machine would say the pan weighs, out loud, for the screen. */
 export const onPan = (run: Run): number => weighs(run.pan)
@@ -214,13 +233,11 @@ function apply(run: Run, move: Move): void {
 
   if (move.kind === 'tap') {
     if (move.bit < 0 || move.bit >= bitsFor(run.level)) return
-    /*
-     * On a name job the weights are the machine's, not yours: the pan is the
-     * question and moving it would be rubbing the question out. On a carry
-     * job the pile is the machine's too — the only thing you are allowed to
-     * do to it is tidy it, which is the whole job.
-     */
-    if (crate.job === 'name' || crate.job === 'carry' || crate.job === 'exponent') return
+    if (crate.job === 'borrow') {
+      borrowTap(run, move.bit)
+      return
+    }
+    if (locked(crate.job)) return
     if (run.pan[move.bit] > 0) {
       run.pan[move.bit] = 0
       run.events.push('lift')
@@ -233,6 +250,18 @@ function apply(run: Run, move: Move): void {
 
   if (move.kind === 'carry') {
     if (carry(run.pan, move.bit)) run.events.push('carried')
+    return
+  }
+
+  if (move.kind === 'split') {
+    /*
+     * Only ever on the job it exists for. Anywhere else the pan is yours to
+     * build and breaking a weight open would be a way of getting two of
+     * something, which is the one thing the machine does not allow.
+     */
+    if (crate.job !== 'borrow') return
+    if (move.bit < 0 || move.bit >= bitsFor(run.level)) return
+    if (split(run.pan, move.bit)) run.events.push('split')
     return
   }
 
@@ -269,6 +298,70 @@ function apply(run: Run, move: Move): void {
     }
   }
 }
+
+/**
+ * Taking one weight off a borrow crate.
+ *
+ * The first version of this did the clever thing: one button, and a weight
+ * that would not come off broke in two instead. It read well and it was
+ * wrong, because it made the machine choose. Working 104 - 17 the way it is
+ * worked on paper means breaking the 8 open to find a 1 — and the 8 was
+ * affordable, so the clever button lifted it instead and the pencil-and-paper
+ * method was the one thing the machine would not let you do. A rule that
+ * forbids the correct method is not a harder game.
+ *
+ * So the two moves are two moves, named on the screen, and this is the one
+ * that takes brass off the pan:
+ *
+ *  - one weight comes off, whether it is sitting on its own or in a pile. It
+ *    has to come off a pile too: breaking an 8 open leaves two 4s, and taking
+ *    one of them away is the next line of the sum. A machine that could only
+ *    lift single weights would break the 8 and then refuse to use it;
+ *  - but only if the pan can spare it;
+ *  - and a pile the pan cannot spare goes together instead, which is the only
+ *    moment carrying helps on this job and is the gesture a carry crate has
+ *    already taught.
+ *
+ * "If the pan can spare it" is what makes the job safe, and between them
+ * those three lines mean there is always a way through from wherever a player
+ * has got to. While the pan is over the load, breaking the smallest weight
+ * again and again always reaches something small enough to take off, and
+ * every one that comes off brings the pan nearer. Once the pan is level,
+ * nothing can come off at all, so every pile goes together and the pan tidies
+ * itself into the answer written in binary. A machine that let you lift too
+ * much would strand a child with a pan that cannot be rebuilt and a clock
+ * running, and nothing on the screen would say why.
+ */
+function borrowTap(run: Run, bit: number): void {
+  const many = run.pan[bit]
+  if (many < 1) return
+
+  if (weighs(run.pan) - WEIGHTS[bit] >= run.crate.load) {
+    run.pan[bit] = many - 1
+    run.events.push('lift')
+    return
+  }
+  if (many >= 2) {
+    if (carry(run.pan, bit)) run.events.push('carried')
+    return
+  }
+  // More than the pan can spare. Nothing happens, and the beam says so rather
+  // than the screen going quiet on a child who has just pressed something.
+  run.wobble = 0.35
+  run.events.push('wrong')
+}
+
+/**
+ * Whether taking this weight off would leave the pan short.
+ *
+ * Asked by the screen as well as the model, so the button can say it before
+ * it is pressed: a weight that will not come off is exactly the one that has
+ * to be broken open, and leaving a child to find that out by pressing things
+ * is a worse game rather than a harder one.
+ */
+export const wontComeOff = (run: Run, bit: number): boolean =>
+  run.crate.job === 'borrow' && run.pan[bit] >= 1 &&
+  weighs(run.pan) - WEIGHTS[bit] < run.crate.load
 
 /** A crate finished: paid for, cheered, and the next one brought on. */
 function done(run: Run): void {
@@ -313,7 +406,9 @@ export const stillToCarry = (run: Run): number => carriesLeft(run.pan)
  * for him.
  */
 export function nudge(run: Run): number | null {
-  if (typedAt(run) || run.crate.job === 'carry') return null
+  // A borrow crate is nudged by nothing: the hint would be "put this weight
+  // on", and putting weights on is the one move the job does not have.
+  if (typedAt(run) || run.crate.job === 'carry' || run.crate.job === 'borrow') return null
   const want = panFor(run.crate.load)
   for (let bit = WEIGHTS.length - 1; bit >= 0; bit--) {
     if (want[bit] !== (run.pan[bit] > 0 ? 1 : 0)) return bit

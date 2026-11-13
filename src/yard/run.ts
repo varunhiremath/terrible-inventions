@@ -13,7 +13,7 @@
  */
 import {
   DEEPEST, LIVES, TALL, WIDE,
-  areaOf, cubesOf, edgeOf, fills, newOrder, offBy, ordersFor,
+  areaOf, cubesOf, edgeOf, fills, newOrder, offBy, ordersFor, skinOf, slantOf,
   type Cut, type Dice, type Order,
 } from './level'
 
@@ -174,7 +174,7 @@ function apply(run: Run, move: Move): void {
   }
 
   if (move.kind === 'deep') {
-    if (run.order.job !== 'tank') return
+    if (run.order.job !== 'tank' && run.order.job !== 'skin') return
     const want = Math.max(1, Math.min(DEEPEST, run.deep + move.by))
     if (want !== run.deep) {
       run.deep = want
@@ -229,15 +229,24 @@ function bringOn(run: Run): void {
 
 // --- what the screen asks ----------------------------------------------------------
 
-/** What the chalked rectangle comes to, for the board along the bottom. */
+/**
+ * What the chalked rectangle comes to, for the board along the bottom.
+ *
+ * All of them, on every order, not just the one being asked about. The whole
+ * confusion this game is for is between area and perimeter, and the only cure
+ * is watching both of them change as the rectangle does.
+ */
 export const measures = (run: Run): {
-  wide: number; tall: number; area: number; edge: number; cubes: number
+  wide: number; tall: number; area: number; edge: number
+  half: number; cubes: number; skin: number
 } => ({
   wide: run.cut.wide,
   tall: run.cut.tall,
   area: areaOf(run.cut),
   edge: edgeOf(run.cut),
+  half: slantOf(run.cut),
   cubes: cubesOf(run.cut, run.deep),
+  skin: skinOf(run.cut, run.deep),
 })
 
 /** Whether the press would take what is chalked at the moment. */

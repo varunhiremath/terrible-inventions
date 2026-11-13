@@ -78,7 +78,8 @@ describe('the order things are heard in', () => {
 
   it('covers every event the scales can raise, exactly once', () => {
     const all: ScalesEvent[] = [
-      'place', 'lift', 'carried', 'balanced', 'wrong', 'arrive', 'dropped', 'cleared', 'over',
+      'place', 'lift', 'carried', 'split', 'balanced', 'wrong', 'arrive', 'dropped',
+      'cleared', 'over',
     ]
     sameSet(SCALES, all)
   })

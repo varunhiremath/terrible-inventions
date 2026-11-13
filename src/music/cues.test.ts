@@ -119,10 +119,10 @@ const TICKS: CueName[] = [
   // trigger held, every shot that lands rings, and a machine that has seen you
   // fires about as often as you do.
   'rifle', 'spang', 'sizzle',
-  // And the scales' three: a weight going on, a weight coming off, and a pile
-  // being tidied — somebody who knows what they are doing taps eight of these
-  // in four seconds.
-  'clink', 'offPan', 'swapUp',
+  // And the scales' four: a weight going on, a weight coming off, a pile being
+  // tidied and a weight being broken open — somebody who knows what they are
+  // doing taps eight of these in four seconds.
+  'clink', 'offPan', 'swapUp', 'swapDown',
   // And the yard's chalk, which is the busiest of the lot: it fires every
   // time the rectangle changes size, and a finger dragging across a sheet
   // changes it several times a second.
@@ -578,6 +578,13 @@ describe('the scales cues', () => {
     expect(offTo).toBeLessThan(offFrom)
     const [carryFrom, carryTo] = ends('swapUp')
     expect(carryTo, 'two becoming the next one up is a step up').toBeGreaterThan(carryFrom)
+    const [splitFrom, splitTo] = ends('swapDown')
+    expect(splitTo, 'one breaking into two of the next down is a step down')
+      .toBeLessThan(splitFrom)
+    expect(
+      [splitFrom, splitTo],
+      'borrowing is carrying backwards, and should be the same two notes backwards',
+    ).toEqual([carryTo, carryFrom])
     const [missFrom, missTo] = ends('notQuite')
     expect(missTo).toBeLessThan(missFrom)
     const [doneFrom, doneTo] = ends('weighed')

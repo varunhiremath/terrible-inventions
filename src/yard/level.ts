@@ -42,7 +42,7 @@ export const LIVES = 3
 /** How deep a tank can be built. */
 export const DEEPEST = 8
 
-export type Job = 'panel' | 'edging' | 'exact' | 'tank'
+export type Job = 'panel' | 'edging' | 'exact' | 'half' | 'tank' | 'skin'
 
 export interface Order {
   id: number
@@ -53,6 +53,8 @@ export interface Order {
   edge: number
   /** Cubes wanted, for a tank. */
   cubes: number
+  /** Ply wanted for the outside of a tank, for a skin order. */
+  skin: number
   /** A depth the order insists on, if it does. */
   deep: number | null
   /** Seconds it is on the board before the lorry goes without it. */
@@ -70,6 +72,29 @@ export interface Cut {
 export const areaOf = (cut: Cut): number => cut.wide * cut.tall
 export const edgeOf = (cut: Cut): number => 2 * (cut.wide + cut.tall)
 export const cubesOf = (cut: Cut, deep: number): number => areaOf(cut) * deep
+
+/**
+ * The slant: half a rectangle, cut corner to corner.
+ *
+ * This is the only piece in the yard that is not a rectangle, and it is here
+ * because half base times height is the one area formula that has to be
+ * *seen* to stop being a letter. A triangle of twelve squares is a rectangle
+ * of twenty-four with a line through it, and the only way to find the
+ * rectangle is to double the order and then factor it — so the job is the
+ * panel job with one extra step, and the extra step is the lesson.
+ */
+export const slantOf = (cut: Cut): number => areaOf(cut) / 2
+
+/**
+ * The skin of a tank: all six faces of it.
+ *
+ * Two the size of the floor, and a band right round the sides as deep as the
+ * tank is. Written the way it is worth saying out loud — two faces and a band
+ * — rather than as 2(lw + lh + wh), because the second one is four letters
+ * and the first one is a thing you can see.
+ */
+export const skinOf = (cut: Cut, deep: number): number =>
+  2 * areaOf(cut) + 2 * deep * (cut.wide + cut.tall)
 
 /**
  * The thinnest piece the press will take.
@@ -93,9 +118,19 @@ export function fills(order: Order, cut: Cut, deep: number): boolean {
     case 'panel': return areaOf(cut) === order.area
     case 'edging': return edgeOf(cut) === order.edge
     case 'exact': return areaOf(cut) === order.area && edgeOf(cut) === order.edge
+    /*
+     * The slant wants a rectangle of twice the order, because the press takes
+     * the corner-to-corner line out of whatever is chalked. An odd number of
+     * squares has no rectangle at all — 2 x 12.5 is not a thing a yard cuts —
+     * and the orders are built from real rectangles so one never goes up.
+     */
+    case 'half': return areaOf(cut) === order.area * 2
     case 'tank':
       if (order.deep !== null && deep !== order.deep) return false
       return cubesOf(cut, deep) === order.cubes
+    case 'skin':
+      if (order.deep !== null && deep !== order.deep) return false
+      return skinOf(cut, deep) === order.skin
   }
 }
 
@@ -120,6 +155,14 @@ export function offBy(order: Order, cut: Cut, deep: number): string {
       if (edge !== order.edge) return `edge is ${edge}, not ${order.edge}`
       return ''
     }
+    case 'half': {
+      const got = slantOf(cut)
+      if (got === order.area) return ''
+      // Said in halves when it lands on one, because "11.5 squares, not 12"
+      // is the whole point of the job and rounding it away would hide it.
+      const said = Number.isInteger(got) ? String(got) : got.toFixed(1)
+      return `${said} squares on the slant, not ${order.area}`
+    }
     case 'tank': {
       if (order.deep !== null && deep !== order.deep) {
         return `${deep} deep, not ${order.deep}`
@@ -127,22 +170,37 @@ export function offBy(order: Order, cut: Cut, deep: number): string {
       const got = cubesOf(cut, deep)
       return got === order.cubes ? '' : `${got} cubes, not ${order.cubes}`
     }
+    case 'skin': {
+      if (order.deep !== null && deep !== order.deep) {
+        return `${deep} deep, not ${order.deep}`
+      }
+      const got = skinOf(cut, deep)
+      return got === order.skin ? '' : `${got} of skin, not ${order.skin}`
+    }
   }
 }
 
 // --- how hard, and how fast ---------------------------------------------------
 
-/** Which orders the yard is taking on this level. */
+/**
+ * Which orders the yard is taking on this level.
+ *
+ * Area and perimeter together from the first level rather than one at a time,
+ * because confusing the two is the mistake the game exists to fix and you
+ * cannot confuse them if you have only met one. Then the puzzle that needs
+ * both, the slant, the tanks, and the skin of a tank last.
+ */
 export function jobsFor(level: number): Job[] {
-  const jobs: Job[] = ['panel']
-  if (level >= 2) jobs.push('edging')
-  if (level >= 3) jobs.push('exact')
+  const jobs: Job[] = ['panel', 'edging']
+  if (level >= 2) jobs.push('exact')
+  if (level >= 3) jobs.push('half')
   if (level >= 4) jobs.push('tank')
+  if (level >= 5) jobs.push('skin')
   return jobs
 }
 
-export const ordersFor = (level: number): number => 4 + level
-export const secondsFor = (level: number): number => Math.max(18, 42 - level * 3)
+export const ordersFor = (level: number): number => 5 + level
+export const secondsFor = (level: number): number => Math.max(14, 36 - level * 3)
 
 /**
  * The biggest side the orders will ask for on this level.
@@ -153,7 +211,7 @@ export const secondsFor = (level: number): number => Math.max(18, 42 - level * 3
  * no answer at all. An exact order is the worst place for that to happen,
  * because it has only the one answer to lose.
  */
-export const sidesFor = (level: number): number => Math.min(WIDE, 3 + level)
+export const sidesFor = (level: number): number => Math.min(WIDE, 4 + level * 2)
 export const acrossFor = (level: number): number => Math.min(WIDE, sidesFor(level))
 export const downFor = (level: number): number => Math.min(TALL, sidesFor(level))
 
@@ -172,7 +230,43 @@ export function newOrder(id: number, level: number, rng: Dice): Order {
   const jobs = jobsFor(level)
   const job = jobs[rng.int(0, jobs.length - 1)]
   const seconds = secondsFor(level)
-  const blank: Order = { id, job, area: 0, edge: 0, cubes: 0, deep: null, seconds }
+  const blank: Order = { id, job, area: 0, edge: 0, cubes: 0, skin: 0, deep: null, seconds }
+
+  if (job === 'half') {
+    /*
+     * Built from the rectangle the press will take, so the order is always a
+     * whole number of squares and always has a rectangle behind it. Both
+     * sides at least two as everywhere else, and at least one of them even,
+     * because a slant off an odd-by-odd rectangle is a half square.
+     */
+    const wide = rng.int(2, acrossFor(level))
+    let tall = rng.int(2, downFor(level))
+    // Odd by odd is the only pair whose half lands between two squares, and
+    // a side knocked down by one is always still at least two, because two is
+    // even and so is never the side that gets knocked down.
+    if ((wide * tall) % 2 !== 0) tall -= 1
+    return { ...blank, area: (wide * tall) / 2 }
+  }
+
+  if (job === 'skin') {
+    /*
+     * The outside of a tank, built from a tank. Floors are kept small here on
+     * purpose: the skin of a six by six four deep is 264, and a number that
+     * size stops being something anybody works out and starts being something
+     * they stab at.
+     */
+    const deep = rng.int(2, Math.min(DEEPEST, 2 + Math.floor(level / 2)))
+    const wide = rng.int(2, Math.min(acrossFor(level), 5))
+    const tall = rng.int(2, Math.min(downFor(level), 5))
+    const stated = rng.next() < 0.6
+    return {
+      ...blank,
+      skin: 2 * wide * tall + 2 * deep * (wide + tall),
+      deep: stated ? deep : null,
+      area: wide * tall,
+      cubes: wide * tall * deep,
+    }
+  }
 
   if (job === 'tank') {
     const deep = rng.int(2, Math.min(DEEPEST, 2 + Math.floor(level / 2)))
@@ -208,10 +302,11 @@ export function newOrder(id: number, level: number, rng: Dice): Order {
 /** Every rectangle on the sheet that would fill this order. */
 export function answers(order: Order): Cut[] {
   const out: Cut[] = []
+  const deepens = order.job === 'tank' || order.job === 'skin'
   for (let tall = 1; tall <= TALL; tall++) {
     for (let wide = 1; wide <= WIDE; wide++) {
       const cut = { x: 0, y: 0, wide, tall }
-      if (order.job === 'tank') {
+      if (deepens) {
         for (let deep = 1; deep <= DEEPEST; deep++) {
           if (fills(order, cut, deep)) { out.push(cut); break }
         }
@@ -227,10 +322,15 @@ export function wants(order: Order): string {
     case 'panel': return `${order.area} SQUARES`
     case 'edging': return `${order.edge} OF EDGING`
     case 'exact': return `${order.area} SQUARES, ${order.edge} OF EDGE`
+    case 'half': return `${order.area} SQUARES ON THE SLANT`
     case 'tank':
       return order.deep === null
         ? `${order.cubes} CUBES`
         : `${order.cubes} CUBES, ${order.deep} DEEP`
+    case 'skin':
+      return order.deep === null
+        ? `${order.skin} OF SKIN`
+        : `${order.skin} OF SKIN, ${order.deep} DEEP`
   }
 }
 
@@ -240,6 +340,8 @@ export function howTo(job: Job): string {
     case 'panel': return 'drag out that many squares — two each way at least'
     case 'edging': return 'the edge all the way round has to come to that'
     case 'exact': return 'both at once — there is only one way'
+    case 'half': return 'the press cuts corner to corner, so chalk twice as much'
     case 'tank': return 'drag the floor, then count the depth up'
+    case 'skin': return 'all six sides — two the size of the floor and a band right round'
   }
 }

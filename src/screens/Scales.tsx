@@ -37,6 +37,7 @@ const NOISE: Record<ScalesEvent, CueName> = {
   place: 'clink',
   lift: 'offPan',
   carried: 'swapUp',
+  split: 'swapDown',
   balanced: 'level',
   wrong: 'notQuite',
   arrive: 'belt',
@@ -52,7 +53,9 @@ const HOW: Record<Job, string> = {
   power: 'one weight, and it is a power of two',
   exponent: 'two to the what? type the power',
   double: 'twice as much — every weight moves up one',
+  halve: 'half as much — every weight moves down one',
   carry: 'two of a kind make the next one up',
+  borrow: 'take weights off — break one in two when it will not come off whole',
 }
 
 /** The exponent, written small, for under each weight on the rack. */
@@ -72,6 +75,8 @@ interface Hud {
   /** What is chalked on the crate, and what to do with it, in words. */
   says: string
   asks: string
+  /** What the pan has to come to, which a borrow job reads to mark the rack. */
+  load: number
 }
 
 export function Scales() {
@@ -87,11 +92,24 @@ export function Scales() {
   const [hud, setHud] = useState<Hud>({
     level: 1, score: 0, lives: LIVES, left: cratesFor(1) - 1, job: 'weigh',
     pan: WEIGHTS.map(() => 0), typed: '', status: 'playing', hint: null,
-    says: '', asks: '',
+    says: '', asks: '', load: 0,
   })
   const [asking, setAsking] = useState(false)
+  /*
+   * Which of the borrow job's two moves the rack is sending.
+   *
+   * Sticky, because borrowing comes in runs: working out 104 - 17 means
+   * breaking the 8 down three times in a row and then lifting once, and a
+   * mode that sprang back after every tap would cost four presses to do one
+   * thing. It is reset whenever the job changes, so a crate never arrives
+   * with the rack set to something the last crate wanted.
+   */
+  const [breaking, setBreaking] = useState(false)
 
   useEffect(() => { spare.current = spareLives({ workshop: kit }) }, [kit])
+
+  // A crate never arrives with the rack set to what the last one wanted.
+  useEffect(() => { setBreaking(false) }, [hud.job])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -161,6 +179,7 @@ export function Scales() {
           hint: next.clock < 6 ? nudge(next) : null,
           says: saysOn(next.crate),
           asks: asks(next.crate),
+          load: next.crate.load,
         }
         const was = shown.current
         if (
@@ -222,7 +241,7 @@ export function Scales() {
     setHud((h) => keep({
       ...h, status: 'playing', level: after.level, left: after.left,
       job: after.crate.job, pan: after.pan, typed: '',
-      says: saysOn(after.crate), asks: asks(after.crate),
+      says: saysOn(after.crate), asks: asks(after.crate), load: after.crate.load,
     }))
   }
 
@@ -233,7 +252,7 @@ export function Scales() {
     setHud(keep({
       level: 1, score: 0, lives: fresh.lives, left: fresh.left, job: fresh.crate.job,
       pan: fresh.pan, typed: '', status: 'playing', hint: null,
-      says: saysOn(fresh.crate), asks: asks(fresh.crate),
+      says: saysOn(fresh.crate), asks: asks(fresh.crate), load: fresh.crate.load,
     }))
   }
 
@@ -242,10 +261,20 @@ export function Scales() {
   const bits = bitsFor(hud.level)
   // The two jobs answered on the pad rather than on the rack.
   const naming = hud.job === 'name' || hud.job === 'exponent'
+  /*
+   * And the two whose pan belongs to the machine, which send a different move
+   * from the same button. A carry crate only ever tidies; a borrow crate
+   * works out for itself whether the weight under the thumb is coming off,
+   * breaking in two, or carrying up, because which of the three it is can be
+   * read off the button before it is pressed.
+   */
   const carrying = hud.job === 'carry'
+  const borrowing = hud.job === 'borrow'
+  const splitting = borrowing && breaking
 
   /* Biggest first, the way a number is written. */
   const rack = Array.from({ length: bits }, (_, i) => bits - 1 - i)
+  const onThePan = hud.pan.reduce((sum, many, bit) => sum + many * WEIGHTS[bit], 0)
 
   return (
     <div className="relative flex h-full w-full touch-none select-none flex-col overflow-hidden bg-ink">
@@ -343,18 +372,64 @@ export function Scales() {
            * a third of a phone and leaves the machine looking through a
            * letterbox.
            */
+          <>
+            {borrowing && (
+              /*
+               * The borrow job's two moves, named, on the screen, and lit so
+               * that which one the rack is sending is never a thing you have
+               * to remember. Both of them are real words for what they do:
+               * you take a weight off, or you break one in two.
+               */
+              <div className="mb-1.5 grid grid-cols-2 gap-2">
+                {([false, true] as const).map((mode) => (
+                  <button
+                    key={String(mode)}
+                    type="button"
+                    aria-pressed={breaking === mode}
+                    onPointerDown={() => setBreaking(mode)}
+                    className={[
+                      'rounded-xl border-2 py-2 font-mono text-[0.7rem] font-bold',
+                      'uppercase tracking-widest transition-transform',
+                      'active:translate-y-[2px]',
+                      breaking === mode
+                        ? 'border-rust bg-rust/25 text-rust'
+                        : 'border-ink-line bg-ink-soft text-dim',
+                    ].join(' ')}
+                  >
+                    {mode ? 'break in two' : 'take off'}
+                  </button>
+                ))}
+              </div>
+            )}
           <div className={bits > 8 ? 'grid grid-cols-6 gap-1.5' : 'grid grid-cols-4 gap-2'}>
             {rack.map((bit) => {
               const many = hud.pan[bit] ?? 0
               const on = many > 0
               const pile = many > 1
+              /*
+               * On a borrow job the button says, before it is pressed,
+               * whether the pan can spare this weight. One it cannot spare is
+               * exactly the one that has to be broken open, and that is the
+               * whole insight the job exists for — leaving a child to find it
+               * by pressing things is a worse game, not a harder one.
+               */
+              const weight = WEIGHTS[bit]
+              const breaks =
+                borrowing && many >= 1 && onThePan - weight < hud.load
               return (
                 <button
                   key={bit}
                   type="button"
-                  aria-label={`${WEIGHTS[bit]}${pile ? `, ${many} of them` : ''}`}
+                  aria-label={
+                    `${weight}${pile ? `, ${many} of them` : ''}` +
+                    (breaks ? ', will not come off' : '')
+                  }
                   onPointerDown={() => send(
-                    carrying ? { kind: 'carry', bit } : { kind: 'tap', bit },
+                    carrying
+                      ? { kind: 'carry', bit }
+                      : splitting
+                        ? { kind: 'split', bit }
+                        : { kind: 'tap', bit },
                   )}
                   className={[
                     'relative rounded-xl border-2 font-mono font-bold tabular-nums',
@@ -364,9 +439,10 @@ export function Scales() {
                       ? 'border-bolt bg-bolt/25 text-bolt'
                       : 'border-ink-line bg-ink-soft text-dim',
                     hud.hint === bit ? 'ring-2 ring-moss/70' : '',
+                    breaks ? 'border-dashed' : '',
                   ].join(' ')}
                 >
-                  {WEIGHTS[bit]}
+                  {weight}
                   {pile && (
                     <span className="absolute right-1.5 top-1 font-mono text-[0.6rem] text-rust">
                       ×{many}
@@ -379,6 +455,7 @@ export function Scales() {
               )
             })}
           </div>
+          </>
         )}
         <p className="mt-1.5 text-center font-mono text-[0.62rem] uppercase tracking-widest text-dim/60">
           {HOW[hud.job]}

@@ -361,7 +361,7 @@ const TILES: Tile[] = [
       drawYard(ctx, {
         ...base,
         order: {
-          id: 1, job: 'exact', area: 24, edge: 20, cubes: 0, deep: null, seconds: 40,
+          id: 1, job: 'exact', area: 24, edge: 20, cubes: 0, skin: 0, deep: null, seconds: 40,
         },
         cut: { x: 4, y: 3, wide: 6, tall: 4 },
         clock: 31,

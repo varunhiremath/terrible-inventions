@@ -15,17 +15,24 @@
  * way you are wrong. Nothing here asks "what is 45 in binary"; the machine
  * asks it by existing.
  *
- * Four jobs come along the belt, and between them they cover the three things
- * he likes doing:
+ * Eight jobs come along the belt, in four pairs, and each pair is one idea
+ * read in both directions — which is the whole shape of the game:
  *
- *  - WEIGH: the crate says 45, make it. Decimal into binary.
- *  - NAME: the weights are already on and the crate is a mystery. Binary back
- *    into decimal.
- *  - POWER: the crate says 2⁶ and wants exactly that weight. Powers of two.
- *  - CARRY: the pan has two 8s on it, and the machine takes only one of each.
- *    Tap them together and they become a 16. That is carrying, and it is the
- *    one rule of binary addition that anybody ever gets wrong — here it is a
- *    physical move that visibly does not change what the pan weighs.
+ *  - WEIGH / NAME: the crate says 45, make it; or the weights are already on
+ *    and the crate is a mystery. Decimal into binary, and back out again.
+ *  - POWER / EXPONENT: the crate says 2⁶ and wants that one weight; or it
+ *    says 16384 and wants the power typed. The second is the only job here
+ *    not limited by what the rack can lift, so it goes to 2²⁰.
+ *  - DOUBLE / HALVE: the pan arrives with 87 on it and the crate says ×2, or
+ *    with 174 on it and the crate says ÷2. Every weight takes one step left,
+ *    or one step right. Place value, with handles on it.
+ *  - CARRY / BORROW: the pan has two 8s on it and the machine takes one of
+ *    each, so tap them together and they become a 16. Or the crate says
+ *    104−17 and arrives with 104 on it, and seventeen is not on the pan to
+ *    lift — so a weight has to be broken into two of the next one down until
+ *    it is. Binary addition and binary subtraction, both as moves you make
+ *    with a thumb rather than rules you are told, and in both of them the pan
+ *    visibly goes on weighing the same while you work.
  */
 
 /** The dice, as little of them as this file needs. */
@@ -62,7 +69,9 @@ export const TOP_POWER = 20
 /** How many goes you get, before anything the workshop adds. */
 export const LIVES = 3
 
-export type Job = 'weigh' | 'name' | 'power' | 'carry' | 'exponent' | 'double'
+export type Job =
+  | 'weigh' | 'name' | 'power' | 'exponent'
+  | 'double' | 'halve' | 'carry' | 'borrow'
 
 export interface Crate {
   id: number
@@ -99,31 +108,40 @@ const empty = (): number[] => WEIGHTS.map(() => 0)
 /**
  * How many weights are in play on a given level.
  *
- * Four to start with, which is nought to fifteen and the whole of what a
- * beginner should be looking at; eight by the fifth, which is 255. Going
- * straight to eight is how you make a rack of brass look like a wall.
+ * Five to start with, which is nought to thirty-one, and the whole rack by
+ * the eighth. It used to start at four — nought to fifteen — and four is the
+ * right opening for somebody meeting a rack of brass for the first time, not
+ * for somebody who has already had the game for a term. Grade five does not
+ * need a level spent on numbers under sixteen.
  */
-export const bitsFor = (level: number): number => Math.min(WEIGHTS.length, 3 + level)
+export const bitsFor = (level: number): number => Math.min(WEIGHTS.length, 4 + level)
 
 /** The biggest exponent worth asking for on this level. */
 export const powerCeiling = (level: number): number =>
-  Math.min(TOP_POWER, 6 + level)
+  Math.min(TOP_POWER, 8 + level)
 
 export const topFor = (level: number): number => Math.pow(2, bitsFor(level)) - 1
 
-/** Which jobs the belt is sending on this level. */
+/**
+ * Which jobs the belt is sending on this level.
+ *
+ * Every one of them arrives a level earlier than it used to, and the two new
+ * ones are at the end. A ladder pitched so that the interesting jobs start on
+ * level five is a ladder most of whose rungs are spent waiting.
+ */
 export function jobsFor(level: number): Job[] {
   const jobs: Job[] = ['weigh']
-  if (level >= 2) jobs.push('name')
-  if (level >= 3) jobs.push('power', 'exponent')
+  if (level >= 1) jobs.push('name')
+  if (level >= 2) jobs.push('power', 'exponent')
+  if (level >= 3) jobs.push('double', 'halve')
   if (level >= 4) jobs.push('carry')
-  if (level >= 5) jobs.push('double')
+  if (level >= 5) jobs.push('borrow')
   return jobs
 }
 
 /** How many crates there are, and how long each is on the belt. */
-export const cratesFor = (level: number): number => 5 + level
-export const secondsFor = (level: number): number => Math.max(12, 28 - level * 2)
+export const cratesFor = (level: number): number => 6 + level
+export const secondsFor = (level: number): number => Math.max(11, 26 - level * 2)
 
 // --- reading and writing numbers ----------------------------------------------
 
@@ -166,6 +184,16 @@ export function uncarry(pan: number[], bit: number): boolean {
   pan[bit - 1] += 2
   return true
 }
+
+/**
+ * Splitting, which is the same move with the player's hands on it.
+ *
+ * Carrying is how a pile is tidied up; splitting is how a weight that will
+ * not come off the pan whole is broken into two that will. They are the same
+ * arithmetic read in opposite directions, and borrowing in binary is nothing
+ * but this move done until the weight you want to take off is on the pan.
+ */
+export const split = uncarry
 
 /** And carrying: two of one size become one of the next. */
 export function carry(pan: number[], bit: number): boolean {
@@ -237,6 +265,43 @@ export function newCrate(id: number, level: number, rng: Dice): Crate {
     }
   }
 
+  if (job === 'halve') {
+    /*
+     * And back the other way: every weight takes one step to the right. The
+     * load has to be even for that to land on the rack at all, which is
+     * itself the thing worth noticing — an odd number cannot be halved on a
+     * bench of whole weights, and the belt never sends one that cannot.
+     */
+    const half = pickLoad(level, rng, 2, Math.floor(topFor(level) / 2))
+    const was = half * 2
+    return {
+      id, job, load: half, pan: panFor(was), seconds, was: String(was),
+    }
+  }
+
+  if (job === 'borrow') {
+    /*
+     * Taking a number off the pan, which is the half of binary arithmetic the
+     * machine had no move for.
+     *
+     * The crate says 104-17 and arrives with 104 on the pan. Seventeen is
+     * 16+1 and the pan holds 64, 32 and 8, so there is nothing to lift: you
+     * have to break a weight into two of the next one down until the ones you
+     * want are there. That is borrowing, and here it is a thing you do with a
+     * thumb rather than a row of crossings-out.
+     *
+     * The amount taken off is deliberately never a subset of what is on the
+     * pan. If it were, the whole job would be lifting two weights off and
+     * nobody would ever have to split anything.
+     */
+    const from = pickLoad(level, rng, 2)
+    const off = pickBorrow(from, level, rng)
+    return {
+      id, job, load: from - off, pan: panFor(from), seconds,
+      was: `${from}-${off}`,
+    }
+  }
+
   if (job === 'carry') {
     /*
      * A carry crate is an addition that has been poured onto the pan without
@@ -275,6 +340,29 @@ function pickLoad(level: number, rng: Dice, least: number, ceiling?: number): nu
   return Math.max(3, Math.min(top, 0b101101 % (top + 1)))
 }
 
+/**
+ * How much to take off a borrow crate.
+ *
+ * Two conditions, and the second is the job. It has to leave something
+ * behind, and it must not be a subset of the bits already on the pan —
+ * because `104 - 8` is answered by lifting the 8 off and learning nothing,
+ * while `104 - 17` cannot be answered without breaking something open.
+ */
+function pickBorrow(from: number, level: number, rng: Dice): number {
+  const bits = bitsFor(level)
+  for (let tries = 0; tries < 48; tries++) {
+    const off = rng.int(1, from - 1)
+    if ((from & off) !== off && onBits(off) >= 1 && off < from) return off
+  }
+  // Whatever happens, something that is not already on the pan: the lowest
+  // bit the pan has not got, which is never a subset of it by construction.
+  for (let bit = 0; bit < bits; bit++) {
+    const w = WEIGHTS[bit]
+    if ((from & w) === 0 && w < from) return w
+  }
+  return 1
+}
+
 /** How many bits are set. */
 export const onBits = (n: number): number => {
   let many = 0
@@ -293,7 +381,9 @@ export function saysOn(crate: Crate): string {
     case 'power': return `2^${crate.power}`
     case 'exponent': return String(crate.load)
     case 'double': return `${crate.was} x2`
+    case 'halve': return `${crate.was} /2`
     case 'carry': return crate.was ?? String(crate.load)
+    case 'borrow': return crate.was ?? String(crate.load)
   }
 }
 
@@ -305,6 +395,8 @@ export function asks(crate: Crate): string {
     case 'power': return 'ONE WEIGHT ONLY'
     case 'exponent': return 'WHICH POWER OF TWO IS IT?'
     case 'double': return 'DOUBLE IT'
+    case 'halve': return 'HALVE IT'
     case 'carry': return 'ADD IT UP — TAP A PAIR'
+    case 'borrow': return 'TAKE IT OFF'
   }
 }

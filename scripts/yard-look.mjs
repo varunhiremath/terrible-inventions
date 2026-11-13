@@ -142,10 +142,26 @@ function findShape(order) {
       if (order.job === 'exact' && wide * tall === order.area && 2 * (wide + tall) === order.edge) {
         return { wide, tall, deep: null }
       }
+      /*
+       * The slant: the press cuts corner to corner, so the rectangle wanted
+       * is twice the order. Doubling and then factoring, which is the job.
+       */
+      if (order.job === 'half' && wide * tall === order.area * 2) {
+        return { wide, tall, deep: null }
+      }
       if (order.job === 'tank') {
         for (let deep = 2; deep <= 8; deep++) {
           if (order.deep !== null && deep !== order.deep) continue
           if (wide * tall * deep === order.cubes) return { wide, tall, deep }
+        }
+      }
+      // And the skin: two faces the size of the floor and a band right round.
+      if (order.job === 'skin') {
+        for (let deep = 1; deep <= 8; deep++) {
+          if (order.deep !== null && deep !== order.deep) continue
+          if (2 * wide * tall + 2 * deep * (wide + tall) === order.skin) {
+            return { wide, tall, deep }
+          }
         }
       }
     }
@@ -156,10 +172,18 @@ function findShape(order) {
 /** What the board is asking for, off its own spoken line. */
 function readOrder(text) {
   const line = (text.match(/Order: ([^.]+)\./) ?? [])[1] ?? ''
+  // Skin before cubes, and the slant before a plain panel: both of the later
+  // patterns would match the earlier orders' wording as well.
+  const skin = line.match(/(\d+) OF SKIN(?:, (\d+) DEEP)?/)
+  if (skin) {
+    return { job: 'skin', skin: Number(skin[1]), deep: skin[2] ? Number(skin[2]) : null }
+  }
   const cubes = line.match(/(\d+) CUBES(?:, (\d+) DEEP)?/)
   if (cubes) {
     return { job: 'tank', cubes: Number(cubes[1]), deep: cubes[2] ? Number(cubes[2]) : null }
   }
+  const slant = line.match(/(\d+) SQUARES ON THE SLANT/)
+  if (slant) return { job: 'half', area: Number(slant[1]) }
   const both = line.match(/(\d+) SQUARES, (\d+) OF EDGE/)
   if (both) return { job: 'exact', area: Number(both[1]), edge: Number(both[2]) }
   const edge = line.match(/(\d+) OF EDGING/)
@@ -172,13 +196,15 @@ function readOrder(text) {
 let filled = 0
 let best = 0
 const kinds = new Set()
-for (let round = 0; round < 24; round++) {
+for (let round = 0; round < 60; round++) {
   const body = await page.locator('body').innerText()
   if (/Level \d+ delivered/i.test(body)) {
     const level = Number((body.match(/Level (\d+) delivered/) ?? [])[1] ?? 0)
     await page.getByRole('button', { name: /On to level/i }).first().click()
     await page.waitForTimeout(800)
-    if (level >= 4) break
+    // Through to the sixth, because the two orders worth proving arrive late:
+    // the slant on the third and the skin of a tank on the fifth.
+    if (level >= 6) break
     continue
   }
   if (/lorry went without you/i.test(body)) { console.log('ran out of lives'); break }
@@ -199,7 +225,7 @@ for (let round = 0; round < 24; round++) {
     break
   }
 
-  if (want.deep) {
+  if (want.deep !== null && want.deep !== undefined) {
     const now = Number(((await said()).match(/(\d+) deep/) ?? [])[1] ?? 2)
     const button = page.getByRole('button', { name: want.deep > now ? 'Deeper' : 'Shallower' })
     for (let i = 0; i < Math.abs(want.deep - now); i++) {
@@ -216,6 +242,10 @@ for (let round = 0; round < 24; round++) {
 
 await page.screenshot({ path: '/tmp/yard-after.png' })
 console.log(`${filled} orders had a go, best ${best}, bar ${(await hud()).replace(/\s+/g, ' ').slice(0, 70)}`)
+console.log(`orders met: ${[...kinds].sort().join(', ')}`)
+for (const job of ['panel', 'edging', 'exact', 'half', 'tank', 'skin']) {
+  if (!kinds.has(job)) console.log(`  (never saw a ${job} order)`)
+}
 if (best === 0) console.log('YARD FAILED: nothing scored — the press may not be reaching the sheet')
 
 if (problems.length === 0) console.log('YARD: nothing thrown')

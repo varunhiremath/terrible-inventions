@@ -1215,7 +1215,7 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     const [wide, tall] = steps[Math.min(steps.length - 1, Math.floor(t * steps.length))]
     drawSheet(ctx, {
       ...base,
-      order: { id: 1, job: 'panel', area: 24, edge: 0, cubes: 0, deep: null, seconds: 40 },
+      order: { id: 1, job: 'panel', area: 24, edge: 0, cubes: 0, skin: 0, deep: null, seconds: 40 },
       cut: { x: 3, y: 3, wide, tall },
       clock: 34,
       left: 4,
@@ -1228,7 +1228,7 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     const deep = 1 + Math.min(2, Math.floor(t * 3))
     drawSheet(ctx, {
       ...base,
-      order: { id: 1, job: 'tank', area: 0, edge: 0, cubes: 24, deep: null, seconds: 40 },
+      order: { id: 1, job: 'tank', area: 0, edge: 0, cubes: 24, skin: 0, deep: null, seconds: 40 },
       cut: { x: 3, y: 4, wide: 4, tall: 3 },
       deep,
       clock: 30,

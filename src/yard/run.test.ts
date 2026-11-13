@@ -3,7 +3,7 @@ import {
   DEEPEST, LIVES, TALL, WIDE,
   THINNEST,
   acrossFor, answers, areaOf, cubesOf, downFor, edgeOf, fills, jobsFor, newOrder, offBy,
-  ordersFor, sidesFor,
+  ordersFor, sidesFor, skinOf, slantOf,
   type Cut, type Dice, type Order,
 } from './level'
 import {
@@ -102,10 +102,17 @@ describe('chalking a rectangle', () => {
 
 describe('the order book', () => {
   it('only takes work the yard has been taught', () => {
-    expect(jobsFor(1)).toEqual(['panel'])
-    expect(jobsFor(2)).toContain('edging')
-    expect(jobsFor(3)).toContain('exact')
+    // Area and perimeter together from the first order, because confusing the
+    // two is what the game is for and you cannot confuse one.
+    expect(jobsFor(1)).toEqual(['panel', 'edging'])
+    expect(jobsFor(2)).toContain('exact')
+    expect(jobsFor(3)).toContain('half')
     expect(jobsFor(4)).toContain('tank')
+    expect(jobsFor(5)).toContain('skin')
+    // And nothing before its turn: the skin of a tank before a tank would be
+    // the outside of something nobody has built yet.
+    expect(jobsFor(2)).not.toContain('half')
+    expect(jobsFor(4)).not.toContain('skin')
   })
 
   it('never puts up an order that cannot be filled', () => {
@@ -130,7 +137,7 @@ describe('the order book', () => {
      * nobody has to think about.
      */
     const order: Order = {
-      id: 1, job: 'panel', area: 12, edge: 0, cubes: 0, deep: null, seconds: 30,
+      id: 1, job: 'panel', area: 12, edge: 0, cubes: 0, skin: 0, deep: null, seconds: 30,
     }
     expect(fills(order, { x: 0, y: 0, wide: 12, tall: 1 }, 1)).toBe(false)
     expect(fills(order, { x: 0, y: 0, wide: 6, tall: 2 }, 1)).toBe(true)
@@ -172,7 +179,7 @@ describe('the order book', () => {
 
   it('gives a panel order its factor pairs', () => {
     const order: Order = {
-      id: 1, job: 'panel', area: 24, edge: 0, cubes: 0, deep: null, seconds: 30,
+      id: 1, job: 'panel', area: 24, edge: 0, cubes: 0, skin: 0, deep: null, seconds: 30,
     }
     const shapes = answers(order).map((cut) => `${cut.wide}x${cut.tall}`).sort()
     // Every way of making 24 that fits on a fourteen by ten sheet.
@@ -192,7 +199,102 @@ describe('the order book', () => {
     const early = newOrder(1, 1, dice(3)).seconds
     const late = newOrder(1, 8, dice(3)).seconds
     expect(early).toBeGreaterThan(late)
-    expect(late).toBeGreaterThanOrEqual(18)
+    expect(late).toBeGreaterThanOrEqual(14)
+  })
+
+  it('never asks for a slant that has no rectangle behind it', () => {
+    /*
+     * A triangle of twelve squares is a rectangle of twenty-four cut corner
+     * to corner. A triangle of eleven and a half is a rectangle of
+     * twenty-three, which has no factor pair with both sides over one — so
+     * the order would go up on the board with no answer at all. Every slant
+     * order is built from a real rectangle, and this is what says so.
+     */
+    let seen = 0
+    for (let seed = 1; seed <= 200; seed++) {
+      for (const level of [3, 4, 6, 9]) {
+        const order = newOrder(1, level, dice(seed))
+        if (order.job !== 'half') continue
+        seen++
+        const fits = answers(order).filter((cut) => cut.wide > 1 && cut.tall > 1)
+        expect(fits.length, `level ${level} seed ${seed}: ${order.area} on the slant`)
+          .toBeGreaterThan(0)
+        expect(Number.isInteger(order.area), `${order.area} is not a whole number`).toBe(true)
+      }
+    }
+    expect(seen, 'no slant orders were generated, so this tested nothing')
+      .toBeGreaterThan(40)
+  })
+
+  it('cuts a slant to half the rectangle, every rectangle', () => {
+    // Against the arithmetic itself, for every rectangle the sheet will hold.
+    for (let wide = 2; wide <= WIDE; wide++) {
+      for (let tall = 2; tall <= TALL; tall++) {
+        const cut: Cut = { x: 0, y: 0, wide, tall }
+        expect(slantOf(cut), `${wide} by ${tall}`).toBe((wide * tall) / 2)
+        const order: Order = {
+          id: 1, job: 'half', area: (wide * tall) / 2, edge: 0, cubes: 0, skin: 0,
+          deep: null, seconds: 30,
+        }
+        // The right rectangle fills it; one square bigger does not.
+        expect(fills(order, cut, 1), `${wide} by ${tall}`).toBe(true)
+        expect(fills(order, { ...cut, wide: wide + 1 }, 1)).toBe(false)
+      }
+    }
+  })
+
+  it('counts a skin as two faces and a band right round', () => {
+    /*
+     * Surface area, against the formula written the other way. A three by
+     * four tank two deep: two floors is 24, and the band round is 2 x 2 x 7,
+     * which is 28. Fifty-two. If these two ever disagree the game is teaching
+     * the wrong surface area, and this is the only thing that would say so.
+     */
+    expect(skinOf({ x: 0, y: 0, wide: 3, tall: 4 }, 2)).toBe(52)
+    for (let wide = 2; wide <= 6; wide++) {
+      for (let tall = 2; tall <= 6; tall++) {
+        for (let deep = 1; deep <= DEEPEST; deep++) {
+          const cut: Cut = { x: 0, y: 0, wide, tall }
+          expect(skinOf(cut, deep), `${wide}x${tall}x${deep}`)
+            .toBe(2 * (wide * tall + wide * deep + tall * deep))
+        }
+      }
+    }
+  })
+
+  it('never puts up a skin order that cannot be built', () => {
+    let seen = 0
+    for (let seed = 1; seed <= 200; seed++) {
+      for (const level of [5, 6, 9]) {
+        const order = newOrder(1, level, dice(seed))
+        if (order.job !== 'skin') continue
+        seen++
+        const fits = answers(order).filter((cut) => cut.wide > 1 && cut.tall > 1)
+        expect(fits.length, `level ${level} seed ${seed}: ${order.skin} of skin`)
+          .toBeGreaterThan(0)
+      }
+    }
+    expect(seen, 'no skin orders were generated, so this tested nothing')
+      .toBeGreaterThan(40)
+  })
+
+  it('says which way a slant and a skin are out, not just no', () => {
+    const slant: Order = {
+      id: 1, job: 'half', area: 12, edge: 0, cubes: 0, skin: 0, deep: null, seconds: 30,
+    }
+    // A four by five is twenty, so ten on the slant, which is two short.
+    expect(offBy(slant, { x: 0, y: 0, wide: 4, tall: 5 }, 1))
+      .toBe('10 squares on the slant, not 12')
+    // And an odd-by-odd rectangle lands on half a square, which is said as one.
+    expect(offBy(slant, { x: 0, y: 0, wide: 3, tall: 5 }, 1))
+      .toBe('7.5 squares on the slant, not 12')
+
+    const wrap: Order = {
+      id: 1, job: 'skin', area: 0, edge: 0, cubes: 0, skin: 52, deep: 2, seconds: 30,
+    }
+    expect(offBy(wrap, { x: 0, y: 0, wide: 3, tall: 4 }, 3)).toBe('3 deep, not 2')
+    expect(offBy(wrap, { x: 0, y: 0, wide: 2, tall: 4 }, 2)).toBe('40 of skin, not 52')
+    expect(offBy(wrap, { x: 0, y: 0, wide: 3, tall: 4 }, 2)).toBe('')
   })
 
   it('asks for bigger shapes as the levels go on, each inside its own axis', () => {
@@ -208,7 +310,7 @@ describe('the press', () => {
     return {
       ...base,
       order: {
-        id: 1, job: 'panel', area: 24, edge: 0, cubes: 0, deep: null, seconds: 40,
+        id: 1, job: 'panel', area: 24, edge: 0, cubes: 0, skin: 0, deep: null, seconds: 40,
         ...order,
       },
       clock: 40,
@@ -345,7 +447,7 @@ function work(run: Run): Move | null {
   const order = run.order
   const want = find(order)
   if (!want) return { kind: 'cut' }
-  if (order.job === 'tank' && run.deep !== want.deep) {
+  if ((order.job === 'tank' || order.job === 'skin') && run.deep !== want.deep) {
     return { kind: 'deep', by: run.deep < want.deep ? 1 : -1 }
   }
   if (run.cut.wide !== want.wide || run.cut.tall !== want.tall) {
@@ -370,10 +472,32 @@ function find(order: Order): { wide: number; tall: number; deep: number } | null
       }
       if (order.job === 'exact' && wide * tall === order.area &&
         2 * (wide + tall) === order.edge) return { wide, tall, deep: 2 }
+      /*
+       * The slant: the press takes the corner-to-corner line out, so the
+       * rectangle wanted is twice the order. Doubling and then factoring,
+       * which is the whole job and is done here rather than looked up.
+       */
+      if (order.job === 'half' && wide * tall === order.area * 2) {
+        return { wide, tall, deep: 2 }
+      }
       if (order.job === 'tank') {
         for (let deep = 1; deep <= DEEPEST; deep++) {
           if (order.deep !== null && deep !== order.deep) continue
           if (wide * tall * deep === order.cubes) return { wide, tall, deep }
+        }
+      }
+      /*
+       * And the skin: two faces the size of the floor, plus a band round the
+       * sides as deep as the tank. Written out longhand here on purpose — if
+       * this ever stopped agreeing with the game's own, one of the two would
+       * be teaching the wrong surface area and nothing else would notice.
+       */
+      if (order.job === 'skin') {
+        for (let deep = 1; deep <= DEEPEST; deep++) {
+          if (order.deep !== null && deep !== order.deep) continue
+          if (2 * wide * tall + 2 * deep * (wide + tall) === order.skin) {
+            return { wide, tall, deep }
+          }
         }
       }
       void cut
@@ -468,7 +592,7 @@ describe('what the board says', () => {
     const base = newRun(4, LIVES, 0, 5)
     const run: Run = {
       ...base,
-      order: { id: 1, job: 'tank', area: 0, edge: 0, cubes: 60, deep: null, seconds: 40 },
+      order: { id: 1, job: 'tank', area: 0, edge: 0, cubes: 60, skin: 0, deep: null, seconds: 40 },
       cut: { x: 1, y: 1, wide: 4, tall: 4 },
       deep: 3,
     }

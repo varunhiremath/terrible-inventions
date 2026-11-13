@@ -12,7 +12,7 @@
  * both ends. That is the picture he is being taught to read, so it is the
  * picture the game draws.
  */
-import { TALL, WIDE, areaOf, cubesOf, edgeOf, wants, type Cut } from './level'
+import { TALL, WIDE, areaOf, cubesOf, edgeOf, skinOf, slantOf, wants, type Cut } from './level'
 import { ready, type Run } from './run'
 
 export interface View {
@@ -165,6 +165,7 @@ function sheet(ctx: CanvasRenderingContext2D, board: Board): void {
 /** The piece chalked on the sheet, flat. */
 function chalked(
   ctx: CanvasRenderingContext2D, board: Board, cut: Cut, right: boolean, cheer: number,
+  slant = false,
 ): void {
   const { x, y, cell } = board
   const left = x + cut.x * cell
@@ -172,19 +173,48 @@ function chalked(
   const w = cut.wide * cell
   const h = cut.tall * cell
 
-  ctx.fillStyle = right ? 'rgba(74,222,128,0.26)' : INK.cutFill
-  ctx.fillRect(left, top, w, h)
-  if (cheer > 0) {
-    ctx.fillStyle = `rgba(74,222,128,${0.3 * cheer})`
-    ctx.fillRect(left, top, w, h)
+  /*
+   * On a slant order only half of the rectangle is coming off the sheet, so
+   * only half of it is shaded. The point of the job is that the piece is half
+   * the rectangle, and a child who can see the other half of the rectangle
+   * sitting there unshaded does not have to be told.
+   */
+  const shade = (alpha: string) => {
+    ctx.fillStyle = alpha
+    if (!slant) {
+      ctx.fillRect(left, top, w, h)
+      return
+    }
+    ctx.beginPath()
+    ctx.moveTo(left, top)
+    ctx.lineTo(left + w, top)
+    ctx.lineTo(left, top + h)
+    ctx.closePath()
+    ctx.fill()
   }
+
+  shade(right ? 'rgba(74,222,128,0.26)' : INK.cutFill)
+  if (cheer > 0) shade(`rgba(74,222,128,${0.3 * cheer})`)
 
   // A dashed cut line, because that is what a line you are about to cut along
   // looks like on a piece of wood.
   ctx.strokeStyle = right ? INK.good : INK.cut
   ctx.lineWidth = Math.max(2, cell * 0.08)
   ctx.setLineDash([cell * 0.3, cell * 0.22])
-  ctx.strokeRect(left, top, w, h)
+  if (slant) {
+    // The rectangle in a thin line and the cut itself in a fat one, so which
+    // of the two lines the press follows is never in doubt.
+    ctx.save()
+    ctx.lineWidth = Math.max(1, cell * 0.035)
+    ctx.strokeRect(left, top, w, h)
+    ctx.restore()
+    ctx.beginPath()
+    ctx.moveTo(left + w, top)
+    ctx.lineTo(left, top + h)
+    ctx.stroke()
+  } else {
+    ctx.strokeRect(left, top, w, h)
+  }
   ctx.setLineDash([])
 }
 
@@ -320,8 +350,9 @@ export function drawRun(ctx: CanvasRenderingContext2D, run: Run, view: View): vo
   // --- the sheet and what is chalked on it ----------------------------------
   sheet(ctx, board)
   const right = ready(run)
-  if (run.order.job === 'tank') stacked(ctx, board, run.cut, run.deep, right)
-  else chalked(ctx, board, run.cut, right, run.cheer)
+  const solid = run.order.job === 'tank' || run.order.job === 'skin'
+  if (solid) stacked(ctx, board, run.cut, run.deep, right)
+  else chalked(ctx, board, run.cut, right, run.cheer, run.order.job === 'half')
 
   // The two measurements, written the way his book writes them.
   const cutL = board.x + run.cut.x * cell
@@ -348,14 +379,32 @@ export function drawRun(ctx: CanvasRenderingContext2D, run: Run, view: View): vo
   ctx.fillStyle = 'rgba(12,14,18,0.76)'
   box(ctx, w * 0.04, plateY - h * 0.055, w * 0.92, h * 0.115, h * 0.018)
 
-  const tank = run.order.job === 'tank'
+  const job = run.order.job
   const cells: { name: string; value: string; lit: boolean }[] = [
     { name: 'SIDES', value: `${run.cut.wide}x${run.cut.tall}`, lit: false },
-    { name: 'SQUARES', value: String(areaOf(run.cut)), lit: run.order.job === 'panel' || run.order.job === 'exact' },
-    { name: 'EDGE', value: String(edgeOf(run.cut)), lit: run.order.job === 'edging' || run.order.job === 'exact' },
+    { name: 'SQUARES', value: String(areaOf(run.cut)), lit: job === 'panel' || job === 'exact' },
+    { name: 'EDGE', value: String(edgeOf(run.cut)), lit: job === 'edging' || job === 'exact' },
   ]
-  if (tank) {
+  /*
+   * A slant order shows the rectangle's squares *and* half of them, side by
+   * side, because the whole job is the step between those two numbers. Hiding
+   * the rectangle's area and only showing the half would turn it back into a
+   * sum with the working rubbed out.
+   */
+  if (job === 'half') {
+    const got = slantOf(run.cut)
+    cells.push({
+      name: 'HALF OF IT',
+      value: Number.isInteger(got) ? String(got) : got.toFixed(1),
+      lit: true,
+    })
+  }
+  if (job === 'tank') {
     cells.push({ name: 'CUBES', value: String(cubesOf(run.cut, run.deep)), lit: true })
+  }
+  if (job === 'skin') {
+    cells.push({ name: 'CUBES', value: String(cubesOf(run.cut, run.deep)), lit: false })
+    cells.push({ name: 'SKIN', value: String(skinOf(run.cut, run.deep)), lit: true })
   }
   const slot = (w * 0.92) / cells.length
   for (const [i, cell2] of cells.entries()) {

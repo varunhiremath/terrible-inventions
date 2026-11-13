@@ -62,7 +62,9 @@ interface Hud {
   tall: number
   area: number
   edge: number
+  half: number
   cubes: number
+  skin: number
 }
 
 export function Yard() {
@@ -79,7 +81,7 @@ export function Yard() {
   const [hud, setHud] = useState<Hud>({
     level: 1, score: 0, lives: LIVES, left: ordersFor(1) - 1, job: 'panel',
     wants: '', deep: 2, ready: false, status: 'playing',
-    wide: 2, tall: 2, area: 4, edge: 8, cubes: 8,
+    wide: 2, tall: 2, area: 4, edge: 8, half: 2, cubes: 8, skin: 24,
   })
   const [asking, setAsking] = useState(false)
 
@@ -256,7 +258,15 @@ export function Yard() {
 
   const cleared = hud.status === 'cleared'
   const over = hud.status === 'over'
+  /*
+   * The two orders built rather than cut: a tank, and the ply that wraps one.
+   * Both of them want the depth steppers on screen, and both of them say
+   * "build it" on the press rather than "cut it", because what comes off the
+   * sheet is a box and not a panel.
+   */
   const tank = hud.job === 'tank'
+  const skin = hud.job === 'skin'
+  const solid = tank || skin
 
   return (
     <div className="relative flex h-full w-full touch-none select-none flex-col overflow-hidden bg-ink">
@@ -293,7 +303,9 @@ export function Yard() {
         <p className="sr-only" aria-live="polite">
           Order: {hud.wants}. Chalked: {hud.wide} by {hud.tall},
           {' '}{hud.area} squares, {hud.edge} of edge
-          {tank ? `, ${hud.cubes} cubes, ${hud.deep} deep` : ''}.
+          {solid ? `, ${hud.cubes} cubes, ${hud.deep} deep` : ''}
+          {skin ? `, ${hud.skin} of skin` : ''}
+          {hud.job === 'half' ? `, ${hud.half} on the slant` : ''}.
         </p>
 
         {asking && (
@@ -331,7 +343,7 @@ export function Yard() {
 
       <div className="shrink-0 px-3 pb-3 pt-1">
         <div className="flex items-stretch gap-2">
-          {tank && (
+          {solid && (
             <div className="flex shrink-0 items-stretch gap-1.5">
               <button
                 type="button"
@@ -370,7 +382,7 @@ export function Yard() {
                 : 'border-ink-line bg-ink-soft text-chalk',
             ].join(' ')}
           >
-            {tank ? 'Build it' : 'Cut it'}
+            {solid ? 'Build it' : 'Cut it'}
           </button>
         </div>
         <p className="mt-1.5 text-center font-mono text-[0.62rem] uppercase tracking-widest text-dim/60">

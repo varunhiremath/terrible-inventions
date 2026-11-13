@@ -3367,6 +3367,17 @@ const SWAP_UP: Track = {
   parts: [{ wave: 'bell', gain: 0.045, sustain: 0.28, pattern: 'A4 C#5 E5 ' }],
 }
 
+/**
+ * And one weight breaking into two of the next one down: the same little step,
+ * walked the other way. Borrowing sounds like carrying in reverse because that
+ * is exactly what it is, and the pair of noises is worth hearing as a pair.
+ */
+const SWAP_DOWN: Track = {
+  name: 'Swap down',
+  beatsPerMinute: 340,
+  parts: [{ wave: 'pluck', gain: 0.04, sustain: 0.24, pattern: 'E5 C#5 A4 ' }],
+}
+
 /** The beam going level. The noise the game is played for. */
 const LEVEL: Track = {
   name: 'Level',
@@ -3425,6 +3436,7 @@ export const SCALES_CUES = {
   clink: CLINK,
   offPan: OFF_PAN,
   swapUp: SWAP_UP,
+  swapDown: SWAP_DOWN,
   level: LEVEL,
   notQuite: NOT_QUITE,
   belt: BELT,

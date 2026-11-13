@@ -115,16 +115,36 @@ describe('the arithmetic', () => {
 
 describe('what comes along the belt', () => {
   it('only sends jobs the player has met', () => {
-    expect(jobsFor(1)).toEqual(['weigh'])
-    expect(jobsFor(2)).toContain('name')
-    expect(jobsFor(3)).toContain('power')
+    expect(jobsFor(1)).toEqual(['weigh', 'name'])
+    expect(jobsFor(2)).toContain('power')
+    expect(jobsFor(2)).toContain('exponent')
+    expect(jobsFor(3)).toContain('double')
+    expect(jobsFor(3)).toContain('halve')
     expect(jobsFor(4)).toContain('carry')
+    expect(jobsFor(5)).toContain('borrow')
+    // And nothing arrives before its pair's other half: halving a number you
+    // have never been asked to double is a move with no idea behind it.
+    expect(jobsFor(2)).not.toContain('double')
+    expect(jobsFor(4)).not.toContain('borrow')
+  })
+
+  it('every job is one of a pair, and both halves are sent', () => {
+    const sent = jobsFor(99)
+    for (const [one, other] of [
+      ['weigh', 'name'], ['power', 'exponent'],
+      ['double', 'halve'], ['carry', 'borrow'],
+    ] as const) {
+      expect(sent, `${one} is sent`).toContain(one)
+      expect(sent, `${other} is sent`).toContain(other)
+    }
   })
 
   it('grows the rack a weight at a time', () => {
-    expect(bitsFor(1)).toBe(4)
-    expect(topFor(1)).toBe(15)
-    expect(topFor(5)).toBe(255)
+    // Five to start with rather than four: nought to thirty-one. The opening
+    // level is no longer spent on numbers under sixteen.
+    expect(bitsFor(1)).toBe(5)
+    expect(topFor(1)).toBe(31)
+    expect(topFor(4)).toBe(255)
     expect(bitsFor(99)).toBe(12)
     expect(topFor(99)).toBe(4095)
   })
@@ -151,6 +171,30 @@ describe('what comes along the belt', () => {
         const want = panFor(crate.load)
         if (crate.job === 'double') {
           expect(weighs(crate.pan) * 2, `${where}: the double is not a double`).toBe(crate.load)
+        }
+        if (crate.job === 'halve') {
+          expect(weighs(crate.pan), `${where}: the pan is not twice the load`)
+            .toBe(crate.load * 2)
+          expect(weighs(crate.pan) % 2, `${where}: an odd number cannot be halved here`)
+            .toBe(0)
+        }
+        if (crate.job === 'borrow') {
+          const parts = (crate.was ?? '').split('-').map(Number)
+          expect(parts, `${where}: a borrow crate should say what is coming off`)
+            .toHaveLength(2)
+          expect(parts[0] - parts[1], `${where}: the subtraction on the side is wrong`)
+            .toBe(crate.load)
+          expect(weighs(crate.pan), `${where}: the pan is not what it started as`)
+            .toBe(parts[0])
+          /*
+           * And the rule the job turns on: what is coming off is never
+           * already sitting on the pan. If it were, borrowing would be
+           * lifting two weights off, and nothing would ever be broken open.
+           */
+          expect(
+            parts[0] & parts[1],
+            `${where}: ${parts[1]} is a subset of ${parts[0]} — nothing to borrow`,
+          ).not.toBe(parts[1])
         }
         if (crate.job === 'carry') {
           const parts = (crate.was ?? '').split('+').map(Number)
@@ -181,9 +225,13 @@ describe('what comes along the belt', () => {
     for (let seed = 1; seed <= 60; seed++) {
       for (const level of [1, 3, 5]) {
         const crate = newCrate(1, level, dice(seed))
-        // A power and an exponent are one weight on purpose; a double is
-        // whatever the number before it was, doubled.
-        if (crate.job === 'power' || crate.job === 'exponent' || crate.job === 'double') continue
+        // A power and an exponent are one weight on purpose; a double and a
+        // halve are whatever the number before them was, shifted; a borrow's
+        // load is a difference and is allowed to land anywhere.
+        if (
+          crate.job === 'power' || crate.job === 'exponent' ||
+          crate.job === 'double' || crate.job === 'halve' || crate.job === 'borrow'
+        ) continue
         expect(onBits(crate.load), `level ${level} seed ${seed}: ${crate.load} is one weight`)
           .toBeGreaterThanOrEqual(2)
       }
@@ -387,6 +435,7 @@ function solve(run: Run): Move | null {
     const bit = run.pan.findIndex((many) => many >= 2)
     return bit >= 0 ? { kind: 'carry', bit } : null
   }
+  if (crate.job === 'borrow') return borrow(run)
   // Weigh and power are the same move: make the pan match the number, and
   // worked out here the long way round rather than with panFor, so that the
   // bot is doing the arithmetic rather than agreeing with the game's.
@@ -403,6 +452,173 @@ function solve(run: Run): Move | null {
   }
   return null
 }
+
+/**
+ * Borrowing, done the way it is done on paper.
+ *
+ * The load is worked out here from what is chalked on the crate — 104-17, so
+ * eighty-seven — and never read off `crate.load`, because a bot that reads the
+ * answer proves only that the game agrees with itself.
+ *
+ * Then the method: while the pan is over the load, take off the biggest weight
+ * it can spare; if it can spare none, break the smallest one open and look
+ * again. Once the pan is level, put every pile together until the machine
+ * will take it. That is the whole of binary subtraction and it is four lines.
+ */
+function borrow(run: Run): Move | null {
+  const [from, off] = (run.crate.was ?? '').split('-').map(Number)
+  const load = from - off
+  const pan = run.pan
+  const onPan = pan.reduce((sum, many, bit) => sum + many * WEIGHTS[bit], 0)
+
+  if (onPan > load) {
+    const spare = onPan - load
+    for (let bit = WEIGHTS.length - 1; bit >= 0; bit--) {
+      if (pan[bit] >= 1 && WEIGHTS[bit] <= spare) return { kind: 'tap', bit }
+    }
+    // Nothing on the pan is small enough to come off. Break the smallest.
+    for (let bit = 1; bit < WEIGHTS.length; bit++) {
+      if (pan[bit] >= 1) return { kind: 'split', bit }
+    }
+    return null
+  }
+
+  const pile = pan.findIndex((many) => many >= 2)
+  return pile >= 0 ? { kind: 'tap', bit: pile } : null
+}
+
+describe('borrowing', () => {
+  const taking = (from: number, off: number): Run => {
+    const base = newRun(6, LIVES, 0, 5)
+    return {
+      ...base,
+      crate: {
+        id: 1, job: 'borrow', load: from - off, pan: panFor(from),
+        seconds: 30, was: `${from}-${off}`,
+      },
+      pan: panFor(from),
+      typed: '',
+    }
+  }
+
+  /** Plays a borrow crate out to the end, or gives up after a hundred moves. */
+  const work = (run: Run): { run: Run; moves: number } => {
+    for (let moves = 1; moves <= 100; moves++) {
+      const move = borrow(run)
+      if (!move) return { run, moves: moves - 1 }
+      run = step(run, move, FIXED)
+      if (run.crate.job !== 'borrow' || run.status !== 'playing') {
+        return { run, moves }
+      }
+    }
+    return { run, moves: 101 }
+  }
+
+  it('the pan never goes under the load, however it is pressed', () => {
+    /*
+     * The one promise the job makes. Everything else about borrowing is
+     * recoverable — a weight broken by mistake can be put back together, a
+     * weight taken off cannot — so this is the rule that keeps a child who
+     * has pressed the wrong thing from being stuck with a clock running.
+     */
+    let run = taking(104, 17)
+    for (let i = 0; i < 300; i++) {
+      const bit = i % WEIGHTS.length
+      run = step(run, { kind: i % 3 === 0 ? 'split' : 'tap', bit }, FIXED)
+      if (run.crate.job !== 'borrow') break
+      expect(
+        run.pan.reduce((sum, many, b) => sum + many * WEIGHTS[b], 0),
+        `after ${i} jabs at the rack the pan is under the load`,
+      ).toBeGreaterThanOrEqual(run.crate.load)
+    }
+  })
+
+  it('cannot be finished by taking everything off', () => {
+    let run = taking(104, 17)
+    // Take the lot off, as fast as the rack will allow.
+    for (let i = 0; i < 200; i++) {
+      for (let bit = WEIGHTS.length - 1; bit >= 0; bit--) {
+        run = step(run, { kind: 'tap', bit }, FIXED)
+      }
+      if (run.crate.job !== 'borrow') break
+    }
+    // Either it was worked out properly or it is still going. What it is not
+    // is finished by an empty pan.
+    if (run.crate.job === 'borrow') {
+      expect(run.pan.some((many) => many > 0)).toBe(true)
+    }
+  })
+
+  it('is done the way it is done on paper', () => {
+    const { run, moves } = work(taking(104, 17))
+    expect(run.done, '104 - 17 was not finished').toBe(1)
+    // Three breaks down to a 1, one off, one break to a 16, one off: six.
+    expect(moves, `took ${moves} moves`).toBeLessThanOrEqual(12)
+  })
+
+  it('lands on the right number, in the right bits, for every pair', () => {
+    /*
+     * Checked against the language's own subtraction and its own binary, for
+     * every pair the rack can hold. A game that quietly teaches that 104 - 17
+     * is anything but 1010111 would be worse than no game at all, and nothing
+     * else here would notice.
+     */
+    let tried = 0
+    for (let from = 3; from <= 255; from += 7) {
+      for (let off = 1; off < from; off += 11) {
+        const { run } = work(taking(from, off))
+        const where = `${from} - ${off}`
+        expect(run.done, `${where} was not finished`).toBe(1)
+        tried++
+      }
+    }
+    expect(tried).toBeGreaterThan(100)
+  })
+
+  it('needs a weight breaking open, every time', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const crate = newCrate(1, 6, dice(seed))
+      if (crate.job !== 'borrow') continue
+      const [from, off] = (crate.was ?? '').split('-').map(Number)
+      /*
+       * The rule the job turns on. If what is coming off were already on the
+       * pan, borrowing would be lifting two weights, which is the easy case
+       * and the one nobody has to think about.
+       */
+      expect(from & off, `${from} - ${off} needs nothing broken open`).not.toBe(off)
+    }
+  })
+
+  it('is only finished when the pan is the answer written in binary', () => {
+    /*
+     * This is what makes the test above a real test. A borrow crate is
+     * finished when the pan comes to the load *and* the machine will take
+     * it — one of each weight at most — and those two conditions together
+     * have exactly one solution, which is the load written in binary. So a
+     * run that reports a crate done has, provably, left 1010111 on the pan.
+     */
+    const run = taking(104, 17)
+    expect(run.crate.load).toBe(87)
+
+    // The right weight, in the right bits.
+    expect(finished({ ...run, pan: panFor(87) })).toBe(true)
+    /*
+     * The right weight, in the wrong bits. 87 is 64 + 16 + 4 + 2 + 1; this is
+     * the same 87 with the bottom 7 of it left as two 2s and three 1s, which
+     * is what a pan looks like halfway through being tidied. It weighs
+     * exactly the same and the machine will not take it.
+     */
+    const untidy = panFor(87)
+    untidy[2] = 0
+    untidy[1] = 2
+    untidy[0] = 3
+    expect(untidy.reduce((sum, many, bit) => sum + many * WEIGHTS[bit], 0)).toBe(87)
+    expect(tidy(untidy)).toBe(false)
+    expect(finished({ ...run, pan: untidy })).toBe(false)
+    // And the wrong weight, tidily.
+    expect(finished({ ...run, pan: panFor(86) })).toBe(false)
+  })
+})
 
 describe('a level', () => {
   /** Plays it at a human sort of pace: one move every third of a second. */
