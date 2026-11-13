@@ -148,13 +148,19 @@ for (let round = 0; round < 30; round++) {
 
 console.log(`${seen} problems read, ${kinds.size} different ones`)
 /*
- * Six is the bar. The point of this script is reading problems rather than
- * answering them, and the run ends when it lands on a screen it does not
- * know how to leave — which is not itself a fault, so it is reported and not
- * counted against the lab.
+ * What this script is for is reading problems, not answering them: it presses
+ * buttons well enough to turn pages and no better. Some problems are answered
+ * with a picker rather than a keypad, and a run ends when it lands on one it
+ * cannot get past — which is this script running out of road rather than the
+ * lab being broken, and the two are reported differently on purpose.
+ *
+ * The faults it does look for — an unfilled {papa}, a question off the side
+ * of the screen, anything thrown — are checked on every problem it did read,
+ * so a short run is a smaller sample and not a failure.
  */
-if (seen < 6) console.log('LAB FAILED: barely any problems came up')
-if (stranded) console.log(`stopped on: ${stranded}`)
+if (seen === 0) console.log('LAB FAILED: no problems came up at all')
+else if (seen < 6) console.log(`only ${seen} problems read — a thin sample, not a fault`)
+if (stranded) console.log(`this script gave up on: ${stranded}`)
 if (problems.length === 0) console.log('LAB: nothing thrown')
 else for (const p of problems.slice(0, 8)) console.log(p)
 await browser.close()

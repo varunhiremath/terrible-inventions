@@ -17,7 +17,16 @@ const browser = await chromium.launch({
   ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
-const page = await browser.newPage({ viewport: { width: 430, height: 860 }, ignoreHTTPSErrors: true })
+/*
+ * A layout only breaks at a size, so this takes one. The readout along the
+ * bottom grows a cell for a tank and two for the skin of one, and five cells
+ * on a narrow phone is the shape that would go wrong first.
+ */
+const WIDE_AS = Number(process.env.YARD_WIDTH ?? 430)
+const page = await browser.newPage({
+  viewport: { width: WIDE_AS, height: Number(process.env.YARD_HEIGHT ?? 860) },
+  ignoreHTTPSErrors: true,
+})
 const problems = []
 page.on('pageerror', (e) => problems.push(`page error: ${e.message}`))
 page.on('console', (m) => { if (m.type() === 'error') problems.push(`console: ${m.text()}`) })
@@ -215,7 +224,10 @@ for (let round = 0; round < 60; round++) {
   if (!want) { problems.push(`nothing fills ${JSON.stringify(order)}`); break }
   if (!kinds.has(order.job)) {
     kinds.add(order.job)
-    await page.screenshot({ path: `/tmp/yard-${order.job}.png` })
+    await page.screenshot({ path: `/tmp/yard-${WIDE_AS}-${order.job}.png` })
+    const over = await page.evaluate(() =>
+      document.documentElement.scrollWidth - window.innerWidth)
+    if (over > 1) problems.push(`${order.job}: ${over}px off the side at ${WIDE_AS}px wide`)
     console.log(`  ${order.job}: ${JSON.stringify(order)} -> ${want.wide}x${want.tall}` +
       (want.deep ? ` x${want.deep}` : ''))
   }

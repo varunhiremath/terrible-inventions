@@ -18,7 +18,16 @@ const browser = await chromium.launch({
   ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
-const page = await browser.newPage({ viewport: { width: 430, height: 860 }, ignoreHTTPSErrors: true })
+/*
+ * A layout only breaks at a size. The rack goes from five buttons to twelve
+ * as the levels climb and borrowing puts a two-button strip above it, so the
+ * shape most likely to go wrong is the full rack on the smallest phone.
+ */
+const WIDE_AS = Number(process.env.SCALES_WIDTH ?? 430)
+const page = await browser.newPage({
+  viewport: { width: WIDE_AS, height: Number(process.env.SCALES_HEIGHT ?? 860) },
+  ignoreHTTPSErrors: true,
+})
 const problems = []
 page.on('pageerror', (e) => problems.push(`page error: ${e.message}`))
 page.on('console', (m) => { if (m.type() === 'error') problems.push(`console: ${m.text()}`) })
@@ -255,6 +264,23 @@ for (let round = 0; round < 90; round++) {
 
 await page.screenshot({ path: '/tmp/scales-after.png' })
 console.log(`${crates} crates had a go, best ${best}, bar ${(await hud()).replace(/\s+/g, ' ').slice(0, 70)}`)
+/*
+ * The rack is what a thumb lands on, so it is measured rather than eyeballed.
+ * Twelve buttons six to a row is the shape that comes closest to the floor.
+ */
+const racked = await page.locator('button[aria-label]').evaluateAll((all) =>
+  all.map((b) => Math.round(b.getBoundingClientRect().width)).filter((w) => w > 0))
+if (racked.length > 0) {
+  const narrowest = Math.min(...racked)
+  console.log(`${racked.length} on the rack, narrowest ${narrowest}px, at ${WIDE_AS}px wide`)
+  if (narrowest < 44) {
+    problems.push(`a rack button is only ${narrowest}px across at ${WIDE_AS}px wide`)
+  }
+}
+const over = await page.evaluate(() =>
+  document.documentElement.scrollWidth - window.innerWidth)
+if (over > 1) problems.push(`${over}px of the machine is off the side at ${WIDE_AS}px wide`)
+
 console.log(`levels cleared: ${levels}`)
 console.log(`jobs met: ${[...met].sort().join(', ')}`)
 for (const job of ['weigh', 'name', 'power', 'exponent', 'double', 'halve', 'carry', 'borrow']) {
