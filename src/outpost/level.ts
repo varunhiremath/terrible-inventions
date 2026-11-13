@@ -329,6 +329,9 @@ export interface Machine {
  * are actually out there — and there are always a couple of other pairs that
  * nearly work, because "nearly" is where the arithmetic happens.
  */
+/** How many fuses you can carry. */
+export const BELT = 4
+
 export interface Lock {
   /** The total the door is asking for. */
   wants: number
@@ -336,13 +339,20 @@ export interface Lock {
   sockets: number
 }
 
+/*
+ * Three fuses from the third mission rather than the fifth, and four from the
+ * seventh. Two numbers adding to a total is a sum you can do by looking at
+ * the pair; three is where you have to hold one while you hunt for the other
+ * two, which is the part that makes the compound a place you are thinking in
+ * rather than walking through.
+ *
+ * Never more than the belt holds, or the door would want a fuse you cannot
+ * be carrying.
+ */
 export const lockFor = (mission: number): Lock => ({
   wants: 0,
-  sockets: mission >= 5 ? 3 : 2,
+  sockets: Math.min(BELT, mission >= 7 ? 4 : mission >= 3 ? 3 : 2),
 })
-
-/** How many fuses you can carry. */
-export const BELT = 4
 
 /** How near you have to be to pick a fuse up, or to work the door. */
 export const CLOSE = 1.5

@@ -264,7 +264,10 @@ export function newRun(mission = 1, lives = LIVES, score = 0, seed = 1): Run {
  * gets harder — and the right way round, because by then you can move.
  */
 function pickNumbers(mission: number, many: number, rng: Dice): number[] {
-  const most = Math.min(20, 6 + mission * 2)
+  // Up to forty rather than twenty. Two numbers under twenty adding to a
+  // total is a number bond; the same question in the thirties is addition
+  // with something to carry, done in the dark while something is shooting.
+  const most = Math.min(40, 9 + mission * 3)
   const out: number[] = []
   for (let i = 0; i < many; i++) {
     let n = rng.int(1, most)

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DRAW_TIME, ESCAPE_Y, EYE, FAR, GRAVITY, NEAR,
-  arrowSpeed, biggest, fits, needFor, newBalloon, reachFor, ruleFor, ruleSays,
+  arrowSpeed, biggest, fits, needFor, newBalloon, reachFor, ruleFor, ruleSays, share,
   type Balloon, type Dice, type Rule,
 } from './level'
 import {
@@ -240,8 +240,27 @@ describe('what the round is asking for', () => {
     const rules: Rule[] = [
       { kind: 'even' }, { kind: 'odd' }, { kind: 'over', n: 9 },
       { kind: 'under', n: 7 }, { kind: 'times', n: 4 },
+      { kind: 'notTimes', n: 3 }, { kind: 'factor', n: 24 },
+      { kind: 'both', a: 2, b: 3 }, { kind: 'prime' }, { kind: 'square' },
     ]
-    for (const rule of rules) expect(ruleSays(rule).length).toBeGreaterThan(8)
+    /*
+     * And short enough to fit. The rule sits in one line across the top of
+     * the picture at a size meant to be read out of the corner of an eye
+     * while you are turning round, so it is the one piece of text in this
+     * game that cannot be allowed to wrap. Thirty characters is what a small
+     * phone takes at that size with that letter spacing.
+     */
+    for (const rule of rules) {
+      expect(ruleSays(rule).length, ruleSays(rule)).toBeGreaterThan(8)
+      expect(ruleSays(rule).length, `${ruleSays(rule)} will wrap`).toBeLessThanOrEqual(30)
+    }
+    // Including every rule a real run can actually produce.
+    for (let round = 1; round <= 40; round++) {
+      for (let seed = 1; seed <= 20; seed++) {
+        const said = ruleSays(ruleFor(round, dice(round * 7 + seed)))
+        expect(said.length, `${said} will wrap`).toBeLessThanOrEqual(30)
+      }
+    }
     expect(fits({ kind: 'even' }, 8)).toBe(true)
     expect(fits({ kind: 'even' }, 7)).toBe(false)
     expect(fits({ kind: 'odd' }, 7)).toBe(true)
@@ -252,13 +271,84 @@ describe('what the round is asking for', () => {
     expect(fits({ kind: 'times', n: 4 }, 14)).toBe(false)
   })
 
+  it('knows a prime, a square and a factor when it sees one', () => {
+    /*
+     * Checked against arithmetic worked out here rather than against the
+     * game's own, because a meadow that quietly teaches that nine is prime
+     * would be worse than a meadow with no numbers on the balloons.
+     */
+    const primesUnderSixty = [
+      2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59,
+    ]
+    for (let n = 1; n <= 60; n++) {
+      expect(fits({ kind: 'prime' }, n), `${n}`).toBe(primesUnderSixty.includes(n))
+      expect(fits({ kind: 'square' }, n), `${n}`)
+        .toBe([1, 4, 9, 16, 25, 36, 49].includes(n))
+    }
+    // One is not prime, and neither is nine, which is the one everybody says.
+    expect(fits({ kind: 'prime' }, 1)).toBe(false)
+    expect(fits({ kind: 'prime' }, 9)).toBe(false)
+
+    // A factor goes *into* the number, which is the table read backwards.
+    const of24 = [1, 2, 3, 4, 6, 8, 12, 24]
+    for (let n = 1; n <= 60; n++) {
+      expect(fits({ kind: 'factor', n: 24 }, n), `${n} into 24`).toBe(of24.includes(n))
+    }
+    // And a table in the negative is exactly everything the table is not.
+    for (let n = 1; n <= 60; n++) {
+      expect(fits({ kind: 'notTimes', n: 7 }, n)).toBe(!fits({ kind: 'times', n: 7 }, n))
+    }
+    // Both tables at once is the common multiples and nothing else.
+    for (let n = 1; n <= 60; n++) {
+      expect(fits({ kind: 'both', a: 4, b: 6 }, n), `${n}`).toBe(n % 12 === 0)
+    }
+  })
+
+  it('never asks for something there is almost none of in the sky', () => {
+    /*
+     * A round is cleared by popping a set number of wanted balloons, so a
+     * rule that almost nothing fits is a round that cannot be finished. "The
+     * 5s that are also 7s" has one answer under sixty, and the spawner would
+     * send up a sky of balloons all meant to be wanted and almost none of
+     * which were. Every rule is measured before it goes out, and this is what
+     * says so — across every round and every seed, not a sample of five.
+     */
+    for (let round = 1; round <= 40; round++) {
+      for (let seed = 1; seed <= 25; seed++) {
+        const rule = ruleFor(round, dice(round * 1000 + seed))
+        const part = share(rule, biggest(round))
+        expect(part, `round ${round} seed ${seed}: ${ruleSays(rule)}`)
+          .toBeGreaterThanOrEqual(0.1)
+        expect(part, `round ${round} seed ${seed}: ${ruleSays(rule)}`)
+          .toBeLessThanOrEqual(0.9)
+      }
+    }
+  })
+
+  it('gets to the rules that are a maths lesson rather than a sorting job', () => {
+    /*
+     * Even and odd are instant once you can do them at all. The rules worth
+     * having are the ones a grade five book is made of, and a run that never
+     * reaches them is a run spent telling odd from even in three dimensions.
+     */
+    const met = new Set<string>()
+    for (let round = 1; round <= 16; round++) {
+      for (let seed = 1; seed <= 40; seed++) {
+        met.add(ruleFor(round, dice(round * 97 + seed)).kind)
+      }
+    }
+    for (const kind of ['prime', 'square', 'factor', 'both', 'notTimes']) {
+      expect(met, `a run never asks for ${kind}`).toContain(kind)
+    }
+  })
+
   it('puts enough of what it asked for in the sky to be gettable', () => {
     /*
      * The trap in generating a number and seeing what it turns out to be: on
      * the sevens, one balloon in seven would be worth shooting and the round
      * would be unplayable. `newBalloon` decides whether it is wanted first.
      */
-    for (const round of [1, 3, 6, 9, 14]) {
+    for (const round of [1, 3, 6, 9, 14, 20, 30]) {
       const rng = dice(round * 31)
       const rule = ruleFor(round, rng)
       const sky = Array.from({ length: 300 }, (_, i) => newBalloon(i, round, rule, rng))

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   BELT, BUILD, CLOSE, EYE, HOME, LIVES,
-  at, buildMap, cellAt, clearLine, middleOf, reach, solid,
+  at, buildMap, cellAt, clearLine, lockFor, middleOf, reach, solid,
   type Dice, type Map,
 } from './level'
 import {
@@ -582,5 +582,54 @@ describe('what the screen is told', () => {
   it('knows a sentry is tougher than a patrol', () => {
     expect(BUILD.sentry.tough).toBeGreaterThan(BUILD.patrol.tough)
     expect(BUILD.sentry.pace).toBe(0)
+  })
+})
+
+describe('the lock on the cage', () => {
+  it('wants more fuses, sooner, and bigger numbers on them', () => {
+    /*
+     * Two numbers adding to a total is a sum you do by looking at the pair.
+     * Three is where one has to be held while the other two are hunted for,
+     * which is the part that makes the compound somewhere you are thinking
+     * rather than somewhere you are walking.
+     */
+    expect(lockFor(1).sockets).toBe(2)
+    expect(lockFor(3).sockets, 'three fuses by the third mission').toBe(3)
+    expect(lockFor(9).sockets, 'and four by the ninth').toBe(4)
+    // Never more than the belt holds, or the door wants a fuse you cannot
+    // be carrying when you reach it.
+    for (let mission = 1; mission <= 40; mission++) {
+      expect(lockFor(mission).sockets, `mission ${mission}`).toBeLessThanOrEqual(BELT)
+      expect(lockFor(mission).sockets).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it('is always a total that the fuses lying about can actually make', () => {
+    /*
+     * The standing promise, in this game's own terms: the door's total is
+     * built by picking fuses that are really out there, so there is never a
+     * mission that cannot be finished. Checked by going and finding them.
+     */
+    for (let mission = 1; mission <= 10; mission++) {
+      for (let seed = 1; seed <= 6; seed++) {
+        const run = newRun(mission, 5, 0, seed)
+        const out = run.machines.map((m) => m.fuse)
+        const want = run.wants
+        const sockets = run.sockets
+
+        // Every way of choosing that many of them, looking for the total.
+        const reaches = (from: number, left: number, sum: number): boolean => {
+          if (left === 0) return sum === want
+          for (let i = from; i < out.length; i++) {
+            if (reaches(i + 1, left - 1, sum + out[i])) return true
+          }
+          return false
+        }
+        expect(
+          reaches(0, sockets, 0),
+          `mission ${mission} seed ${seed}: no ${sockets} of ${out.join(',')} make ${want}`,
+        ).toBe(true)
+      }
+    }
   })
 })

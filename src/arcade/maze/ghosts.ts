@@ -234,9 +234,33 @@ export const PHASE_SCHEDULE: readonly { phase: 'scatter' | 'chase'; seconds: num
  * beginner needs the pressure to come and *go*, because that is what teaches
  * that it can be survived.
  */
+/*
+ * And how it goes on being stretched after that.
+ *
+ * The easing above reaches the written schedule on the fifth board and then
+ * stops, and the speeds reach their ceiling somewhere around the twentieth —
+ * so past the twentieth every board was the same board, for ever. Nobody
+ * noticed because nobody had got there. A child two years older does get
+ * there, and a game that stops asking for anything new is a game that is
+ * over without saying so.
+ *
+ * So the breathing space goes on shrinking. Scatter is the part of the cycle
+ * where nobody is coming for you, and past the fifth board it closes from the
+ * written schedule to a bit under half of it by the twenty-fifth, with the
+ * hunts between stretching to match. Nothing before the fifth board changes
+ * by a single frame: this term is nought until the first easing has finished.
+ */
+const LATE_FROM = 5
+const LATE_TO = 25
+
 function pace(level: number): { scatter: number; chase: number } {
-  const eased = Math.max(0, Math.min(1, (Math.max(1, level) - 1) / 4))
-  return { scatter: 2.3 - eased * 1.3, chase: 0.62 + eased * 0.38 }
+  const at = Math.max(1, level)
+  const eased = Math.max(0, Math.min(1, (at - 1) / 4))
+  const late = Math.max(0, Math.min(1, (at - LATE_FROM) / (LATE_TO - LATE_FROM)))
+  return {
+    scatter: (2.3 - eased * 1.3) * (1 - late * 0.55),
+    chase: (0.62 + eased * 0.38) * (1 + late * 0.3),
+  }
 }
 
 export function phaseAt(elapsedSeconds: number, level = 99): 'scatter' | 'chase' {

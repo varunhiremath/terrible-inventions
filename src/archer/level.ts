@@ -141,6 +141,22 @@ export type Rule =
   | { kind: 'over'; n: number }
   | { kind: 'under'; n: number }
   | { kind: 'times'; n: number }
+  /** Anything that is *not* in that table, which is the harder half of it. */
+  | { kind: 'notTimes'; n: number }
+  /** What goes into a number, which is the times tables read backwards. */
+  | { kind: 'factor'; n: number }
+  /** In both tables at once, which is where common multiples live. */
+  | { kind: 'both'; a: number; b: number }
+  | { kind: 'prime' }
+  | { kind: 'square' }
+
+export const isPrime = (n: number): boolean => {
+  if (n < 2) return false
+  for (let d = 2; d * d <= n; d++) if (n % d === 0) return false
+  return true
+}
+
+const isSquare = (n: number): boolean => Number.isInteger(Math.sqrt(n))
 
 export const fits = (rule: Rule, n: number): boolean => {
   switch (rule.kind) {
@@ -149,6 +165,11 @@ export const fits = (rule: Rule, n: number): boolean => {
     case 'over': return n > rule.n
     case 'under': return n < rule.n
     case 'times': return n % rule.n === 0
+    case 'notTimes': return n % rule.n !== 0
+    case 'factor': return rule.n % n === 0
+    case 'both': return n % rule.a === 0 && n % rule.b === 0
+    case 'prime': return isPrime(n)
+    case 'square': return isSquare(n)
   }
 }
 
@@ -160,29 +181,112 @@ export const ruleSays = (rule: Rule): string => {
     case 'over': return `POP ANYTHING OVER ${rule.n}`
     case 'under': return `POP ANYTHING UNDER ${rule.n}`
     case 'times': return `POP THE ${rule.n}s`
+    case 'notTimes': return `POP ANYTHING NOT IN THE ${rule.n}s`
+    case 'factor': return `POP WHAT GOES INTO ${rule.n}`
+    case 'both': return `POP THE ${rule.a}s THAT ARE ALSO ${rule.b}s`
+    case 'prime': return 'POP THE PRIMES'
+    case 'square': return 'POP THE SQUARE NUMBERS'
   }
 }
 
 /**
  * The rule for a round, getting harder as they go on.
  *
- * Even and odd first, because telling those apart is instant once you can do
- * it at all and the first round should be about learning to shoot. Then the
- * comparisons, then the times tables — which are the ones worth drilling, so
- * they are most of the back half.
+ * Even first, because the first round should be about learning to shoot
+ * rather than about the numbers. After that it moves quickly: the times
+ * tables by the second round, and from the fourth the rules that are
+ * actually a grade five syllabus — factors, primes, square numbers, common
+ * multiples, and a table read in the negative.
+ *
+ * Those last ones are harder than a times table for a reason that matters
+ * here. "Pop the 7s" is answered one balloon at a time and a wrong one costs
+ * nothing but an arrow. "Pop anything not in the 7s" means every balloon in
+ * the sky is wanted *except* a few, so the thing being practised is spotting
+ * the exception while turning round — which is the same table, from the side
+ * nobody drills.
  */
+/**
+ * How many of the numbers that can turn up this round fit a rule.
+ *
+ * The spawner decides first whether a balloon is wanted and then hunts for a
+ * number that says so, which works while there are plenty of both to find
+ * and quietly stops working when there are not: "the 5s that are also 7s"
+ * has one answer under sixty, so a round of it would send up a sky of
+ * balloons that were all meant to be wanted and almost none of which were,
+ * and could not be cleared at all.
+ *
+ * So every rule is measured before it goes out. This is the meadow's half of
+ * the standing promise that there is always a way through.
+ */
+export function share(rule: Rule, most: number): number {
+  let many = 0
+  for (let n = 1; n <= most; n++) if (fits(rule, n)) many++
+  return many / most
+}
+
+/** Thin enough to be unfindable, or so broad that nothing is excluded. */
+const workable = (rule: Rule, most: number): boolean => {
+  const part = share(rule, most)
+  return part >= 0.1 && part <= 0.9
+}
+
 export function ruleFor(round: number, rng: Dice): Rule {
-  if (round === 1) return { kind: 'even' }
-  if (round === 2) return { kind: 'odd' }
-  if (round <= 4) {
-    return rng.next() < 0.5
-      ? { kind: 'over', n: rng.int(5, 12) }
-      : { kind: 'under', n: rng.int(6, 14) }
+  const chosen = chooseRule(round, rng)
+  if (workable(chosen, biggest(round))) return chosen
+  /*
+   * Fallen through: a table, widened until enough of the sky is in it. The
+   * 2s are always workable, so this ends.
+   */
+  for (let n = 4; n >= 2; n--) {
+    const table: Rule = { kind: 'times', n }
+    if (workable(table, biggest(round))) return table
   }
-  const table = Math.min(12, 2 + Math.floor((round - 3) / 2) + rng.int(0, 1))
-  return rng.next() < 0.3
-    ? (rng.next() < 0.5 ? { kind: 'even' } : { kind: 'over', n: rng.int(8, 20) })
-    : { kind: 'times', n: Math.max(2, table) }
+  return { kind: 'even' }
+}
+
+function chooseRule(round: number, rng: Dice): Rule {
+  if (round === 1) return { kind: 'even' }
+  if (round === 2) return { kind: 'times', n: rng.int(3, 5) }
+  if (round === 3) {
+    return rng.next() < 0.5
+      ? { kind: 'over', n: rng.int(8, 16) }
+      : { kind: 'under', n: rng.int(8, 18) }
+  }
+
+  const most = biggest(round)
+  const table = Math.min(12, 3 + Math.floor((round - 3) / 2) + rng.int(0, 1))
+  const roll = rng.next()
+
+  // Primes and squares want a sky with enough of them in it to be findable.
+  if (roll < 0.16 && most >= 20) return { kind: 'prime' }
+  if (roll < 0.3 && most >= 25) return { kind: 'square' }
+  if (roll < 0.44) {
+    /*
+     * Factors of a number with plenty of them. A prime would make a round
+     * with two wanted balloons in it, which is not a hard round, it is an
+     * empty one.
+     */
+    const rich = [12, 18, 24, 30, 36, 48, 60].filter((n) => n <= Math.max(24, most))
+    return { kind: 'factor', n: rng.pick(rich) }
+  }
+  if (roll < 0.58 && round >= 6) {
+    /*
+     * Two tables at once, picked so there are several numbers in both of
+     * them up there rather than one. The 4s that are also 6s is every
+     * twelfth number; the 5s that are also 7s is every thirty-fifth, which
+     * under sixty is a single balloon.
+     */
+    for (let tries = 0; tries < 30; tries++) {
+      const a = rng.int(2, 6)
+      const b = rng.int(2, 8)
+      if (a === b || b % a === 0 || a % b === 0) continue
+      const together = { kind: 'both' as const, a, b }
+      if (workable(together, most)) return together
+    }
+  }
+  if (roll < 0.72 && round >= 5) return { kind: 'notTimes', n: Math.max(3, table) }
+  if (roll < 0.8) return { kind: 'over', n: rng.int(10, Math.max(14, Math.round(most * 0.6))) }
+  return { kind: 'times', n: Math.max(2, table) }
 }
 
 /** The biggest number that can turn up, which grows with the rounds. */

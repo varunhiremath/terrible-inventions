@@ -165,10 +165,15 @@ describe('steering', () => {
 
 describe('phases', () => {
   it('opens on scatter and settles into chase', () => {
-    expect(phaseAt(0)).toBe('scatter')
-    expect(phaseAt(6.9)).toBe('scatter')
-    expect(phaseAt(7.1)).toBe('chase')
-    expect(phaseAt(10_000)).toBe('chase')
+    /*
+     * On the fifth board, which is the one played to the schedule exactly as
+     * it is written: the opening easing has run out by then and the late
+     * stretching has not started.
+     */
+    expect(phaseAt(0, 5)).toBe('scatter')
+    expect(phaseAt(6.9, 5)).toBe('scatter')
+    expect(phaseAt(7.1, 5)).toBe('chase')
+    expect(phaseAt(10_000, 5)).toBe('chase')
   })
 
   it('gives less and less respite as the level goes on', () => {

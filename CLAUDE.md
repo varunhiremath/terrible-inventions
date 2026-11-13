@@ -177,14 +177,42 @@ These are not preferences. Breaking one defeats the point of the project.
   rectangle is; it asks for 24 squares and leaves you to find 4 by 6. Same arithmetic,
   better end: it is where the factor pairs live, and it cannot be done by multiplying
   the two numbers you were handed. The same rule made the scales: the rack is a binary
-  number, so putting weights on a pan *is* the conversion.
+  number, so putting weights on a pan *is* the conversion. And the slant: the press
+  cuts corner to corner, so an order for 35 squares wants a rectangle of 70.
+- **Say the formula as the thing it is.** A tank's skin is "two faces the size of the
+  floor and a band right round the sides", not 2(lw+lh+wh). The first one is something
+  a child can see on the screen in front of them; the second is four letters.
 - **Close the shortcut, or the shortcut is the game.** An order for 16 squares is
   filled by a strip 1 by 16 — correct, instant, and the one factor pair nobody has to
   think about. The press refuses anything under two squares each way. Probes find these
   before children do: this one took the strip on its first order and every order after.
 - **Teach a number system against the language's own.** `scales/run.test.ts` checks
   every number the rack can hold against `n.toString(2)`. A game that quietly teaches
-  the wrong binary is worse than no game, and nothing else would catch it.
+  the wrong binary is worse than no game, and nothing else would catch it. The same
+  rule holds everywhere the app does arithmetic: the meadow's primes are checked
+  against a written-out list, the yard's surface areas against 2(lw+lh+wh) written the
+  other way round, and every new generator against sums worked out in the test rather
+  than by the generator. A generator that agrees with itself is not checked at all.
+- **Never let a machine forbid the method it is teaching.** The scales' borrow job
+  first had one clever button: a weight that would not come off whole broke in two
+  instead. It read beautifully. Working 104−17 the way it is worked on paper means
+  breaking the 8 open to find a 1, and the 8 was affordable — so the clever button
+  lifted it, and pencil-and-paper was the one method the machine refused. Two named
+  moves is less elegant and is the game. A rule that forbids the correct method is not
+  a harder game.
+- **Measure a rule before it goes out.** The meadow picks a rule for a round and then
+  hunts for numbers that fit it. "The 5s that are also 7s" has one answer under sixty,
+  so that round would send up a sky of balloons all meant to be wanted, almost none of
+  which were, and could not be cleared at all. `share()` counts how much of the sky a
+  rule covers and anything under a tenth or over nine tenths is thrown away. This is
+  the meadow's half of *there is always a way through*.
+- **A ladder that stops climbing is lying to the selector.** The maze's speeds reach
+  their ceiling around the twentieth board and its phase schedule stopped easing at the
+  fifth, so every board past the twentieth was the same board for ever — invisible,
+  because nobody had got there. The generators have a rule about this already; games
+  need it too. Where a real ceiling is deliberate (a chaser is always a shade slower
+  than the player, or being caught stops being a cornering mistake), say so and test
+  the floor.
 
 ## Rendering
 
@@ -211,6 +239,16 @@ These are not preferences. Breaking one defeats the point of the project.
   not the hands.
 - **Characters seen from overhead must be laid flat** (`buildVoxel(..., { flat: true })`).
   An upright sprite is five voxels thick and from above that is all you see.
+
+## Who is playing
+
+The app was built for a nine-year-old and is now pitched at a grade five or six
+syllabus. That is not a slider anywhere — it is where each game's ladder starts and
+what its rungs are made of. If it has to move again, the places are: `jobsFor` and
+`bitsFor` in `scales/level.ts`, `jobsFor` and `sidesFor` in `yard/level.ts`, `ruleFor`
+in `archer/level.ts`, `lockFor` in `outpost/level.ts`, and the `BOUNDS` at the top of
+each generator in `src/content/`. The Elo finds the player's level within whatever
+those produce; it cannot invent content that is not there.
 
 ## Conventions
 

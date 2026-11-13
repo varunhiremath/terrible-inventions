@@ -126,23 +126,39 @@ written down. So making 45 is not a procedure to remember, it is four weights an
 beam that tips to tell you which way you are wrong; and the row of 1s and 0s under the
 bench writes down what your hands just did. Four kinds of crate come along the belt:
 
-- **weigh** — it says 45, make it. Decimal into binary.
-- **name** — the weights are already on and the crate is a mystery. Binary back into
-  decimal, typed on the pad that replaces the rack.
-- **power** — it says 2⁶ and wants exactly that weight, not 64 made of smaller ones.
-- **exponent** — the other way round: it says 16384 and wants the power typed. This is
-  the one job not limited by what the rack can lift, so it goes to 2²⁰ — lifting that
-  would want a weight the size of the bench; naming it wants nothing but knowing it.
-- **double** — the pan arrives with 87 on it and the crate says ×2. In binary that is
-  every weight taking one step to the left, and the numbers are big enough by then
-  that seeing the shift is quicker than starting again.
-- **carry** — the crate says 17+87 and the pan arrives with the two of them poured on
-  together: three 32s and an 8. The machine takes one of each, so tap a pair and they
-  become the next one up. That is binary addition, done with a thumb, and the pan
-  visibly weighs the same before and after.
+Eight jobs come along the belt, in four pairs, and each pair is one idea read in both
+directions:
 
-The rack grows a weight a level: four of them to begin with, which is nought to
-fifteen, and twelve by the ninth, which is 4095. A wrong answer costs two seconds and
+- **weigh / name** — it says 45, make it; or the weights are already on and the crate is
+  a mystery. Decimal into binary, and back out again on the pad that replaces the rack.
+- **power / exponent** — it says 2⁶ and wants exactly that weight, not 64 made of smaller
+  ones; or it says 16384 and wants the power typed. The second is the one job not limited
+  by what the rack can lift, so it goes to 2²⁰ — lifting that would want a weight the size
+  of the bench; naming it wants nothing but knowing it.
+- **double / halve** — the pan arrives with 87 on it and the crate says ×2, or with 174
+  on it and the crate says ÷2. Every weight takes one step to the left, or one to the
+  right. Place value, with handles on it.
+- **carry / borrow** — the crate says 17+87 and the pan arrives with the two of them
+  poured on together: three 32s and an 8, so tap a pair and they become the next one up.
+  Or the crate says 104−17 and arrives with 104 on it — and seventeen is 16+1, neither of
+  which is on the pan to lift, so a weight has to be broken into two of the next one down
+  until it is. Binary addition and binary subtraction, both done with a thumb, and in
+  both of them the pan visibly goes on weighing the same while you work.
+
+Borrowing has two named moves on the screen, TAKE OFF and BREAK IN TWO, and the first go
+at it had one clever button instead: a weight that would not come off whole broke in two.
+It read well and it was wrong. Working 104−17 the way it is worked on paper means
+breaking the 8 open to find a 1 — and the 8 was affordable, so the clever button lifted
+it instead, and the pencil-and-paper method was the one thing the machine would not let
+you do. A rule that forbids the correct method is not a harder game.
+
+The pan is never allowed under what the crate asks for. That is what makes the job safe:
+from wherever anybody has got to, breaking the smallest weight again and again always
+reaches something small enough to take off, and once the pan is level every pile goes
+together and it tidies itself into the answer written in binary.
+
+The rack grows a weight a level: five of them to begin with, which is nought to
+thirty-one, and twelve by the eighth, which is 4095. A wrong answer costs two seconds and
 nothing else — no life, no buzzer, and the number you typed is rubbed out so the next
 go starts clean. The only thing that can actually beat you is the belt.
 
@@ -163,12 +179,21 @@ and it cannot be done by multiplying the two numbers you were handed.
 
 - **panel** — so many squares. Area, and the factor pairs that make it.
 - **edging** — so much edge. Perimeter, which is the one everybody confuses with area
-  until they have had to make both.
+  until they have had to make both. Both of these arrive on the first level, because you
+  cannot confuse two things if you have only met one.
 - **exact** — so many squares *and* so much edge. Both at once, which has exactly one
   answer: the sides are the product and the sum, so they are the roots of a quadratic,
-  and a nine-year-old solves it by knowing his factor pairs and checking their edges.
+  and it is solved by knowing your factor pairs and checking their edges.
+- **slant** — a triangle. The press cuts corner to corner, so an order for 35 squares
+  wants a rectangle of 70: doubling, and then factoring. Half base times height is the
+  one area formula that has to be *seen* to stop being letters, and the board shows the
+  rectangle's squares and half of them side by side, because the step between those two
+  numbers is the whole job.
 - **tank** — so many cubes, built as a floor you drag and a depth you count up, so that
   length times width times height is three things you did rather than three letters.
+- **skin** — the outside of a tank, all six faces of it. Said on the screen as two faces
+  the size of the floor and a band right round the sides, rather than as 2(lw+lh+wh),
+  because the first one is a thing you can see and the second is four letters.
 
 The press will not take anything thinner than two squares. That rule is the game: without
 it an order for sixteen squares is filled by dragging a strip one square wide and
@@ -274,11 +299,30 @@ considerably stronger. Only a game over costs a compulsory one, and that is the 
 | **Short Circuit** | Counting routes through a grid; walks into Pascal's triangle unaided |
 | **{papa}'s Mistake** | Finding the first wrong line in someone else's working |
 | **Faulty Wiring** | Knights-and-knaves deduction, with no arithmetic at all |
-| **Split Clues** | Two players, half the clues each, neither half solvable alone |
+| **{papa}'s Mixture** | Ratio and proportion, from both ends and then chained |
+| **{papa}'s Prices** | Percentages — and the thing that makes them hard, which is keeping hold of what the hundred is |
+| **The Gearbox** | Factors, primes, and the two numbers nobody names: two cogs come back round together after the lowest common multiple of their teeth |
+| **{papa}'s Crates** | Solving for an unknown, on a beam, with the letters taken off |
 
-Every generator is seeded, machine-verifiable and unbounded in difficulty. Difficulty is
-an Elo rating shared by player and problem, with a short warm-up pitched to be got right
-before it starts hunting for his ceiling.
+The last four were added when the module changed. Ratio, percentage, factors and the
+unknown are four of the things a grade five or six syllabus is made of, and none of them
+had any road here at all — and the five above them were re-pitched at the same time,
+because their bottom rungs were written for a seven-year-old and a session was being
+spent climbing past them.
+
+Two of them are worth saying out loud. **The Gearbox** never writes "LCM" or "HCF" until
+the explanation: two meshing cogs come back round together after the lowest common
+multiple of their teeth, and that is not a definition, it is a thing that happens on a
+bench. **{papa}'s Crates** is algebra with the notation taken off — a letter standing for
+a number is a notation problem on top of a reasoning problem, and the reasoning problem
+is the one worth having, so it is a sealed crate on a beam and the two rules are things
+you can see: take the same off both sides, and share both sides equally.
+
+Every generator is seeded, machine-verifiable and unbounded in difficulty, and every one
+of the new ones is checked in the tests against arithmetic worked out independently
+rather than against its own — a generator that agrees with itself about 20% off 48 is no
+use to anybody. Difficulty is an Elo rating shared by player and problem, with a short
+warm-up pitched to be got right before it starts hunting for his ceiling.
 
 ## Privacy
 
@@ -296,6 +340,12 @@ npm run build      # production build
 npm run preview    # serve the build, then:
 npm run smoke      # play the maze in a real browser
 ```
+
+`scripts/` holds a probe per game that plays it in a browser — `scales-look.mjs` works
+through all eight jobs and eight levels, `yard-look.mjs` fills all six kinds of order,
+and `lab-look.mjs` reads problems in the workshop looking for the two things no unit
+test can see: an unfilled `{papa}` on the screen, and a question that runs off the side
+of a phone.
 
 Pushing to `main` builds and publishes to GitHub Pages. Pages must be switched on once by
 hand under **Settings > Pages > Source: GitHub Actions** — a workflow cannot do it.
