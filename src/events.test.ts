@@ -17,6 +17,7 @@ import { LOUDEST as MOB, type MobEvent } from './mob/run'
 import { LOUDEST as ARCHER, type ArcherEvent } from './archer/run'
 import { LOUDEST as OUTPOST, type OutpostEvent } from './outpost/run'
 import { LOUDEST as SCALES, type ScalesEvent } from './scales/run'
+import { LOUDEST as YARD, type YardEvent } from './yard/run'
 
 /**
  * Every event a game can raise has a place in the order of importance.
@@ -80,6 +81,13 @@ describe('the order things are heard in', () => {
       'place', 'lift', 'carried', 'balanced', 'wrong', 'arrive', 'dropped', 'cleared', 'over',
     ]
     sameSet(SCALES, all)
+  })
+
+  it('covers every event the yard can raise, exactly once', () => {
+    const all: YardEvent[] = [
+      'chalk', 'cut', 'offcut', 'order', 'scrapped', 'cleared', 'over',
+    ]
+    sameSet(YARD, all)
   })
 
   it('covers every event the space run can raise, exactly once', () => {

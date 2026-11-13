@@ -50,8 +50,13 @@ const HOW: Record<Job, string> = {
   weigh: 'tap weights until the beam is level',
   name: 'read the weights and type the number',
   power: 'one weight, and it is a power of two',
+  exponent: 'two to the what? type the power',
+  double: 'twice as much — every weight moves up one',
   carry: 'two of a kind make the next one up',
 }
+
+/** The exponent, written small, for under each weight on the rack. */
+const POWERS = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹', '¹⁰', '¹¹', '¹²']
 
 interface Hud {
   level: number
@@ -235,7 +240,8 @@ export function Scales() {
   const cleared = hud.status === 'cleared'
   const over = hud.status === 'over'
   const bits = bitsFor(hud.level)
-  const naming = hud.job === 'name'
+  // The two jobs answered on the pad rather than on the rack.
+  const naming = hud.job === 'name' || hud.job === 'exponent'
   const carrying = hud.job === 'carry'
 
   /* Biggest first, the way a number is written. */
@@ -269,6 +275,14 @@ export function Scales() {
           */}
         <p className="sr-only" aria-live="polite">
           Crate {hud.says}. {hud.asks}.
+          {' '}On the pan: {hud.pan.some((many) => many > 0)
+            ? hud.pan
+              .map((many, bit) => ({ many, weight: WEIGHTS[bit] }))
+              .filter(({ many }) => many > 0)
+              .reverse()
+              .map(({ many, weight }) => (many > 1 ? `${weight} times ${many}` : `${weight}`))
+              .join(', ')
+            : 'nothing'}.
         </p>
 
         {asking && (
@@ -323,7 +337,13 @@ export function Scales() {
             disabled={hud.status !== 'playing'}
           />
         ) : (
-          <div className="grid grid-cols-4 gap-2">
+          /*
+           * Four weights to a row while the rack is small, six once it has
+           * grown past eight: twelve buttons in fours is four rows, which is
+           * a third of a phone and leaves the machine looking through a
+           * letterbox.
+           */
+          <div className={bits > 8 ? 'grid grid-cols-6 gap-1.5' : 'grid grid-cols-4 gap-2'}>
             {rack.map((bit) => {
               const many = hud.pan[bit] ?? 0
               const on = many > 0
@@ -337,7 +357,8 @@ export function Scales() {
                     carrying ? { kind: 'carry', bit } : { kind: 'tap', bit },
                   )}
                   className={[
-                    'relative rounded-xl border-2 py-3 font-mono text-lg font-bold tabular-nums',
+                    'relative rounded-xl border-2 font-mono font-bold tabular-nums',
+                    bits > 8 ? 'py-2 text-sm' : 'py-3 text-lg',
                     'transition-transform active:translate-y-[2px]',
                     on
                       ? 'border-bolt bg-bolt/25 text-bolt'
@@ -351,8 +372,8 @@ export function Scales() {
                       ×{many}
                     </span>
                   )}
-                  <span className="mt-0.5 block font-mono text-[0.6rem] font-normal text-dim">
-                    2{'⁰¹²³⁴⁵⁶⁷'[bit]}
+                  <span className="mt-0.5 block font-mono text-[0.55rem] font-normal text-dim">
+                    2{POWERS[bit]}
                   </span>
                 </button>
               )

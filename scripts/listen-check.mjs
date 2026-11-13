@@ -8,9 +8,10 @@
  * then navigate to the page the way somebody tapping a link would.
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 const page = await browser.newPage({ viewport: { width: 420, height: 800 } })

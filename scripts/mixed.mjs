@@ -7,8 +7,9 @@
  * both work: the same socket from an http:// page.
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 
-const BROWSER = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+const BROWSER = chromiumAt().executablePath
 const LAN = process.argv[2] ?? '127.0.0.1'
 
 const browser = await chromium.launch({

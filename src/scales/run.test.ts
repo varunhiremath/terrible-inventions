@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  LIVES, WEIGHTS,
+  LIVES, TOP_POWER, WEIGHTS,
   bitsFor, bitsOf, carriesLeft, carry, cratesFor, jobsFor, newCrate, onBits, panFor,
-  tidy, topFor, uncarry, weighs,
+  powerCeiling, tidy, topFor, uncarry, weighs,
   type Dice,
 } from './level'
 import {
@@ -53,8 +53,15 @@ describe('the arithmetic', () => {
   })
 
   it('has one weight for each power of two, in order', () => {
-    expect(WEIGHTS).toEqual([1, 2, 4, 8, 16, 32, 64, 128])
+    expect(WEIGHTS).toEqual([1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048])
     for (const [i, weight] of WEIGHTS.entries()) expect(weight).toBe(Math.pow(2, i))
+  })
+
+  it('asks about powers well past the end of its own rack', () => {
+    // Lifting 2^20 would want a weight the size of the bench. Naming it wants
+    // nothing but knowing it, which is the job that exists for exactly that.
+    expect(TOP_POWER).toBeGreaterThanOrEqual(20)
+    expect(Math.pow(2, TOP_POWER)).toBeGreaterThan(WEIGHTS[WEIGHTS.length - 1])
   })
 
   it('counts the bits that are set', () => {
@@ -83,6 +90,17 @@ describe('the arithmetic', () => {
     }
   })
 
+  it('doubles a number by moving every weight one place up', () => {
+    /*
+     * The insight the doubling job exists for: twice as much is the same bits
+     * one step to the left. If this ever stopped being true the job would be
+     * teaching something that is not so.
+     */
+    for (let n = 1; n <= 2047; n++) {
+      expect(bitsOf(panFor(n * 2), 12), `${n} doubled`).toBe(`${bitsOf(panFor(n), 11)}0`)
+    }
+  })
+
   it('will not carry off the top of the rack', () => {
     const pan = panFor(0)
     pan[WEIGHTS.length - 1] = 2
@@ -107,7 +125,13 @@ describe('what comes along the belt', () => {
     expect(bitsFor(1)).toBe(4)
     expect(topFor(1)).toBe(15)
     expect(topFor(5)).toBe(255)
-    expect(bitsFor(99)).toBe(8)
+    expect(bitsFor(99)).toBe(12)
+    expect(topFor(99)).toBe(4095)
+  })
+
+  it('asks for bigger powers as the rack grows', () => {
+    expect(powerCeiling(1)).toBeLessThan(powerCeiling(9))
+    expect(powerCeiling(99)).toBe(TOP_POWER)
   })
 
   it('is always something that can be done', () => {
@@ -116,9 +140,24 @@ describe('what comes along the belt', () => {
         const crate = newCrate(1, level, dice(seed))
         const where = `level ${level} seed ${seed} ${crate.job} ${crate.load}`
         expect(crate.load, where).toBeGreaterThan(0)
+        if (crate.job === 'exponent') {
+          // The one job whose number is deliberately off the end of the rack.
+          expect(crate.answer, where).toBe(Math.log2(crate.load))
+          expect(crate.answer, where).toBeLessThanOrEqual(powerCeiling(level))
+          continue
+        }
         expect(crate.load, where).toBeLessThanOrEqual(topFor(level))
         // Whatever it is, the rack it is being asked of can hold the answer.
         const want = panFor(crate.load)
+        if (crate.job === 'double') {
+          expect(weighs(crate.pan) * 2, `${where}: the double is not a double`).toBe(crate.load)
+        }
+        if (crate.job === 'carry') {
+          const parts = (crate.was ?? '').split('+').map(Number)
+          expect(parts, `${where}: a carry crate should say what it is the sum of`)
+            .toHaveLength(2)
+          expect(parts[0] + parts[1], `${where}: the sum on the side is wrong`).toBe(crate.load)
+        }
         for (let bit = bitsFor(level); bit < WEIGHTS.length; bit++) {
           expect(want[bit], `${where} needs a weight that is not out yet`).toBe(0)
         }
@@ -142,7 +181,9 @@ describe('what comes along the belt', () => {
     for (let seed = 1; seed <= 60; seed++) {
       for (const level of [1, 3, 5]) {
         const crate = newCrate(1, level, dice(seed))
-        if (crate.job === 'power') continue
+        // A power and an exponent are one weight on purpose; a double is
+        // whatever the number before it was, doubled.
+        if (crate.job === 'power' || crate.job === 'exponent' || crate.job === 'double') continue
         expect(onBits(crate.load), `level ${level} seed ${seed}: ${crate.load} is one weight`)
           .toBeGreaterThanOrEqual(2)
       }
@@ -321,8 +362,22 @@ describe('the belt', () => {
  */
 function solve(run: Run): Move | null {
   const crate = run.crate
-  if (crate.job === 'name') {
-    const want = String(crate.load)
+  if (crate.job === 'name' || crate.job === 'exponent') {
+    /*
+     * Worked out rather than read off the crate. A naming job is the weights
+     * on the pan added up; an exponent job is halving the number until it is
+     * one and counting how many times that took — which is what the game is
+     * asking a nine-year-old to know by heart.
+     */
+    let want: string
+    if (crate.job === 'name') {
+      want = String(run.pan.reduce((sum, many, bit) => sum + many * WEIGHTS[bit], 0))
+    } else {
+      let n = crate.load
+      let power = 0
+      while (n > 1) { n /= 2; power++ }
+      want = String(power)
+    }
     if (run.typed.length < want.length) {
       return { kind: 'type', digit: want[run.typed.length] }
     }

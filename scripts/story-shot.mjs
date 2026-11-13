@@ -14,6 +14,7 @@
  *     node scripts/story-shot.mjs [story]
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 import { mkdirSync } from 'node:fs'
 
 const story = process.argv[2] ?? 'space'
@@ -21,7 +22,7 @@ const out = `/tmp/story-${story}`
 mkdirSync(out, { recursive: true })
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 const page = await browser.newPage({ viewport: { width: 500, height: 950 } })

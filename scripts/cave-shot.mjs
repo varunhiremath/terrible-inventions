@@ -6,11 +6,12 @@
  * either readable at a glance or is a wall of orange.
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 import { mkdirSync } from 'node:fs'
 mkdirSync('/tmp/caves', { recursive: true })
 
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 for (const cave of (process.env.CAVES ?? '4').split(',')) {

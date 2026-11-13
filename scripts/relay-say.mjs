@@ -6,10 +6,11 @@
  * address typed into the lobby, and whatever comes back on screen.
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 
 const SITE = process.argv[2] ?? 'https://varunhiremath.com/terrible-inventions/'
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 const page = await browser.newPage({ viewport: { width: 900, height: 560 }, ignoreHTTPSErrors: true })

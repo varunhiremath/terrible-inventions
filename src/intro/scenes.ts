@@ -74,10 +74,12 @@ import {
 } from '../mob/run'
 import { drawRun as drawMob } from '../mob/draw'
 import { drawEscape as drawGetaway, drawFlight as drawArrow } from '../archer/emblem'
-import { drawHomeward, drawYard } from '../outpost/emblem'
+import { drawHomeward, drawYard as drawCompound } from '../outpost/emblem'
 import { drawRun as drawScales } from '../scales/draw'
 import { newRun as newScales } from '../scales/run'
 import { panFor as scalePan, WEIGHTS as SCALE_WEIGHTS } from '../scales/level'
+import { drawRun as drawSheet } from '../yard/draw'
+import { newRun as newSheet } from '../yard/run'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -1198,6 +1200,42 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
     drawArrow(ctx, w, h, t, clock)
   },
 
+/**
+   * The yard, with a panel actually being dragged out of the sheet.
+   *
+   * The real machine, drawn by the game's own drawing: this is a 2D canvas
+   * like most of them, so there is nothing to paint by hand and no excuse for
+   * an approximation. The rectangle grows over the beat the way a finger
+   * grows it, and the numbers under it follow.
+   */
+  cutting({ ctx, w, h, t, clock }) {
+    const base = newSheet(3, 3, 0, 4)
+    // Twenty-four squares, found by dragging: 2x2, then 4x3, then 6x4.
+    const steps: [number, number][] = [[2, 2], [3, 3], [5, 4], [6, 4]]
+    const [wide, tall] = steps[Math.min(steps.length - 1, Math.floor(t * steps.length))]
+    drawSheet(ctx, {
+      ...base,
+      order: { id: 1, job: 'panel', area: 24, edge: 0, cubes: 0, deep: null, seconds: 40 },
+      cut: { x: 3, y: 3, wide, tall },
+      clock: 34,
+      left: 4,
+    }, { w, h, clock })
+  },
+
+  /** And the other half: a tank, with the floor laid and the depth stacking up. */
+  tanking({ ctx, w, h, t, clock }) {
+    const base = newSheet(5, 3, 0, 6)
+    const deep = 1 + Math.min(2, Math.floor(t * 3))
+    drawSheet(ctx, {
+      ...base,
+      order: { id: 1, job: 'tank', area: 0, edge: 0, cubes: 24, deep: null, seconds: 40 },
+      cut: { x: 3, y: 4, wide: 4, tall: 3 },
+      deep,
+      clock: 30,
+      left: 3,
+    }, { w, h, clock })
+  },
+
   /** And one you wanted, getting away over the trees behind you. */
   getaway({ ctx, w, h, t, clock }) {
     drawGetaway(ctx, w, h, t, clock)
@@ -1211,8 +1249,8 @@ export const SCENES: Record<string, (stage: Stage) => void> = {
    * What is in the picture is what is in the compound: the wall, the lamps,
    * the numbers on the machines, the number on the cage.
    */
-  yard({ ctx, w, h, t, clock }) {
-    drawYard(ctx, w, h, t, clock)
+  compound({ ctx, w, h, t, clock }) {
+    drawCompound(ctx, w, h, t, clock)
   },
 
 /**

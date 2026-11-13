@@ -1,9 +1,10 @@
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 import { writeFileSync, mkdirSync } from 'fs'
 
 const URL = 'http://127.0.0.1:4173/'
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 // A phone on its side. 915x412 is a Pixel; 740x360 is a small/older one.

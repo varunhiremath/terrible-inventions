@@ -18,9 +18,10 @@
  * has broken for fingers and not for keyboards.
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 const problems = []

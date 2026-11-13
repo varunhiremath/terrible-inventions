@@ -6,10 +6,11 @@
  * what is in the way, and take a picture the moment the level is won.
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 
 const SITE = process.argv[2] ?? 'http://127.0.0.1:4173/'
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 const page = await browser.newPage({ viewport: { width: 820, height: 460 }, ignoreHTTPSErrors: true })

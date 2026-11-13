@@ -16,8 +16,9 @@
  *   node scripts/smooth.mjs
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 const b = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 const p = await b.newPage({ viewport: { width: 420, height: 860 } })

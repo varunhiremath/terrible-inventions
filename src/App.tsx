@@ -13,6 +13,7 @@ import { Mob } from './screens/Mob'
 import { Archer } from './screens/Archer'
 import { Outpost } from './screens/Outpost'
 import { Scales } from './screens/Scales'
+import { Yard } from './screens/Yard'
 import { Snake } from './screens/Snake'
 import { Space } from './screens/Space'
 import { Workshop } from './screens/Workshop'
@@ -79,6 +80,7 @@ export default function App() {
       : screen === 'archer' ? 'meadow'
       : screen === 'outpost' ? 'outpost'
       : screen === 'scales' ? 'scales'
+      : screen === 'yard' ? 'yard'
       // The workshop gets the thinking tune: it is the one screen where
       // somebody is sitting still working something out.
       : screen === 'workshop' ? 'thinking'
@@ -126,6 +128,8 @@ export default function App() {
       return <Outpost />
     case 'scales':
       return <Scales />
+    case 'yard':
+      return <Yard />
     case 'workshop':
       return <Workshop />
     case 'note':

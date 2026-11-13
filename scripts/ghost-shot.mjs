@@ -6,11 +6,12 @@
  * the road alongside.
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 import { mkdirSync } from 'node:fs'
 mkdirSync('/tmp/ghost', { recursive: true })
 
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 const page = await browser.newPage({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 2 })

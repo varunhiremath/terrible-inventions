@@ -27,6 +27,7 @@ the money taken out.
 | **The Pipes** | Run, jump, stomp, and catch the flagpole as high up as you can | Between lives |
 | **The Road** | Four lanes, six stages, and four of his machines racing you from a standing start | Between lives; a right answer is half a tank and a car back |
 | **The Scales** | A weighing machine, a rack of brass weights, and crates coming along a belt | All of it. The weights are the powers of two and the pan is a binary number |
+| **The Yard** | A sheet of ply, a cutting press, and orders on the board | All of it. Area, perimeter and volume, made rather than worked out |
 | **The Long Way Out** | Fly to the eight real planets, in order, through what he has left in the way | None. Break things up for scrap, spend it at each world, and every world tells you something true |
 
 **The Dungeon is not on the front screen.** Thirteen floors and an hour on the clock,
@@ -129,13 +130,19 @@ bench writes down what your hands just did. Four kinds of crate come along the b
 - **name** — the weights are already on and the crate is a mystery. Binary back into
   decimal, typed on the pad that replaces the rack.
 - **power** — it says 2⁶ and wants exactly that weight, not 64 made of smaller ones.
-- **carry** — the pan arrives with two 8s on it, and the machine takes one of each.
-  Tap them together and they become a 16. That is the carry rule of binary addition as
-  a move you make with your thumb, and the pan visibly weighs the same before and
-  after.
+- **exponent** — the other way round: it says 16384 and wants the power typed. This is
+  the one job not limited by what the rack can lift, so it goes to 2²⁰ — lifting that
+  would want a weight the size of the bench; naming it wants nothing but knowing it.
+- **double** — the pan arrives with 87 on it and the crate says ×2. In binary that is
+  every weight taking one step to the left, and the numbers are big enough by then
+  that seeing the shift is quicker than starting again.
+- **carry** — the crate says 17+87 and the pan arrives with the two of them poured on
+  together: three 32s and an 8. The machine takes one of each, so tap a pair and they
+  become the next one up. That is binary addition, done with a thumb, and the pan
+  visibly weighs the same before and after.
 
 The rack grows a weight a level: four of them to begin with, which is nought to
-fifteen, and eight by the fifth, which is 255. A wrong answer costs two seconds and
+fifteen, and twelve by the ninth, which is 4095. A wrong answer costs two seconds and
 nothing else — no life, no buzzer, and the number you typed is rubbed out so the next
 go starts clean. The only thing that can actually beat you is the belt.
 
@@ -143,6 +150,35 @@ The arithmetic is checked against the language's own for every number the rack c
 hold, carrying is checked to never change what the pan weighs, and a bot clears whole
 levels doing the conversions itself rather than reading the answers off the crates —
 because a game that quietly teaches that 45 is 101110 would be worse than no game.
+
+The yard is the scales' sibling, for the shapes module. A sheet of ply marked out in
+squares, a cutting press, and orders on the board; you drag a rectangle out of the
+sheet and press the press.
+
+The whole design turns on one choice: **you are not asked what the area of a shape is,
+you are asked to make one.** "4 by 6, what's the area" is a sum with a picture next to
+it. "Cut me 24 squares" and left to find 4 by 6 — or 3 by 8, or 2 by 12 — is the same
+arithmetic from the other end, and it is a better end, because it is where factors live
+and it cannot be done by multiplying the two numbers you were handed.
+
+- **panel** — so many squares. Area, and the factor pairs that make it.
+- **edging** — so much edge. Perimeter, which is the one everybody confuses with area
+  until they have had to make both.
+- **exact** — so many squares *and* so much edge. Both at once, which has exactly one
+  answer: the sides are the product and the sum, so they are the roots of a quadratic,
+  and a nine-year-old solves it by knowing his factor pairs and checking their edges.
+- **tank** — so many cubes, built as a floor you drag and a depth you count up, so that
+  length times width times height is three things you did rather than three letters.
+
+The press will not take anything thinner than two squares. That rule is the game: without
+it an order for sixteen squares is filled by dragging a strip one square wide and
+sixteen long, which is correct, instant, and the one factor pair nobody has to think
+about. The probe that plays the yard in a browser found that shortcut on its first order
+and took it every time after, which is how the rule got written.
+
+A bad cut costs three seconds and the board says what was wrong with it — "20 squares,
+not 24" — rather than just no. Being told which way you are out is the difference
+between guessing again and thinking again.
 
 The road is a race proper: a staggered grid painted on the tarmac, three red lights, and
 a clock that starts when they go out and does not stop for a crash. The drive that set

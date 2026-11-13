@@ -37,12 +37,14 @@ import { drawCompound } from '../outpost/emblem'
 import { drawRun as drawScales } from '../scales/draw'
 import { newRun as newScales } from '../scales/run'
 import { panFor as scalePan } from '../scales/level'
+import { drawRun as drawYard } from '../yard/draw'
+import { newRun as newYard } from '../yard/run'
 import { fill } from '../config/profile'
 
 /**
  * The front door.
  *
- * Thirteen games, and nothing else on the screen. The app used to open straight
+ * Fourteen games, and nothing else on the screen. The app used to open straight
  * into the maze, which quietly made that one the game and the other three
  * things you had to know were hidden in the settings.
  *
@@ -344,6 +346,30 @@ const TILES: Tile[] = [
     },
   },
   {
+    id: 'yard',
+    title: 'The Yard',
+    blurb: 'Cut a panel of the right size. Squares, edges and cubes.',
+    tint: '#2b3340',
+    /*
+     * The sheet with an order on the board and a piece chalked out on it,
+     * drawn by the game's own drawing — six by four, twenty-four squares,
+     * twenty of edge, with the dimension lines his book draws. Which is the
+     * whole game in one picture.
+     */
+    emblem(ctx, w, h) {
+      const base = newYard(3, 3, 0, 5)
+      drawYard(ctx, {
+        ...base,
+        order: {
+          id: 1, job: 'exact', area: 24, edge: 20, cubes: 0, deep: null, seconds: 40,
+        },
+        cut: { x: 4, y: 3, wide: 6, tall: 4 },
+        clock: 31,
+        left: 3,
+      }, { w, h, clock: performance.now() / 1000 })
+    },
+  },
+  {
     id: 'snake',
     title: 'The Garden',
     blurb: 'Grow. Mind the others. Ring one and it is yours.',
@@ -493,7 +519,7 @@ export function Home() {
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <p className="text-sm text-dim">
-          {fill('{papa}')} built thirteen terrible machines. Swipe and pick one.
+          {fill('{papa}')} built fourteen terrible machines. Swipe and pick one.
         </p>
         {/* The front screen is the one place it is safe to reload, so this is
             the one place the update takes itself. */}

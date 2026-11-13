@@ -11,10 +11,11 @@
  * working out the weights, and pressing them.
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 
 const SITE = process.argv[2] ?? 'http://127.0.0.1:4173/'
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 const page = await browser.newPage({ viewport: { width: 430, height: 860 }, ignoreHTTPSErrors: true })
@@ -78,11 +79,26 @@ const crate = async () => {
   return { job: /TAP A PAIR/i.test(said) ? 'carry' : 'weigh', load: n }
 }
 
-/** Which weights are on the pan, read off the lit buttons. */
-const onPan = async () => page.locator('button[aria-label]').evaluateAll((all) =>
-  all.filter((b) => b.className.includes('border-bolt'))
-    .map((b) => Number((b.getAttribute('aria-label') ?? '').split(',')[0]))
-    .filter((n) => Number.isFinite(n)))
+/**
+ * Which weights are on the pan.
+ *
+ * Off the machine's own spoken line rather than off the rack, because on a
+ * naming job the rack is not there — the number pad has taken its place, and
+ * the weights exist only as brass drawn on a canvas. Which is exactly the
+ * thing that line is for.
+ */
+const onPan = async () => {
+  const said = await page.locator('p.sr-only').first().innerText()
+  const list = (said.match(/On the pan: ([^.]+)\./) ?? [])[1] ?? ''
+  if (/nothing/.test(list)) return []
+  const out = []
+  for (const part of list.split(',')) {
+    const pair = part.trim().match(/^(\d+)(?: times (\d+))?$/)
+    if (!pair) continue
+    for (let i = 0; i < Number(pair[2] ?? 1); i++) out.push(Number(pair[1]))
+  }
+  return out
+}
 
 let crates = 0
 let best = 0

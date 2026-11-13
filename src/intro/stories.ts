@@ -260,15 +260,15 @@ export const STORIES: Record<string, Story> = {
     id: 'outpost',
     title: 'THE OUTPOST',
     beats: [
-      { seconds: 4.6, scene: 'yard', voice: 'narrator', line: 'A compound in the dark. {papa} built this one too.' },
-      { seconds: 4.0, scene: 'yard', voice: 'papa', line: 'Nobody gets in and nobody gets out!' },
-      { seconds: 4.4, scene: 'yard', voice: 'narrator', line: 'Your nan is locked in the middle of it.' },
-      { seconds: 5.2, scene: 'yard', voice: 'narrator', line: 'Left thumb to walk. Drag to look. The button fires.' },
-      { seconds: 5.0, scene: 'yard', voice: 'narrator', line: 'Every machine carries a fuse with a number on it.' },
-      { seconds: 5.2, scene: 'yard', voice: 'narrator', line: 'The cage wants a total. Two fuses that make it.' },
-      { seconds: 5.0, scene: 'yard', voice: 'narrator', line: 'It says what you still need. Go and find that one.' },
+      { seconds: 4.6, scene: 'compound', voice: 'narrator', line: 'A compound in the dark. {papa} built this one too.' },
+      { seconds: 4.0, scene: 'compound', voice: 'papa', line: 'Nobody gets in and nobody gets out!' },
+      { seconds: 4.4, scene: 'compound', voice: 'narrator', line: 'Your nan is locked in the middle of it.' },
+      { seconds: 5.2, scene: 'compound', voice: 'narrator', line: 'Left thumb to walk. Drag to look. The button fires.' },
+      { seconds: 5.0, scene: 'compound', voice: 'narrator', line: 'Every machine carries a fuse with a number on it.' },
+      { seconds: 5.2, scene: 'compound', voice: 'narrator', line: 'The cage wants a total. Two fuses that make it.' },
+      { seconds: 5.0, scene: 'compound', voice: 'narrator', line: 'It says what you still need. Go and find that one.' },
       { seconds: 5.0, scene: 'homeward', voice: 'narrator', line: 'Then walk her back to the chopper. She follows you.' },
-      { seconds: 3.8, scene: 'yard', voice: 'papa', line: 'Mind the big ones. They do not walk about.' },
+      { seconds: 3.8, scene: 'compound', voice: 'papa', line: 'Mind the big ones. They do not walk about.' },
     ],
   },
 
@@ -292,6 +292,29 @@ export const STORIES: Record<string, Story> = {
       { seconds: 4.4, scene: 'carrying', voice: 'narrator', line: 'Some crates arrive with two of a kind on the pan.' },
       { seconds: 5.6, scene: 'carrying', voice: 'narrator', line: 'Tap a pair. Two eights make a sixteen, and it weighs the same.' },
       { seconds: 4.4, scene: 'weighing', voice: 'papa', line: 'And some I never got round to labelling. You tell me.' },
+    ],
+  },
+
+  /*
+   * The yard's story has one job: to get across that the same number of
+   * squares comes in more than one shape. Everything else in the game follows
+   * from that — the factor pairs, the difference between squares and edging,
+   * and why a tank is a floor with a depth on it — so two of the nine beats
+   * are spent saying it twice with different numbers.
+   */
+  yard: {
+    id: 'yard',
+    title: 'THE YARD',
+    beats: [
+      { seconds: 4.6, scene: 'cutting', voice: 'narrator', line: "A builder's yard. {papa} is taking orders again." },
+      { seconds: 4.0, scene: 'cutting', voice: 'papa', line: 'Twenty-four squares! I did not say what shape!' },
+      { seconds: 5.4, scene: 'cutting', voice: 'narrator', line: 'Drag a piece out of the sheet. Any rectangle that comes to it.' },
+      { seconds: 4.6, scene: 'cutting', voice: 'narrator', line: 'Six by four is twenty-four. So is three by eight.' },
+      { seconds: 5.0, scene: 'cutting', voice: 'narrator', line: 'Some orders want edging instead. That is all the way round.' },
+      { seconds: 4.8, scene: 'cutting', voice: 'narrator', line: 'Same squares, longer edge. A thin panel has more of it.' },
+      { seconds: 5.2, scene: 'tanking', voice: 'narrator', line: 'And some want cubes. Drag the floor, then stack it up.' },
+      { seconds: 5.2, scene: 'tanking', voice: 'narrator', line: 'Floor times depth. Four by three, two deep, is twenty-four.' },
+      { seconds: 3.8, scene: 'cutting', voice: 'papa', line: 'Nothing thinner than two squares. It snaps.' },
     ],
   },
 
@@ -322,5 +345,5 @@ export const STORIES: Record<string, Story> = {
 export const STORY_ORDER =
   [
     'arcade', 'archer', 'dave', 'outpost', 'pipes', 'road', 'scales', 'space', 'snake',
-    'bricks', 'sums', 'mob', 'puzzles',
+    'yard', 'bricks', 'sums', 'mob', 'puzzles',
   ] as const

@@ -173,6 +173,15 @@ These are not preferences. Breaking one defeats the point of the project.
   conversion, and carrying is a thumb-tap that visibly does not change what the pan
   weighs. Nothing in it asks "what is 45 in binary". The moment one of these games
   shows a question and a box, it has stopped being a game.
+- **Ask for the shape, not the answer.** The yard never asks what the area of a
+  rectangle is; it asks for 24 squares and leaves you to find 4 by 6. Same arithmetic,
+  better end: it is where the factor pairs live, and it cannot be done by multiplying
+  the two numbers you were handed. The same rule made the scales: the rack is a binary
+  number, so putting weights on a pan *is* the conversion.
+- **Close the shortcut, or the shortcut is the game.** An order for 16 squares is
+  filled by a strip 1 by 16 — correct, instant, and the one factor pair nobody has to
+  think about. The press refuses anything under two squares each way. Probes find these
+  before children do: this one took the strip on its first order and every order after.
 - **Teach a number system against the language's own.** `scales/run.test.ts` checks
   every number the rack can hold against `n.toString(2)`. A game that quietly teaches
   the wrong binary is worse than no game, and nothing else would catch it.

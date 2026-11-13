@@ -144,13 +144,20 @@ export type Move =
  */
 export function finished(run: Run): boolean {
   const { crate, pan } = run
-  if (crate.job === 'name') return false
+  // The two that are finished by typing rather than by lifting.
+  if (crate.job === 'name' || crate.job === 'exponent') return false
   if (!tidy(pan)) return false
   if (crate.job === 'power') {
     return pan[crate.power ?? 0] === 1 && weighs(pan) === crate.load
   }
+  // A weigh, a double and a carry are all the same question in the end: does
+  // the pan come to what the crate says it should.
   return weighs(pan) === crate.load
 }
+
+/** Whether this crate is answered with the number pad rather than the rack. */
+export const typedAt = (run: Run): boolean =>
+  run.crate.job === 'name' || run.crate.job === 'exponent'
 
 /** What the machine would say the pan weighs, out loud, for the screen. */
 export const onPan = (run: Run): number => weighs(run.pan)
@@ -213,7 +220,7 @@ function apply(run: Run, move: Move): void {
      * job the pile is the machine's too — the only thing you are allowed to
      * do to it is tidy it, which is the whole job.
      */
-    if (crate.job === 'name' || crate.job === 'carry') return
+    if (crate.job === 'name' || crate.job === 'carry' || crate.job === 'exponent') return
     if (run.pan[move.bit] > 0) {
       run.pan[move.bit] = 0
       run.events.push('lift')
@@ -230,8 +237,10 @@ function apply(run: Run, move: Move): void {
   }
 
   if (move.kind === 'type') {
-    if (crate.job !== 'name') return
-    if (run.typed.length >= 3) return
+    if (crate.job !== 'name' && crate.job !== 'exponent') return
+    // Long enough for the biggest thing the machine can be holding, which is
+    // four thousand and ninety-five.
+    if (run.typed.length >= 4) return
     if (!/^[0-9]$/.test(move.digit)) return
     run.typed = (run.typed === '0' ? '' : run.typed) + move.digit
     return
@@ -243,8 +252,8 @@ function apply(run: Run, move: Move): void {
   }
 
   if (move.kind === 'say') {
-    if (crate.job !== 'name' || run.typed === '') return
-    if (Number(run.typed) === crate.load) {
+    if ((crate.job !== 'name' && crate.job !== 'exponent') || run.typed === '') return
+    if (Number(run.typed) === (crate.answer ?? crate.load)) {
       done(run)
     } else {
       /*
@@ -304,7 +313,7 @@ export const stillToCarry = (run: Run): number => carriesLeft(run.pan)
  * for him.
  */
 export function nudge(run: Run): number | null {
-  if (run.crate.job === 'name' || run.crate.job === 'carry') return null
+  if (typedAt(run) || run.crate.job === 'carry') return null
   const want = panFor(run.crate.load)
   for (let bit = WEIGHTS.length - 1; bit >= 0; bit--) {
     if (want[bit] !== (run.pan[bit] > 0 ? 1 : 0)) return bit

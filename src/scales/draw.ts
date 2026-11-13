@@ -162,7 +162,18 @@ function drawCrate(
     ctx.font = `bold ${sup}px ui-monospace, Menlo, Consolas, monospace`
     ctx.fillText(power[1], from + base, y + tall * 0.34)
   } else {
-    ctx.font = `bold ${Math.round(tall * (says.length > 2 ? 0.4 : 0.5))}px ui-monospace, Menlo, Consolas, monospace`
+    /*
+     * Sized to fit rather than by a rule of thumb. The crates used to say
+     * three characters at most; now one of them can say 1048576 and another
+     * 1536+512, and a font size picked off the length of the string puts
+     * both of those through the sides of the box.
+     */
+    let size = Math.round(tall * 0.5)
+    ctx.font = `bold ${size}px ui-monospace, Menlo, Consolas, monospace`
+    while (ctx.measureText(says).width > wide * 0.86 && size > 6) {
+      size -= 1
+      ctx.font = `bold ${size}px ui-monospace, Menlo, Consolas, monospace`
+    }
     ctx.fillText(says, x + wide / 2, y + tall / 2)
   }
 }

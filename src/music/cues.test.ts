@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ARCHER_CUES, OUTPOST_CUES, SCALES_CUES,
+  ARCHER_CUES, OUTPOST_CUES, SCALES_CUES, YARD_CUES,
   CAVE_CUES,
   CUES,
   DUNGEON_CUES,
@@ -123,6 +123,10 @@ const TICKS: CueName[] = [
   // being tidied — somebody who knows what they are doing taps eight of these
   // in four seconds.
   'clink', 'offPan', 'swapUp',
+  // And the yard's chalk, which is the busiest of the lot: it fires every
+  // time the rectangle changes size, and a finger dragging across a sheet
+  // changes it several times a second.
+  'chalk',
   // And a decoy going: somebody spraying arrows pops three in two seconds.
   'dud',
 ]
@@ -291,7 +295,7 @@ describe('every cue', () => {
      */
     const sets = [
       DUNGEON_CUES, PIPE_CUES, MAZE_CUES, CAVE_CUES, ROAD_CUES, SPACE_CUES, GARDEN_CUES,
-      BRICK_CUES, FLOOD_CUES, NOTEBOOK_CUES, MOB_CUES, ARCHER_CUES, OUTPOST_CUES, SCALES_CUES, WIPE_CUES,
+      BRICK_CUES, FLOOD_CUES, NOTEBOOK_CUES, MOB_CUES, ARCHER_CUES, OUTPOST_CUES, SCALES_CUES, YARD_CUES, WIPE_CUES,
     ]
     const seen = new Set<string>()
     for (const set of sets) {
@@ -580,6 +584,58 @@ describe('the scales cues', () => {
     expect(doneTo).toBeGreaterThan(doneFrom)
     const [endFrom, endTo] = ends('shutDown')
     expect(endTo).toBeLessThan(endFrom)
+  })
+})
+
+/**
+ * The yard's cues are held to B flat major, which is nobody else's key here.
+ * One stray note is the easiest way to make a whole set sound wrong while
+ * every cue in it still sounds fine on its own.
+ */
+describe('the yard cues', () => {
+  const MAJOR = [10, 0, 2, 3, 5, 7, 9]
+
+  it('stays in B flat major', () => {
+    for (const name of Object.keys(YARD_CUES) as CueName[]) {
+      for (const part of CUES[name].parts) {
+        for (const note of readPart(part.pattern)) {
+          expect(MAJOR, `${name}: ${note.frequency.toFixed(1)}Hz at eighth ${note.at}`)
+            .toContain(pitchClass(note.frequency))
+        }
+      }
+    }
+  })
+
+  it('sends a clean cut up and everything that went wrong down', () => {
+    const ends = (name: CueName) => {
+      const notes = readPart(CUES[name].parts[0].pattern)
+      return [notes[0].frequency, notes[notes.length - 1].frequency]
+    }
+    const [cutFrom, cutTo] = ends('cutClean')
+    expect(cutTo).toBeGreaterThan(cutFrom)
+    const [badFrom, badTo] = ends('offcut')
+    expect(badTo).toBeLessThan(badFrom)
+    const [lostFrom, lostTo] = ends('scrapped')
+    expect(lostTo).toBeLessThan(lostFrom)
+    const [dayFrom, dayTo] = ends('yardDone')
+    expect(dayTo).toBeGreaterThan(dayFrom)
+    const [endFrom, endTo] = ends('knockOff')
+    expect(endTo).toBeLessThan(endFrom)
+  })
+
+  it('keeps the chalk quiet enough to fire several times a second', () => {
+    /*
+     * It goes off every time the rectangle changes size, which while a finger
+     * is moving across the sheet is several times a second. The flood's
+     * landing block is the only thing in the app quieter, and that one fires
+     * eight at a time.
+     */
+    const chalk = Math.max(...CUES.chalk.parts.map((p) => p.gain))
+    expect(chalk).toBeLessThanOrEqual(0.022)
+    for (const name of Object.keys(YARD_CUES) as CueName[]) {
+      if (name === 'chalk') continue
+      expect(Math.max(...CUES[name].parts.map((p) => p.gain)), name).toBeGreaterThan(chalk)
+    }
   })
 })
 

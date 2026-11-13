@@ -37,17 +37,32 @@ export interface Dice {
 /**
  * The rack: one weight for each power of two, smallest first.
  *
- * Eight of them, so the machine goes up to 255. Indexed by the power, so
- * `WEIGHTS[5]` is 32 and index five is also bit five — the two are the same
- * thing, which is the whole point of the game and worth keeping true in the
- * code as well.
+ * Twelve of them, so the machine goes up to 4095. It was eight, and eight was
+ * too few: "he is easily able to compute powers of two up to 2^20, so these
+ * are too easy." Twelve is as many buttons as a phone will take without the
+ * numbers on them going unreadable — the powers past the end of the rack are
+ * still asked about, by the job that wants the exponent typed rather than
+ * lifted, and that one goes to 2^20.
+ *
+ * Indexed by the power, so `WEIGHTS[5]` is 32 and index five is also bit
+ * five — the two are the same thing, which is the whole point of the game and
+ * worth keeping true in the code as well.
  */
-export const WEIGHTS: readonly number[] = [1, 2, 4, 8, 16, 32, 64, 128]
+export const WEIGHTS: readonly number[] = [
+  1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048,
+]
+
+/**
+ * The biggest power the machine ever asks about, which is well past its own
+ * rack. Lifting 2^20 would need a weight the size of the bench; naming it
+ * needs nothing but knowing it.
+ */
+export const TOP_POWER = 20
 
 /** How many goes you get, before anything the workshop adds. */
 export const LIVES = 3
 
-export type Job = 'weigh' | 'name' | 'power' | 'carry'
+export type Job = 'weigh' | 'name' | 'power' | 'carry' | 'exponent' | 'double'
 
 export interface Crate {
   id: number
@@ -64,6 +79,15 @@ export interface Crate {
   pan: number[]
   /** For a power job: which power of two is wanted. */
   power?: number
+  /**
+   * What a typed answer has to be, where that is not the load.
+   *
+   * A naming job wants the load back, so it leaves this alone. An exponent
+   * job shows 4096 and wants 12, which is a different number entirely.
+   */
+  answer?: number
+  /** What the crate says it started as, for the jobs that change it. */
+  was?: string
   /** Seconds it is on the belt before it goes over the end. */
   seconds: number
 }
@@ -81,20 +105,25 @@ const empty = (): number[] => WEIGHTS.map(() => 0)
  */
 export const bitsFor = (level: number): number => Math.min(WEIGHTS.length, 3 + level)
 
+/** The biggest exponent worth asking for on this level. */
+export const powerCeiling = (level: number): number =>
+  Math.min(TOP_POWER, 6 + level)
+
 export const topFor = (level: number): number => Math.pow(2, bitsFor(level)) - 1
 
 /** Which jobs the belt is sending on this level. */
 export function jobsFor(level: number): Job[] {
   const jobs: Job[] = ['weigh']
   if (level >= 2) jobs.push('name')
-  if (level >= 3) jobs.push('power')
+  if (level >= 3) jobs.push('power', 'exponent')
   if (level >= 4) jobs.push('carry')
+  if (level >= 5) jobs.push('double')
   return jobs
 }
 
 /** How many crates there are, and how long each is on the belt. */
 export const cratesFor = (level: number): number => 5 + level
-export const secondsFor = (level: number): number => Math.max(14, 30 - level * 2)
+export const secondsFor = (level: number): number => Math.max(12, 28 - level * 2)
 
 // --- reading and writing numbers ----------------------------------------------
 
@@ -168,10 +197,26 @@ export function newCrate(id: number, level: number, rng: Dice): Crate {
   const seconds = secondsFor(level)
 
   if (job === 'power') {
-    // Never the ones. A crate asking for 2⁰ is asking you to pick up the
-    // weight nearest your hand.
-    const power = rng.int(Math.min(2, bits - 1), bits - 1)
+    /*
+     * Never the small ones. A crate asking for 2³ on a rack that goes to 2048
+     * is asking you to pick up the weight nearest your hand, so the floor
+     * climbs with the rack and only the top half of it is ever asked for.
+     */
+    const low = Math.max(3, bits - 5)
+    const power = rng.int(Math.min(low, bits - 1), bits - 1)
     return { id, job, load: WEIGHTS[power], pan: empty(), power, seconds }
+  }
+
+  if (job === 'exponent') {
+    /*
+     * The other way round, and the one job on the machine that is not limited
+     * by what the rack can lift: it shows a number and wants the power. Which
+     * is how 2^20 gets asked about on a bench that only goes to 2048.
+     */
+    const power = rng.int(4, powerCeiling(level))
+    return {
+      id, job, load: Math.pow(2, power), pan: empty(), power, answer: power, seconds,
+    }
   }
 
   if (job === 'name') {
@@ -179,22 +224,40 @@ export function newCrate(id: number, level: number, rng: Dice): Crate {
     return { id, job, load, pan: panFor(load), seconds }
   }
 
+  if (job === 'double') {
+    /*
+     * Doubling, which in binary is every weight taking one step to the left.
+     * The numbers are big enough by the time this job turns up that clearing
+     * the pan and starting again is slower than seeing the shift, which is
+     * the whole reason the job exists.
+     */
+    const was = pickLoad(level, rng, 2, Math.floor(topFor(level) / 2))
+    return {
+      id, job, load: was * 2, pan: panFor(was), seconds, was: String(was),
+    }
+  }
+
   if (job === 'carry') {
+    /*
+     * A carry crate is an addition that has been poured onto the pan without
+     * being tidied up — so it says what it was the sum of. Tidying it *is*
+     * adding the two numbers in binary, and saying so on the side of the
+     * crate is the difference between a puzzle and a lesson.
+     */
     const load = pickLoad(level, rng, 2)
     const pan = panFor(load)
-    /*
-     * Un-carried a few times, and never below a weight that is not in play on
-     * this level: splitting a 2 into two 1s on a four-weight rack is fine, but
-     * splitting the rack's smallest weight has nowhere to go.
-     */
-    const splits = Math.min(3, 1 + Math.floor(level / 3))
+    const splits = Math.min(4, 1 + Math.floor(level / 3))
     for (let i = 0; i < splits * 3; i++) {
       const bit = rng.int(1, bits - 1)
       if (carriesLeft(pan) >= splits) break
       uncarry(pan, bit)
     }
     if (carriesLeft(pan) === 0) uncarry(pan, Math.max(1, bits - 1))
-    return { id, job, load: weighs(pan), pan, seconds }
+    const total = weighs(pan)
+    const half = rng.int(1, Math.max(1, total - 1))
+    return {
+      id, job, load: total, pan, seconds, was: `${half}+${total - half}`,
+    }
   }
 
   const load = pickLoad(level, rng, 2)
@@ -202,8 +265,8 @@ export function newCrate(id: number, level: number, rng: Dice): Crate {
 }
 
 /** A number on this level worth being asked, with at least `least` bits set. */
-function pickLoad(level: number, rng: Dice, least: number): number {
-  const top = topFor(level)
+function pickLoad(level: number, rng: Dice, least: number, ceiling?: number): number {
+  const top = Math.min(topFor(level), ceiling ?? topFor(level))
   const low = Math.max(3, Math.floor(top / 4))
   for (let tries = 0; tries < 24; tries++) {
     const n = rng.int(low, top)
@@ -228,7 +291,9 @@ export function saysOn(crate: Crate): string {
     case 'weigh': return String(crate.load)
     case 'name': return '?'
     case 'power': return `2^${crate.power}`
-    case 'carry': return String(crate.load)
+    case 'exponent': return String(crate.load)
+    case 'double': return `${crate.was} x2`
+    case 'carry': return crate.was ?? String(crate.load)
   }
 }
 
@@ -238,6 +303,8 @@ export function asks(crate: Crate): string {
     case 'weigh': return 'BALANCE IT'
     case 'name': return 'WHAT DOES IT WEIGH?'
     case 'power': return 'ONE WEIGHT ONLY'
-    case 'carry': return 'ONE OF EACH — TAP A PAIR'
+    case 'exponent': return 'WHICH POWER OF TWO IS IT?'
+    case 'double': return 'DOUBLE IT'
+    case 'carry': return 'ADD IT UP — TAP A PAIR'
   }
 }

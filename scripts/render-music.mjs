@@ -13,6 +13,7 @@
  *     node scripts/render-music.mjs chase 34
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 import { writeFileSync } from 'node:fs'
 
 const WHICH = process.argv[2] ?? 'chase'
@@ -21,7 +22,7 @@ const SECONDS = Number(process.argv[3] ?? 30)
 const WARMTH = Number(process.argv[4] ?? 0)
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 const page = await browser.newPage()

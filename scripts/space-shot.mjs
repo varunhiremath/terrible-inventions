@@ -6,6 +6,7 @@
  * suite was found by looking at one of these.
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 import { mkdirSync } from 'node:fs'
 
 const BASE = 'http://127.0.0.1:4173/'
@@ -13,7 +14,7 @@ const OUT = process.env.OUT ?? '/tmp/shots'
 mkdirSync(OUT, { recursive: true })
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 

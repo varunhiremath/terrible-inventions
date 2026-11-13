@@ -11,12 +11,13 @@
  *     node scripts/voice-balance.mjs flood 1
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 
 const WHICH = process.argv[2] ?? 'flood'
 const WARMTH = Number(process.argv[3] ?? 1)
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 const page = await browser.newPage()

@@ -7,12 +7,13 @@
  * than underneath the Back button — which is a thing that has happened.
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 import { mkdirSync } from 'node:fs'
 
 const OUT = '/tmp/road'
 mkdirSync(OUT, { recursive: true })
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 const page = await browser.newPage({ viewport: { width: 915, height: 412 } })

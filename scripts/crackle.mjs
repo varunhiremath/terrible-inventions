@@ -23,9 +23,10 @@
  *     node scripts/crackle.mjs
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
          '--autoplay-policy=no-user-gesture-required'],
 })

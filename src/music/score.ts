@@ -2197,10 +2197,65 @@ export const SCALES: Track = {
   ],
 }
 
+
+/*
+ * The yard, on a working morning.
+ *
+ * B flat major, unhurried, and built to be ignored — a game where somebody is
+ * counting squares wants music that keeps time and then gets out of the way.
+ * The bass is a pair of boots walking about the yard; the lead is four notes
+ * that come round again, which is what a job you have done a hundred times
+ * sounds like.
+ */
+const YARD_LEAD = [
+  'Bb4 .  .  D5 .  .  F5 . ',
+  'D5 .  .  .  C5 .  Bb4 . ',
+  'C5 .  .  Eb5 .  .  D5 . ',
+  'Bb4 .  .  .  .  .  .  . ',
+  'F5 .  .  Eb5 .  .  D5 . ',
+  'C5 .  .  .  Bb4 .  A4 . ',
+  'Bb4 .  .  C5 .  .  D5 . ',
+  'Bb4 .  .  .  .  .  .  . ',
+].join(' ')
+
+const YARD_BASS = [
+  'Bb2 .  F3 .  Bb2 .  D3 . ',
+  'Bb2 .  F3 .  Bb2 .  D3 . ',
+  'Eb3 .  Bb3 . Eb3 .  G3 . ',
+  'Bb2 .  F3 .  Bb2 .  D3 . ',
+  'F3 .  C4 .  F3 .  A3 . ',
+  'Eb3 .  Bb3 . Eb3 .  G3 . ',
+  'Bb2 .  F3 .  Bb2 .  D3 . ',
+  'F3 .  C4 .  F3 .  Bb2 . ',
+].join(' ')
+
+const YARD_BED = [
+  'Bb3 .  .  .  .  .  .  . ',
+  'Bb3 .  .  .  .  .  .  . ',
+  'Eb4 .  .  .  .  .  .  . ',
+  'Bb3 .  .  .  .  .  .  . ',
+  'F4 .  .  .  .  .  .  . ',
+  'Eb4 .  .  .  .  .  .  . ',
+  'Bb3 .  .  .  .  .  .  . ',
+  'F4 .  .  .  .  .  .  . ',
+].join(' ')
+
+export const YARD: Track = {
+  name: 'The Yard',
+  beatsPerMinute: 100,
+  hotter: 13,
+  parts: [
+    { wave: 'pluck', gain: 0.048, sustain: 0.85, pattern: YARD_LEAD },
+    { wave: 'pluck', gain: 0.05, sustain: 0.5, pattern: YARD_BASS },
+    { wave: 'strings', gain: 0.03, sustain: 1, chord: [0, 7], pattern: YARD_BED },
+  ],
+}
+
 export const TRACKS = {
   chase: CHASE,
   outpost: OUTPOST,
   scales: SCALES,
+  yard: YARD,
   garden: GARDEN,
   wall: WALL,
   flood: FLOOD,
@@ -3378,9 +3433,94 @@ export const SCALES_CUES = {
   shutDown: SHUT_DOWN,
 } as const
 
+
+/*
+ * The yard's noises, in B flat major.
+ *
+ * A key of its own, like every other game here. Warm and plain: this is a
+ * working morning in a builder's yard, and the whole set is pitched to sit
+ * under somebody counting squares under their breath rather than to be
+ * listened to.
+ *
+ * The chalk is the quietest thing in the app on purpose. It fires every time
+ * the rectangle changes size, which while a finger is moving is several times
+ * a second — anything with a shape to it would be a drum solo.
+ */
+
+/** The chalk, as the rectangle grows and shrinks. */
+const CHALK: Track = {
+  name: 'Chalk',
+  beatsPerMinute: 360,
+  parts: [{ wave: 'pluck', gain: 0.02, sustain: 0.14, pattern: 'Bb4 F4 ' }],
+}
+
+/** The press coming down on a piece that fits. */
+const CUT_CLEAN: Track = {
+  name: 'Cut clean',
+  beatsPerMinute: 215,
+  parts: [
+    { wave: 'bell', gain: 0.07, sustain: 0.6, pattern: 'Bb4 D5 F5 ' },
+    { wave: 'strings', gain: 0.03, sustain: 0.8, chord: [0, 7], pattern: 'Bb3 .  .  ' },
+  ],
+}
+
+/** And on one that does not. A shrug, not a buzzer. */
+const OFFCUT: Track = {
+  name: 'Offcut',
+  beatsPerMinute: 170,
+  parts: [{ wave: 'pluck', gain: 0.045, sustain: 0.4, pattern: 'G4 Eb4 ' }],
+}
+
+/** The next docket off the spike. */
+const NEXT_ORDER: Track = {
+  name: 'Next order',
+  beatsPerMinute: 170,
+  parts: [{ wave: 'pluck', gain: 0.035, sustain: 0.35, pattern: 'F3 Bb3 ' }],
+}
+
+/** One the lorry went without. */
+const SCRAPPED: Track = {
+  name: 'Scrapped',
+  beatsPerMinute: 150,
+  parts: [
+    { wave: 'pluck', gain: 0.06, sustain: 0.6, pattern: 'F4 D4 Bb3 ' },
+    { wave: 'strings', gain: 0.028, sustain: 0.9, chord: [0, 7], pattern: 'Bb2 .  .   ' },
+  ],
+}
+
+/** A whole day's orders out of the gate. */
+const YARD_DONE: Track = {
+  name: 'Yard done',
+  beatsPerMinute: 175,
+  parts: [
+    { wave: 'bell', gain: 0.08, sustain: 0.85, pattern: 'Bb4 D5 F5 Bb5 D6 F6 ' },
+    { wave: 'strings', gain: 0.032, sustain: 1, chord: [0, 4, 7], pattern: 'Bb3 .  .  .   .  .  ' },
+  ],
+}
+
+/** And knocking off for the day with orders still on the board. */
+const KNOCK_OFF: Track = {
+  name: 'Knock off',
+  beatsPerMinute: 125,
+  parts: [
+    { wave: 'pluck', gain: 0.07, sustain: 0.85, pattern: 'Bb4 A4 G4 F4 Eb4 ' },
+    { wave: 'strings', gain: 0.03, sustain: 1, chord: [0, 7], pattern: 'Bb2 .  .  .  .   ' },
+  ],
+}
+
+export const YARD_CUES = {
+  chalk: CHALK,
+  cutClean: CUT_CLEAN,
+  offcut: OFFCUT,
+  nextOrder: NEXT_ORDER,
+  scrapped: SCRAPPED,
+  yardDone: YARD_DONE,
+  knockOff: KNOCK_OFF,
+} as const
+
 export const CUES = {
   ...DUNGEON_CUES, ...PIPE_CUES, ...MAZE_CUES, ...CAVE_CUES, ...ROAD_CUES, ...SPACE_CUES,
   ...GARDEN_CUES, ...BRICK_CUES, ...FLOOD_CUES, ...NOTEBOOK_CUES, ...MOB_CUES, ...ARCHER_CUES,
-  ...OUTPOST_CUES, ...SCALES_CUES, ...WIPE_CUES,
+  ...OUTPOST_CUES, ...SCALES_CUES, ...YARD_CUES, ...WIPE_CUES,
 } as const
 export type CueName = keyof typeof CUES

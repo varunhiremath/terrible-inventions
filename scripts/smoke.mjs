@@ -9,12 +9,12 @@
  *   npm run smoke
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 
 const URL = process.env.SMOKE_URL ?? 'http://127.0.0.1:4173/'
-const EXECUTABLE = process.env.CHROMIUM_PATH
 
 const browser = await chromium.launch({
-  ...(EXECUTABLE ? { executablePath: EXECUTABLE } : {}),
+  ...chromiumAt(),
   // Headless has no GPU; without a software rasteriser the canvas stays blank.
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
@@ -142,14 +142,15 @@ await page.goto(URL, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1500)
 
 /*
- * The thirteen tiles that have to be there. The Dungeon is deliberately not among
+ * The fourteen tiles that have to be there. The Dungeon is deliberately not among
  * them any more — it is off the front screen until its bugs are dealt with —
  * and Papa Drowning is called Papa in Trouble now, which this list went on
  * believing for a fortnight because nothing runs it in CI.
  */
 const GAMES = [
   'Papa Panic', 'The Meadow', 'The Caves', 'The Outpost', 'The Swarm', 'The Pipes', 'The Road',
-  'The Scales', 'The Long Way Out', 'The Garden', 'The Wall', 'Papa in Trouble', 'The Notebook',
+  'The Scales', 'The Yard', 'The Long Way Out', 'The Garden', 'The Wall', 'Papa in Trouble',
+  'The Notebook',
 ]
 const homeText = await page.innerText('body')
 for (const game of GAMES) {
@@ -957,6 +958,88 @@ if (await enter('The Scales')) {
   }
 }
 
+// --- the yard: squares, edges and the press ---------------------------------
+if (await enter('The Yard')) {
+  await page.waitForTimeout(1400)
+
+  /*
+   * One order, filled the way the game means it to be filled: read what is
+   * wanted, work out a rectangle that comes to it, drag that out on the
+   * sheet and press the press. If the drag is not reaching the sheet, or the
+   * board is not reading back what was drawn, the score never moves.
+   */
+  const said = async () => (await page.locator('p.sr-only').first().innerText()) ?? ''
+  const bar = async () =>
+    (await page.locator('p.font-mono, span.font-mono').allTextContents()).join(' ')
+  const score = async () => Number(((await bar()).match(/\b(\d{6})\b/) ?? [])[1] ?? -1)
+  const chalked = async () => {
+    const m = (await said()).match(/Chalked: (\d+) by (\d+)/)
+    return m ? { wide: Number(m[1]), tall: Number(m[2]) } : { wide: 0, tall: 0 }
+  }
+
+  if (!/level 1\b/i.test(await bar())) problems.push('the yard did not open on level 1')
+  if ((await score()) !== 0) problems.push('the yard did not open on nothing')
+
+  const order = (await said()).match(/Order: (\d+) SQUARES/)
+  if (!order) problems.push(`the yard never said what was ordered (${await said()})`)
+  else {
+    const area = Number(order[1])
+    // Two each way at least: the press will not take a strip.
+    let want = null
+    for (let wide = 2; wide <= 14 && !want; wide++) {
+      for (let tall = 2; tall <= 10 && !want; tall++) {
+        if (wide * tall === area) want = { wide, tall }
+      }
+    }
+    if (!want) problems.push(`nothing on the sheet makes ${area} squares`)
+    else {
+      const box = await page.locator('canvas').first().boundingBox()
+      const anchor = { x: box.x + box.width * 0.06, y: box.y + box.height * 0.17 }
+      const dragTo = async (dx, dy) => {
+        await page.mouse.move(anchor.x, anchor.y)
+        await page.mouse.down()
+        await page.mouse.move(anchor.x + dx * 0.5, anchor.y + dy * 0.5, { steps: 3 })
+        await page.mouse.move(anchor.x + dx, anchor.y + dy, { steps: 5 })
+        await page.mouse.up()
+        await page.waitForTimeout(170)
+        return chalked()
+      }
+
+      /*
+       * How big a square is, measured rather than worked out: drag a known
+       * number of pixels sideways and see how many squares that turned out
+       * to be. A copy of the game's own layout arithmetic here would be a
+       * copy to keep in step, and this is the same thing the board is
+       * telling the player.
+       */
+      const across = box.width * 0.5
+      const far = await dragTo(across, 0)
+      if (far.wide < 3) problems.push('dragging across the yard chalked almost nothing')
+      else {
+        const cell = across / (far.wide - 1)
+        let dx = (want.wide - 1) * cell
+        let dy = (want.tall - 1) * cell
+        let got = { wide: 0, tall: 0 }
+        for (let go = 0; go < 6; go++) {
+          got = await dragTo(dx, dy)
+          if (got.wide === want.wide && got.tall === want.tall) break
+          dx = Math.max(0, dx + (want.wide - got.wide) * cell * 0.6)
+          dy = Math.max(0, dy + (want.tall - got.tall) * cell * 0.6)
+        }
+        if (got.wide !== want.wide || got.tall !== want.tall) {
+          problems.push(`could not chalk ${want.wide} by ${want.tall} in the yard`)
+        } else {
+          await page.getByRole('button', { name: /Cut it|Build it/i }).first().click()
+          await page.waitForTimeout(450)
+          if ((await score()) <= 0) {
+            problems.push(`${want.wide} by ${want.tall} did not fill an order for ${area} squares`)
+          }
+        }
+      }
+    }
+  }
+}
+
 // --- the notebook -----------------------------------------------------------
 {
   /*
@@ -1029,4 +1112,4 @@ if (problems.length) {
   process.exit(1)
 }
 console.log('smoke test clean: picked from the front door, played the maze, answered the question between lives, ran Dave through the hideout, ran the pipes, drove the road, flew out towards Mercury, took a snake round the garden, knocked a wall down, dragged a line out of the flood, held the lane against the swarm, loosed arrows over the meadow, walked into the outpost, weighed a crate out \
-in brass, and traced a puzzle')
+in brass, cut a panel to size, and traced a puzzle')

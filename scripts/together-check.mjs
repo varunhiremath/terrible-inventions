@@ -8,6 +8,7 @@
  * that the guest is seeing a race at all and that it is the host's race.
  */
 import { chromium } from 'playwright'
+import { chromiumAt } from './browser.mjs'
 import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 
@@ -40,7 +41,7 @@ if (!listening) {
 }
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...chromiumAt(),
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 })
 
