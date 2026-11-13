@@ -10,7 +10,13 @@ import { divisors, rectangleCount, tier } from './util'
  * works out on his own that some numbers make exactly one rectangle.
  */
 
-const BOUNDS = [400, 800, 1250, 1700] as const
+/*
+ * Compressed, for the same reason as the fraction ladder. "24 blocks, four
+ * tall, how wide" is a division with a picture next to it, and it is the
+ * whole of the bottom rung — fine as a way back in on a bad day, and not
+ * somewhere anybody should be spending a session.
+ */
+const BOUNDS = [400, 580, 900, 1350] as const
 
 export const rectangleHunt: Generator = {
   id: 'rectangle-hunt',

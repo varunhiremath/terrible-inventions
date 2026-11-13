@@ -15,10 +15,16 @@ import { tier } from './util'
  * always "where does it FIRST go wrong", not "which line looks odd".
  */
 
-const BOUNDS = [500, 900, 1400, 2000] as const
+/*
+ * Re-pitched for a child two years further on. The bounds are compressed and
+ * the numbers at each rung are two or three times what they were: the old
+ * bottom rung was three steps on numbers under forty, which is where this
+ * belonged when it was written and is now a rung spent proving nothing.
+ */
+const BOUNDS = [500, 750, 1100, 1600] as const
 
 /** Rough upper bound on the numbers in play, per tier. */
-const CEILINGS = [40, 90, 150, 400] as const
+const CEILINGS = [60, 150, 400, 1200] as const
 
 type Op = '+' | '-' | 'x' | '/'
 
@@ -26,6 +32,17 @@ interface Step {
   left: number
   op: Op
   right: number
+  /**
+   * A second operation on the same line, for the lines that have one.
+   *
+   * This is where the order of operations lives. `12 + 4 x 5` is 32, and a
+   * person working left to right gets 80 — which is the single most common
+   * wrong line in a grade five book and could not be written down at all
+   * while every line here had one operation on it. Nothing announces that
+   * the rule is in play; it is simply one of the ways a line can be wrong,
+   * sitting among the dropped carries and the transposed digits.
+   */
+  then?: { op: Op; right: number }
   shown: number
   correct: number
 }
@@ -43,6 +60,30 @@ export const papasMistake: Generator = {
     const stepCount = [3, 4, 4, 5][t] + (t >= 2 && rng.next() < 0.4 ? 1 : 0)
 
     const steps = buildChain(stepCount, t, rng)
+
+    /*
+     * One line in three carries a second operation, from the middle rung up.
+     * Only one of them, and never the last: a line with two operations is
+     * harder to check than a line with one, and a page made entirely of them
+     * stops being about finding the error and starts being about stamina.
+     */
+    if (t >= 1 && rng.next() < 0.6) {
+      /*
+       * Tried a few times over. A second operation cannot be hung on every
+       * line — a divide needs the number before it to have a factor, and a
+       * pair that reads the same either way is thrown away — so one attempt
+       * lands about half the time, and a line with two things on it would
+       * turn up once in four problems instead of once in two.
+       */
+      const where = rng.int(0, steps.length - 2)
+      for (let go = 0; go < 8 && !steps[where].then; go++) {
+        lengthen(steps[where], CEILINGS[t], rng)
+      }
+      for (let i = where + 1; i < steps.length; i++) {
+        steps[i] = nextStep(steps[i - 1].correct, CEILINGS[t], rng)
+      }
+    }
+
     const badIndex = rng.int(t === 0 ? 0 : 1, steps.length - 1)
     const bad = steps[badIndex]
     bad.shown = corrupt(bad.correct, bad, t, rng)
@@ -55,7 +96,7 @@ export const papasMistake: Generator = {
       steps[i] = nextStep(steps[i - 1].shown, CEILINGS[t], rng)
     }
 
-    const lines = steps.map((s, i) => `Step ${i + 1}:  ${s.left} ${s.op} ${s.right} = ${s.shown}`)
+    const lines = steps.map((s, i) => `Step ${i + 1}:  ${written(s)} = ${s.shown}`)
 
     return {
       id: `papas-mistake:${seed}`,
@@ -71,12 +112,100 @@ export const papasMistake: Generator = {
       hints: [
         'Check each line on its own. Ignore whether the final answer looks right.',
         'Every line after the broken one is worked out correctly — from a wrong starting number.',
-        `Look hard at the step that uses ${bad.op === 'x' ? 'multiplying' : bad.op === '/' ? 'dividing' : bad.op === '+' ? 'adding' : 'subtracting'}.`,
+        bad.then
+          ? 'One of these lines has two things to do on it. Which one did he do first?'
+          : `Look hard at the step that uses ${bad.op === 'x' ? 'multiplying' : bad.op === '/' ? 'dividing' : bad.op === '+' ? 'adding' : 'subtracting'}.`,
       ],
-      explain: `Step ${badIndex + 1} should be ${bad.left} ${bad.op} ${bad.right} = ${bad.correct}, not ${bad.shown}. Every later line is done correctly, which is exactly what makes the mistake hard to spot — the working stays tidy all the way to a wrong answer.`,
+      explain:
+        `Step ${badIndex + 1} should be ${written(bad)} = ${bad.correct}, not ` +
+        `${bad.shown}.` +
+        (bad.then && leftToRight(bad) === bad.shown
+          ? ` He worked it straight across the page: ${bad.left} ${bad.op} ` +
+            `${bad.right} first and then ${bad.then.op} ${bad.then.right}. ` +
+            `Multiplying and dividing happen before adding and subtracting, ` +
+            `wherever on the line they are written.`
+          : ' Every later line is done correctly, which is exactly what makes ' +
+            'the mistake hard to spot — the working stays tidy all the way to ' +
+            'a wrong answer.'),
       data: { lines, badIndex },
     }
   },
+}
+
+/** A step written out, with its second operation if it has one. */
+function written(s: Step): string {
+  const first = `${s.left} ${s.op} ${s.right}`
+  return s.then ? `${first} ${s.then.op} ${s.then.right}` : first
+}
+
+/** What a line comes to when it is worked properly. */
+function valueOf(s: Step): number {
+  if (!s.then) return apply(s.left, s.op, s.right)
+  const { op, right } = s.then
+  // Times and divide bind tighter, wherever on the line they are written.
+  const firstBinds = s.op === 'x' || s.op === '/'
+  const secondBinds = op === 'x' || op === '/'
+  if (secondBinds && !firstBinds) {
+    return apply(s.left, s.op, apply(s.right, op, right))
+  }
+  return apply(apply(s.left, s.op, s.right), op, right)
+}
+
+/** And what it comes to worked straight across the page, which is the trap. */
+const leftToRight = (s: Step): number =>
+  s.then ? apply(apply(s.left, s.op, s.right), s.then.op, s.then.right) : valueOf(s)
+
+/**
+ * Hangs a second operation on a line.
+ *
+ * Only ever one that makes the order of operations matter — so a times or a
+ * divide after a plus or a minus, which is the case where working across the
+ * page gives a different answer. Two pluses in a row would be a longer line
+ * and not a harder one, and a line whose two readings agree teaches nothing
+ * about which reading is right.
+ */
+function lengthen(s: Step, ceiling: number, rng: ReturnType<typeof makeRng>): void {
+  /*
+   * Built as a candidate and only written back if it is worth having. The
+   * first go at this edited the step in place and then bailed out halfway
+   * when the divisor did not divide, which left a line reading "5 - 2" with
+   * fifteen still written after the equals sign — a step that was wrong
+   * without being the wrong one, and a test that could not say which.
+   */
+  const first: Op = s.op === 'x' || s.op === '/'
+    ? (rng.next() < 0.5 ? '+' : '-')
+    : s.op
+  const firstRight = first === s.op
+    ? s.right
+    : first === '-'
+      ? rng.int(1, Math.max(1, s.left - 2))
+      : rng.int(2, Math.max(3, Math.floor(ceiling / 4)))
+
+  const op: Op = rng.next() < 0.7 ? 'x' : '/'
+  const factors = smallFactors(firstRight)
+  if (op === '/' && factors.length === 0) return
+  const right = op === 'x'
+    ? rng.int(2, Math.max(2, Math.min(9, Math.floor(ceiling / Math.max(1, firstRight)))))
+    : rng.pick(factors)
+  if (right < 2) return
+
+  const made: Step = {
+    left: s.left, op: first, right: firstRight,
+    then: { op, right }, shown: 0, correct: 0,
+  }
+  made.correct = valueOf(made)
+  made.shown = made.correct
+
+  // A line that reads the same both ways is a longer line and not a harder
+  // one, and a line that comes out negative or fractional is neither.
+  if (leftToRight(made) === made.correct) return
+  if (made.correct <= 0 || !Number.isInteger(made.correct)) return
+
+  s.op = made.op
+  s.right = made.right
+  s.then = made.then
+  s.correct = made.correct
+  s.shown = made.shown
 }
 
 function buildChain(count: number, t: number, rng: ReturnType<typeof makeRng>): Step[] {
@@ -167,6 +296,18 @@ function corrupt(
 
   if (t === 0) {
     candidates.push(correct + rng.int(9, 25), Math.max(1, correct - rng.int(9, 25)))
+  }
+
+  /*
+   * The order-of-operations slip, which only exists on a line that has two
+   * operations on it — and which is put first and weighted heavily, because
+   * it is the whole reason those lines are here.
+   */
+  if (step.then) {
+    const across = leftToRight(step)
+    if (across > 0 && across !== correct && Number.isInteger(across)) {
+      candidates.push(across, across, across)
+    }
   }
 
   if (t >= 1) {

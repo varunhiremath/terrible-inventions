@@ -11,7 +11,12 @@ import { tier } from './util'
  * than taught. Blocked squares then break any formula he memorised.
  */
 
-const BOUNDS = [500, 900, 1400, 1900] as const
+/*
+ * Compressed to match the rest. Counting routes is the one generator here
+ * whose bottom rung is already worth doing — a three by three grid is not an
+ * easy question for anybody who has not met it — so this moves least.
+ */
+const BOUNDS = [500, 700, 1150, 1650] as const
 
 interface Grid {
   cols: number

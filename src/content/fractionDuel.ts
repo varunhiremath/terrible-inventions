@@ -11,7 +11,15 @@ import { tier } from './util'
  * against 1/2, and then for distance from 1. Procedure runs out; reasoning does not.
  */
 
-const BOUNDS = [400, 750, 1100, 1500, 1900] as const
+/*
+ * Compressed for a child two years further on. The bottom two rungs are the
+ * ones a seven-year-old needs — one slice of a cake cut into five against one
+ * cut into eight — and a grade five player was spending his first sitting
+ * climbing past them. They are still here, because the rating has to have
+ * somewhere to go if a day goes badly, but they are a narrow band at the
+ * bottom rather than half the ladder.
+ */
+const BOUNDS = [400, 560, 760, 1150, 1600] as const
 
 interface Frac {
   n: number

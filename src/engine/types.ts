@@ -4,6 +4,10 @@ export type GeneratorId =
   | 'path-count'
   | 'papas-mistake'
   | 'knights-knaves'
+  | 'mix-up'
+  | 'off-the-price'
+  | 'cogs'
+  | 'crate-weight'
 
 /** How an answer is collected and checked. */
 export type Answer =

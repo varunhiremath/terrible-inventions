@@ -64,11 +64,17 @@ export function ProblemView({
  * which is the whole of the fix above.
  */
 function figureFor(problem: Problem) {
+  /*
+   * Named rather than defaulted. This used to end with a pile of blocks for
+   * anything it did not recognise, which was right while the only generator
+   * with a picture was the one about piles of blocks — and quietly wrong the
+   * moment a generator was added whose `data` happens to carry an `n`. A
+   * ratio problem would have come up with thirty-six blocks drawn next to it
+   * and nothing would have failed.
+   */
   if (problem.kind === 'path-count') return <PathGrid data={problem.data as GridData} />
-  if (problem.kind === 'papas-mistake') return null
-  if (problem.kind === 'knights-knaves') return null
-  if (problem.kind === 'fraction-duel') return null
-  return <BlockPile data={problem.data as { n?: number }} />
+  if (problem.kind === 'rectangle-hunt') return <BlockPile data={problem.data as { n?: number }} />
+  return null
 }
 
 function ProblemBody({

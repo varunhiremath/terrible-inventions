@@ -12,7 +12,11 @@ import { MACHINE_NAMES } from './names'
  * have exactly one consistent solution before it is served.
  */
 
-const BOUNDS = [600, 1000, 1500, 2000] as const
+/*
+ * Compressed to match the rest. Two machines and one statement is a rung
+ * worth having once, and the deduction only starts being deduction at three.
+ */
+const BOUNDS = [600, 800, 1250, 1750] as const
 
 
 type Stmt =
